@@ -13,6 +13,7 @@ import re
 from project_state import ProjectState, FeatureTask, Phase
 from nodes.base import call_agent
 from tools.file_tools import save_run_metadata
+from tools.file_parser import uploads_as_context
 from config import MODEL_A1   # El Arquitecto usa el mismo modelo que el PM
 
 
@@ -20,6 +21,9 @@ def a0_arquitecto(state: ProjectState) -> dict:
     repo_name = state["repo_name"]
     repo_path = state["repo_path"]
     is_new    = state["is_new_project"]
+
+    # ── Leer archivos subidos por el Founder ──────────────────────────────────
+    uploads_block = uploads_as_context(state["project_id"])
 
     if is_new:
         task = f"""
@@ -30,6 +34,8 @@ El Founder quiere CREAR UN PROYECTO NUEVO desde cero.
 **Nombre del proyecto:** {state['project_name']}
 **Brief / descripción:** {state['project_brief']}
 **Repositorio destino:** {repo_path}
+
+{uploads_block}
 
 Tu tarea es generar el plan maestro completo del proyecto. Debes entregar:
 
@@ -91,6 +97,8 @@ El Founder quiere generar un PLAN DE DESARROLLO para un proyecto existente.
 **Nombre del proyecto:** {state['project_name']}
 **Objetivo:** {state['project_brief']}
 **Repositorio:** {repo_path}
+
+{uploads_block}
 
 Tu tarea es analizar el estado actual del proyecto y generar el roadmap de features a implementar.
 
@@ -191,6 +199,7 @@ Prioriza features que:
         "is_new_project": is_new,
         "phases_count": len(phases),
         "backlog_count": len(backlog),
+        "uploaded_files": state.get("uploaded_files", []),
         "project_status": "awaiting_approval",
     })
 

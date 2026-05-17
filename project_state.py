@@ -32,6 +32,9 @@ class ProjectState(TypedDict):
     repo_path: str
     is_new_project: bool        # True = desde cero; False = plan para repo existente
 
+    # ── Archivos subidos por el Founder ───────────────────────────────────────
+    uploaded_files: list[str]   # Nombres de archivos en uploads/ (leídos por A0)
+
     # ── Output del A0 ─────────────────────────────────────────────────────────
     tech_stack: Optional[str]   # Stack propuesto (solo para proyectos nuevos)
     roadmap: Optional[str]      # ROADMAP.md completo
@@ -66,6 +69,7 @@ def initial_project_state(
     repo_name: str,
     repo_path: str,
     is_new_project: bool = False,
+    uploaded_files: list[str] | None = None,
 ) -> ProjectState:
     return ProjectState(
         project_id=project_id,
@@ -74,6 +78,7 @@ def initial_project_state(
         repo_name=repo_name,
         repo_path=repo_path,
         is_new_project=is_new_project,
+        uploaded_files=uploaded_files or [],
         tech_stack=None,
         roadmap=None,
         phases=[],

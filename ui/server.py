@@ -12,7 +12,8 @@ from datetime import datetime
 from typing import AsyncIterator
 
 import aiofiles
-from fastapi import FastAPI, Request, Form, HTTPException
+from fastapi import FastAPI, Request, Form, HTTPException, UploadFile, File
+from typing import List
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -162,12 +163,19 @@ async def new_project_page(request: Request):
     })
 
 
+_ALLOWED_UPLOAD_EXTENSIONS = {
+    ".txt", ".md", ".json", ".yaml", ".yml", ".csv", ".pdf", ".docx"
+}
+_MAX_UPLOAD_SIZE_MB = 10
+
+
 @app.post("/project/new")
 async def start_project(
     project_name: str = Form(...),
     project_brief: str = Form(...),
     repo_name: str = Form(...),
     is_new_project: str = Form("false"),
+    files: List[UploadFile] = File(default=[]),
 ):
     if not project_name.strip():
         raise HTTPException(400, "El nombre del proyecto no puede estar vacío")
@@ -180,17 +188,37 @@ async def start_project(
         f"{project_name.strip()[:20].replace(' ', '_').lower()}"
     )
 
+    # ── Guardar archivos subidos ANTES de lanzar el proceso ───────────────────
+    uploads_dir = RUNS_DIR / project_id / "uploads"
+    uploaded_names: list[str] = []
+
+    for upload in files:
+        if not upload.filename:
+            continue
+        safe_name = Path(upload.filename).name          # Evitar path traversal
+        ext = Path(safe_name).suffix.lower()
+        if ext not in _ALLOWED_UPLOAD_EXTENSIONS:
+            continue                                    # Ignorar tipos no soportados
+
+        content = await upload.read()
+        if len(content) > _MAX_UPLOAD_SIZE_MB * 1024 * 1024:
+            continue                                    # Ignorar archivos demasiado grandes
+
+        uploads_dir.mkdir(parents=True, exist_ok=True)
+        (uploads_dir / safe_name).write_bytes(content)
+        uploaded_names.append(safe_name)
+
+    # ── Crear directorio del run y lanzar proceso ─────────────────────────────
+    (RUNS_DIR / project_id).mkdir(parents=True, exist_ok=True)
+    (RUNS_DIR / project_id / "process.pid").write_text("starting")
+
     is_new = is_new_project.lower() in ("true", "1", "on")
-    lite_flag  = ["--new"] if is_new else []
     cmd = [
         sys.executable, "cli.py", "new-project",
         project_name.strip(),
         project_brief.strip(),
         "--repo", repo_name.strip(),
-    ] + lite_flag
-
-    (RUNS_DIR / project_id).mkdir(parents=True, exist_ok=True)
-    (RUNS_DIR / project_id / "process.pid").write_text("starting")
+    ] + (["--new"] if is_new else [])
 
     subprocess.Popen(
         cmd,
@@ -198,7 +226,7 @@ async def start_project(
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
-        env={**__import__("os").environ, "PROJECT_ID_OVERRIDE": project_id},
+        env={**os.environ, "PROJECT_ID_OVERRIDE": project_id},
     )
 
     return RedirectResponse(f"/project/{project_id}", status_code=303)

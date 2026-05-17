@@ -20,7 +20,8 @@
 <div class="row">
   <div class="col-md-8">
     <div class="card p-4">
-      <form method="POST" action="/project/new" id="newProjectForm">
+      <form method="POST" action="/project/new" id="newProjectForm"
+            enctype="multipart/form-data">
 
         <!-- Selector de repositorio -->
         <div class="mb-4">
@@ -65,6 +66,53 @@
                     required {% if not api_key_ok %}disabled{% endif %}></textarea>
           <div class="form-text" style="font-size:.72rem;color:#555">
             Incluye contexto de negocio, usuarios objetivo y restricciones si las hay.
+          </div>
+        </div>
+
+        <!-- Upload de documentos -->
+        <div class="mb-4">
+          <label class="form-label fw-semibold" style="font-size:.85rem">
+            Documentos de contexto
+            <span class="ms-1 text-muted fw-normal" style="font-size:.75rem">(opcional)</span>
+          </label>
+
+          <div id="dropZone"
+               style="border:2px dashed #2a2a3a;border-radius:10px;padding:1.5rem;
+                      text-align:center;cursor:pointer;transition:border-color .2s;
+                      background:#0a0a10"
+               ondragover="handleDragOver(event)"
+               ondragleave="handleDragLeave(event)"
+               ondrop="handleDrop(event)"
+               onclick="document.getElementById('fileInput').click()">
+            <i class="bi bi-cloud-upload" style="font-size:1.6rem;color:#555"></i>
+            <p class="mb-1 mt-2" style="font-size:.82rem;color:#888">
+              Arrastra archivos aquí o <span style="color:var(--brand-light)">haz clic para seleccionar</span>
+            </p>
+            <p style="font-size:.7rem;color:#555;margin:0">
+              .txt .md .pdf .docx .json .yaml .csv · Máx. 10 MB por archivo
+            </p>
+          </div>
+
+          <input type="file" id="fileInput" name="files" multiple
+                 accept=".txt,.md,.pdf,.docx,.json,.yaml,.yml,.csv"
+                 style="display:none"
+                 onchange="handleFileSelect(this.files)">
+
+          <!-- Lista de archivos seleccionados -->
+          <div id="fileList" class="mt-2" style="display:none">
+            <div class="d-flex align-items-center justify-content-between mb-1">
+              <span style="font-size:.75rem;color:#888">Archivos seleccionados:</span>
+              <button type="button" onclick="clearFiles()"
+                      style="font-size:.72rem;color:#f87171;background:none;border:none;cursor:pointer;padding:0">
+                Limpiar todo
+              </button>
+            </div>
+            <ul id="fileItems" style="list-style:none;margin:0;padding:0"></ul>
+          </div>
+
+          <div class="form-text mt-1" style="font-size:.72rem;color:#555">
+            Sube PRDs, wireframes en texto, diagramas, arquitecturas existentes, user stories — cualquier
+            documento que le dé contexto al Arquitecto para generar un roadmap más preciso.
           </div>
         </div>
 
@@ -170,10 +218,102 @@
 
 {% block scripts %}
 <script>
+// ── Drag & drop ───────────────────────────────────────────────────────────────
+let selectedFiles = new DataTransfer();
+
+const EXT_ICONS = {
+  pdf: '📄', docx: '📝', doc: '📝', md: '📋', txt: '📋',
+  json: '🔧', yaml: '⚙️', yml: '⚙️', csv: '📊',
+};
+const MAX_MB = 10;
+
+function fileIcon(name) {
+  const ext = name.split('.').pop().toLowerCase();
+  return EXT_ICONS[ext] || '📎';
+}
+
+function formatSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024*1024) return (bytes/1024).toFixed(1) + ' KB';
+  return (bytes/(1024*1024)).toFixed(1) + ' MB';
+}
+
+function renderFileList() {
+  const list = document.getElementById('fileList');
+  const items = document.getElementById('fileItems');
+  if (selectedFiles.files.length === 0) {
+    list.style.display = 'none';
+    return;
+  }
+  list.style.display = 'block';
+  items.innerHTML = '';
+  Array.from(selectedFiles.files).forEach((f, i) => {
+    const tooBig = f.size > MAX_MB * 1024 * 1024;
+    const li = document.createElement('li');
+    li.style.cssText = 'display:flex;align-items:center;gap:.5rem;padding:.3rem .5rem;border-radius:6px;margin-bottom:.25rem;background:#1e1e28;font-size:.78rem;';
+    li.innerHTML = `
+      <span>${fileIcon(f.name)}</span>
+      <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:${tooBig?'#f87171':'#ccc'}">${f.name}</span>
+      <span style="color:#666;white-space:nowrap">${formatSize(f.size)}${tooBig?' ⚠️':''}</span>
+      <button type="button" onclick="removeFile(${i})"
+              style="background:none;border:none;color:#666;cursor:pointer;padding:0 .2rem;font-size:.9rem;line-height:1">×</button>
+    `;
+    items.appendChild(li);
+  });
+  // Sincronizar input nativo
+  const input = document.getElementById('fileInput');
+  input.files = selectedFiles.files;
+}
+
+function addFiles(fileList) {
+  const allowed = new Set(['txt','md','pdf','docx','json','yaml','yml','csv']);
+  Array.from(fileList).forEach(f => {
+    const ext = f.name.split('.').pop().toLowerCase();
+    if (!allowed.has(ext)) return;
+    // Evitar duplicados por nombre
+    const already = Array.from(selectedFiles.files).some(x => x.name === f.name);
+    if (!already) selectedFiles.items.add(f);
+  });
+  renderFileList();
+}
+
+function removeFile(index) {
+  const dt = new DataTransfer();
+  Array.from(selectedFiles.files).forEach((f, i) => {
+    if (i !== index) dt.items.add(f);
+  });
+  selectedFiles = dt;
+  renderFileList();
+}
+
+function clearFiles() {
+  selectedFiles = new DataTransfer();
+  renderFileList();
+}
+
+function handleFileSelect(files) { addFiles(files); }
+
+function handleDragOver(e) {
+  e.preventDefault();
+  document.getElementById('dropZone').style.borderColor = 'var(--brand-light)';
+}
+
+function handleDragLeave(e) {
+  document.getElementById('dropZone').style.borderColor = '#2a2a3a';
+}
+
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('dropZone').style.borderColor = '#2a2a3a';
+  addFiles(e.dataTransfer.files);
+}
+
+// ── Submit ────────────────────────────────────────────────────────────────────
 document.getElementById("newProjectForm")?.addEventListener("submit", function() {
   const btn = document.getElementById("submitBtn");
+  const count = selectedFiles.files.length;
   btn.disabled = true;
-  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status"></span>Generando roadmap…';
+  btn.innerHTML = `<span class="spinner-border spinner-border-sm me-2" role="status"></span>Generando roadmap${count ? ` (con ${count} archivo${count>1?'s':''})` : ''}…`;
 });
 </script>
 {% endblock %}
