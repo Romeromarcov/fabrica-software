@@ -228,3 +228,17 @@ def compile_graph():
         "checkpoint_b",
         "qa_escalation",
     ])
+
+
+def compile_graph_project_mode():
+    """
+    Variante para Project Loop — sin interrupciones en nodos de aprobación.
+    Los nodos human detectan project_mode=True y auto-aprueban.
+    Solo se interrumpe ante qa_escalation (bloqueante duro).
+    """
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    checkpointer = SqliteSaver.from_conn_string(str(DB_PATH))
+    return build_graph().compile(
+        checkpointer=checkpointer,
+        interrupt_before=["qa_escalation"],   # único bloqueante duro en modo proyecto
+    )

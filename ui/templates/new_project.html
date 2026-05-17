@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+
+{% block title %}Nuevo Proyecto{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+  <h4 class="mb-0 fw-semibold">Nuevo Proyecto</h4>
+  <small class="text-muted">El Arquitecto (A0) genera el roadmap completo y la fábrica lo ejecuta de forma autónoma</small>
+</div>
+
+{% if not api_key_ok %}
+<div class="alert border-0 mb-4 py-2 px-3 d-flex align-items-center gap-2"
+     style="background:#dc262622;color:#f87171;font-size:.85rem">
+  <i class="bi bi-exclamation-triangle-fill"></i>
+  No hay una API Key válida configurada.
+  <a href="/config" class="ms-1" style="color:#f87171">Ir a Configuración →</a>
+</div>
+{% endif %}
+
+<div class="row">
+  <div class="col-md-8">
+    <div class="card p-4">
+      <form method="POST" action="/project/new" id="newProjectForm">
+
+        <!-- Selector de repositorio -->
+        <div class="mb-4">
+          <label class="form-label fw-semibold" style="font-size:.85rem">
+            Repositorio Destino
+          </label>
+          {% if repos %}
+          <select name="repo_name" class="form-select"
+                  {% if not api_key_ok %}disabled{% endif %} required>
+            <option value="" disabled selected>Selecciona un repositorio…</option>
+            {% for r in repos %}
+            <option value="{{ r.name }}">{{ r.name }}</option>
+            {% endfor %}
+          </select>
+          {% else %}
+          <div class="alert border-0 py-2 px-3" style="background:#dc262622;color:#f87171;font-size:.82rem">
+            No se detectaron repositorios. Verifica <code>WORKSPACES_ROOT</code>.
+          </div>
+          {% endif %}
+        </div>
+
+        <!-- Nombre del proyecto -->
+        <div class="mb-4">
+          <label class="form-label fw-semibold" style="font-size:.85rem">
+            Nombre del Proyecto
+          </label>
+          <input type="text" name="project_name" id="projectName"
+                 class="form-control"
+                 placeholder="ej. Sistema de Gestión de Almacenes"
+                 required autofocus
+                 {% if not api_key_ok %}disabled{% endif %}>
+        </div>
+
+        <!-- Brief / objetivo -->
+        <div class="mb-4">
+          <label class="form-label fw-semibold" style="font-size:.85rem">
+            Objetivo del Proyecto
+          </label>
+          <textarea name="project_brief" id="projectBrief"
+                    class="form-control" rows="4"
+                    placeholder="Describe qué quieres lograr, el problema que resuelve y el alcance esperado. Cuanto más detallado, mejor el roadmap que genera el Arquitecto."
+                    required {% if not api_key_ok %}disabled{% endif %}></textarea>
+          <div class="form-text" style="font-size:.72rem;color:#555">
+            Incluye contexto de negocio, usuarios objetivo y restricciones si las hay.
+          </div>
+        </div>
+
+        <!-- Tipo de proyecto -->
+        <div class="mb-4">
+          <label class="form-label fw-semibold" style="font-size:.85rem">Tipo de Proyecto</label>
+          <div class="row g-3 mt-0">
+
+            <div class="col-6">
+              <input type="radio" class="btn-check" name="is_new_project" id="typePlan"
+                     value="false" checked {% if not api_key_ok %}disabled{% endif %}>
+              <label class="btn btn-outline-secondary w-100 text-start p-3" for="typePlan"
+                     style="border-color:#2a2a3a;height:auto">
+                <div class="fw-semibold mb-1" style="font-size:.85rem">
+                  <i class="bi bi-map me-1" style="color:var(--brand-light)"></i> Plan para repo existente
+                </div>
+                <div style="font-size:.72rem;color:#888;line-height:1.4">
+                  El Arquitecto lee el código existente y genera un roadmap de lo que falta.
+                  Ideal para proyectos en curso que necesitan estructura.
+                </div>
+              </label>
+            </div>
+
+            <div class="col-6">
+              <input type="radio" class="btn-check" name="is_new_project" id="typeNew"
+                     value="true" {% if not api_key_ok %}disabled{% endif %}>
+              <label class="btn btn-outline-secondary w-100 text-start p-3" for="typeNew"
+                     style="border-color:#2a2a3a;height:auto">
+                <div class="fw-semibold mb-1" style="font-size:.85rem">
+                  <i class="bi bi-rocket me-1" style="color:#fb923c"></i> Proyecto desde cero
+                </div>
+                <div style="font-size:.72rem;color:#888;line-height:1.4">
+                  A0 propone stack tecnológico + arquitectura + roadmap completo.
+                  El repo puede estar vacío.
+                </div>
+              </label>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Info del loop autónomo -->
+        <div class="p-3 mb-4 rounded" style="background:#0a0a10;border:1px solid #2a2a3a">
+          <div class="fw-semibold mb-2" style="font-size:.78rem;color:#888">
+            <i class="bi bi-infinity me-1" style="color:var(--brand-light)"></i> Modo autónomo
+          </div>
+          <div style="font-size:.72rem;color:#555;line-height:1.6">
+            Una vez apruebas el roadmap, la fábrica ejecuta features de forma continua.<br>
+            Solo te interrumpe ante <strong style="color:#f87171">bloqueantes duros</strong>
+            (seguridad crítica, QA sin resolver) o cuando el backlog se vacía.<br>
+            Puedes escribir <code>PAUSA</code> en cualquier checkpoint para detener.
+          </div>
+        </div>
+
+        <div class="d-flex gap-2">
+          <button type="submit" class="btn btn-brand px-4 flex-grow-1"
+                  id="submitBtn" {% if not api_key_ok %}disabled{% endif %}>
+            <i class="bi bi-diagram-3 me-1"></i> Generar Roadmap y Lanzar
+          </button>
+          <a href="/" class="btn btn-outline-secondary px-3">Cancelar</a>
+        </div>
+
+      </form>
+    </div>
+  </div>
+
+  <!-- Panel lateral informativo -->
+  <div class="col-md-4">
+    <div class="card p-3 mb-3">
+      <div class="fw-semibold mb-2" style="font-size:.82rem">Flujo del Project Loop</div>
+      <div style="font-size:.72rem;color:#666;line-height:2;font-family:monospace">
+        A0 (Arquitecto)<br>
+        ↓<br>
+        <span style="color:#a78bfa">⛔ Tú apruebas el roadmap</span><br>
+        ↓<br>
+        ┌─ LOOP ──────────────┐<br>
+        │ PM elige feature     │<br>
+        │ ↓                   │<br>
+        │ A1→A8 pipeline      │<br>
+        │ ↓                   │<br>
+        │ PM evalúa repo real  │<br>
+        │ ↓ (si hay más)      │<br>
+        └─────────────────────┘<br>
+        ↓<br>
+        <span style="color:#a78bfa">⛔ Tú revisas sugerencias</span><br>
+        ↓<br>
+        🏁 Proyecto completado
+      </div>
+    </div>
+
+    <div class="card p-3">
+      <div class="fw-semibold mb-2" style="font-size:.82rem">Cuándo usar cada tipo</div>
+      <div style="font-size:.72rem;color:#666;line-height:1.6">
+        <strong style="color:#a78bfa">Plan para existente</strong><br>
+        Repo con código pero sin roadmap claro, o que necesita evolución estructurada.<br><br>
+        <strong style="color:#fb923c">Desde cero</strong><br>
+        Repo vacío o con solo el scaffold inicial. A0 define el stack antes de empezar a construir.
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById("newProjectForm")?.addEventListener("submit", function() {
+  const btn = document.getElementById("submitBtn");
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status"></span>Generando roadmap…';
+});
+</script>
+{% endblock %}

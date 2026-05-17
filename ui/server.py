@@ -20,7 +20,7 @@ from fastapi.templating import Jinja2Templates
 # Asegurar imports del orquestador
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from config import RUNS_DIR, PRICES, MODEL_PM, MODEL_STANDARD, MODEL_FAST, DB_PATH, list_repos
+from config import RUNS_DIR, PRICES, MODEL_PM, MODEL_STANDARD, MODEL_FAST, DB_PATH, list_repos, FABRICA_DIR
 from ui.config_store import ConfigStore
 
 # ── App ───────────────────────────────────────────────────────────────────────
@@ -148,10 +148,93 @@ async def new_feature_page(request: Request):
     })
 
 
+# ── Rutas — Nuevo Proyecto ────────────────────────────────────────────────────
+
+@app.get("/project/new", response_class=HTMLResponse)
+async def new_project_page(request: Request):
+    cfg = store.load()
+    api_key_ok = bool(cfg.get("ANTHROPIC_API_KEY", "").startswith("sk-ant-"))
+    repos = list_repos()
+    return templates.TemplateResponse(request, "new_project.html", {
+        "active_page": "new_project",
+        "api_key_ok": api_key_ok,
+        "repos": repos,
+    })
+
+
+@app.post("/project/new")
+async def start_project(
+    project_name: str = Form(...),
+    project_brief: str = Form(...),
+    repo_name: str = Form(...),
+    is_new_project: str = Form("false"),
+):
+    if not project_name.strip():
+        raise HTTPException(400, "El nombre del proyecto no puede estar vacío")
+    if not project_brief.strip():
+        raise HTTPException(400, "El brief del proyecto no puede estar vacío")
+
+    import os
+    project_id = (
+        f"proj_{datetime.now().strftime('%Y%m%d_%H%M%S')}_"
+        f"{project_name.strip()[:20].replace(' ', '_').lower()}"
+    )
+
+    is_new = is_new_project.lower() in ("true", "1", "on")
+    lite_flag  = ["--new"] if is_new else []
+    cmd = [
+        sys.executable, "cli.py", "new-project",
+        project_name.strip(),
+        project_brief.strip(),
+        "--repo", repo_name.strip(),
+    ] + lite_flag
+
+    (RUNS_DIR / project_id).mkdir(parents=True, exist_ok=True)
+    (RUNS_DIR / project_id / "process.pid").write_text("starting")
+
+    subprocess.Popen(
+        cmd,
+        cwd=str(Path(__file__).parent.parent),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        env={**__import__("os").environ, "PROJECT_ID_OVERRIDE": project_id},
+    )
+
+    return RedirectResponse(f"/project/{project_id}", status_code=303)
+
+
+@app.get("/project/{project_id}", response_class=HTMLResponse)
+async def project_detail(request: Request, project_id: str):
+    run_dir = RUNS_DIR / project_id
+    if not run_dir.exists():
+        raise HTTPException(404, "Proyecto no encontrado")
+
+    meta_path = run_dir / "metadata.json"
+    meta = json.loads(meta_path.read_text()) if meta_path.exists() else {}
+
+    return templates.TemplateResponse(request, "project_detail.html", {
+        "project_id": project_id,
+        "meta": meta,
+        "active_page": "dashboard",
+    })
+
+
+@app.post("/project/{project_id}/approve-roadmap")
+async def approve_roadmap(project_id: str, action: str = Form("approve")):
+    """Aprueba o cancela el roadmap desde la UI."""
+    run_dir = RUNS_DIR / project_id
+    approval_file = run_dir / "pending_approval.txt"
+    approval_file.write_text(action)
+    return JSONResponse({"ok": True, "action": action})
+
+
+# ── Rutas — Nuevo Feature ─────────────────────────────────────────────────────
+
 @app.post("/new")
 async def start_feature(
     feature_name: str = Form(...),
-    mode: str = Form("completo"),
+    mode: str = Form("auto"),
     repo_name: str = Form(...),
 ):
     if not feature_name.strip():
@@ -160,12 +243,12 @@ async def start_feature(
         raise HTTPException(400, "Debes seleccionar un repositorio")
 
     # El feature_id se genera en cli.py — llamamos al proceso
-    lite_flag = ["--lite"] if mode == "lite" else []
     cmd = [
         sys.executable, "cli.py", "new-feature",
         feature_name.strip(),
         "--repo", repo_name.strip(),
-    ] + lite_flag
+        "--mode", mode,
+    ]
     # Lanzar en background — el usuario verá el progreso en /stream/<feature_id>
     # Generamos el feature_id anticipado para poder redirigir
     feature_id = (

@@ -16,11 +16,16 @@ class FabricaState(TypedDict):
     # ── Identidad del feature ─────────────────────────────────────────────────
     feature_id: str
     feature_name: str
-    mode: Literal["completo", "lite"]
+    mode: Literal["completo", "lite", "auto"]
+    # "auto" → el Agente 1 elige y actualiza a "completo" o "lite" en su nodo
 
     # ── Repositorio destino ───────────────────────────────────────────────────
     repo_name: str          # ej: "omni-erp"
     repo_path: str          # ej: "/workspace/omni-erp" (absoluta en Docker)
+
+    # ── Modo proyecto (loop autónomo) ─────────────────────────────────────────
+    project_mode: bool          # True = corriendo dentro del Project Loop
+    project_id: Optional[str]   # ID del proyecto padre
 
     # ── Fase A: planificación ─────────────────────────────────────────────────
     master_plan: Optional[str]        # Contenido completo del MASTER_PLAN
@@ -65,9 +70,11 @@ class FabricaState(TypedDict):
 def initial_state(
     feature_id: str,
     feature_name: str,
-    mode: Literal["completo", "lite"],
+    mode: Literal["completo", "lite", "auto"],
     repo_name: str,
     repo_path: str,
+    project_mode: bool = False,
+    project_id: Optional[str] = None,
 ) -> FabricaState:
     """Estado inicial vacío para un feature nuevo."""
     return FabricaState(
@@ -76,6 +83,8 @@ def initial_state(
         mode=mode,
         repo_name=repo_name,
         repo_path=repo_path,
+        project_mode=project_mode,
+        project_id=project_id,
         master_plan=None,
         master_plan_path=None,
         founder_approval=False,

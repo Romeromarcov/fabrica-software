@@ -16,9 +16,20 @@ FRASE_APROBACION = "Plan aprobado. Pasa a ejecución."
 def stop_protocol(state: FabricaState) -> dict:
     """
     Stop Protocol del Agente 1.
-    Suspende el pipeline hasta que el Founder escriba la frase exacta.
-    El thread_id de LangGraph permite reanudar en cualquier momento con `cli.py resume`.
+    En modo proyecto (project_mode=True): auto-aprueba ya que el roadmap fue aprobado.
+    En modo feature normal: suspende hasta que el Founder escriba la frase exacta.
     """
+    # ── Modo proyecto: auto-aprobar ───────────────────────────────────────────
+    if state.get("project_mode"):
+        save_run_metadata(state["feature_id"], {
+            "status": "auto_approved",
+            "project_id": state.get("project_id"),
+        })
+        return {
+            "founder_approval": True,
+            "current_agent": "stop_protocol",
+        }
+
     save_run_metadata(state["feature_id"], {
         "status": "awaiting_approval",
         "paused_at": datetime.utcnow().isoformat(),
@@ -62,9 +73,13 @@ def stop_protocol(state: FabricaState) -> dict:
 
 def checkpoint_a(state: FabricaState) -> dict:
     """
-    Checkpoint A: notificación liviana tras SecOps Revisión 1.
-    Timeout de 30 min — si el Founder no responde, el pipeline continúa.
+    Checkpoint A: notificación tras SecOps Revisión 1.
+    En modo proyecto: auto-continúa sin esperar.
     """
+    if state.get("project_mode"):
+        save_run_metadata(state["feature_id"], {"status": "building"})
+        return {"checkpoint_a_approved": True, "current_agent": "checkpoint_a"}
+
     save_run_metadata(state["feature_id"], {
         "status": "checkpoint_a",
         "checkpoint_a_at": datetime.utcnow().isoformat(),
@@ -101,9 +116,13 @@ def checkpoint_a(state: FabricaState) -> dict:
 
 def checkpoint_b(state: FabricaState) -> dict:
     """
-    Checkpoint B: notificación liviana tras QA pass.
-    Mismo comportamiento que Checkpoint A.
+    Checkpoint B: notificación tras QA pass.
+    En modo proyecto: auto-continúa sin esperar.
     """
+    if state.get("project_mode"):
+        save_run_metadata(state["feature_id"], {"status": "finalizing"})
+        return {"checkpoint_b_approved": True, "current_agent": "checkpoint_b"}
+
     save_run_metadata(state["feature_id"], {
         "status": "checkpoint_b",
         "checkpoint_b_at": datetime.utcnow().isoformat(),

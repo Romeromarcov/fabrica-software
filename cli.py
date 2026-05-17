@@ -41,7 +41,7 @@ def _thread_config(feature_id: str) -> dict:
 
 # ── Comando: new-feature ──────────────────────────────────────────────────────
 
-def cmd_new_feature(feature_name: str, lite: bool, repo_name: str) -> None:
+def cmd_new_feature(feature_name: str, mode: str, repo_name: str) -> None:
     from state import initial_state
     from tools.file_tools import save_run_metadata
     from config import resolve_repo_path, list_repos
@@ -54,7 +54,6 @@ def cmd_new_feature(feature_name: str, lite: bool, repo_name: str) -> None:
         sys.exit(1)
 
     repo_path = resolve_repo_path(repo_name)
-    mode = "lite" if lite else "completo"
     feature_id = (
         f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_"
         f"{feature_name[:20].replace(' ', '_').lower()}"
@@ -67,7 +66,7 @@ def cmd_new_feature(feature_name: str, lite: bool, repo_name: str) -> None:
         f"[bold green]Nueva Feature[/bold green]\n"
         f"Nombre: [cyan]{feature_name}[/cyan]\n"
         f"Repo: [magenta]{repo_name}[/magenta]\n"
-        f"Modo: [yellow]{mode.upper()}[/yellow]\n"
+        f"Modo: [yellow]{mode.upper()}[/yellow]{'  [dim](el PM decide)[/dim]' if mode == 'auto' else ''}\n"
         f"ID: [dim]{feature_id}[/dim]",
         title="🏭 Fábrica de Software"
     ))
@@ -253,6 +252,163 @@ def cmd_status(feature_id: str) -> None:
     ))
 
 
+# ── Comando: new-project ─────────────────────────────────────────────────────
+
+def cmd_new_project(name: str, brief: str, repo_name: str, new: bool) -> None:
+    from project_state import initial_project_state
+    from tools.file_tools import save_run_metadata
+    from config import resolve_repo_path, list_repos
+
+    available = [r["name"] for r in list_repos()]
+    if repo_name not in available:
+        console.print(f"[red]Repositorio '{repo_name}' no encontrado.[/red]")
+        console.print(f"[dim]Disponibles: {', '.join(available) or 'ninguno'}[/dim]")
+        sys.exit(1)
+
+    repo_path  = resolve_repo_path(repo_name)
+    project_id = f"proj_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{name[:20].replace(' ', '_').lower()}"
+
+    import os
+    project_id = os.environ.get("PROJECT_ID_OVERRIDE", project_id)
+
+    console.print(Panel(
+        f"[bold cyan]Nuevo Proyecto[/bold cyan]\n"
+        f"Nombre: [cyan]{name}[/cyan]\n"
+        f"Repo: [magenta]{repo_name}[/magenta]\n"
+        f"Tipo: [yellow]{'Nuevo desde cero' if new else 'Plan para repo existente'}[/yellow]\n"
+        f"ID: [dim]{project_id}[/dim]",
+        title="🏗️ Fábrica de Software — Project Loop"
+    ))
+
+    from graph_project import compile_project_graph
+    state  = initial_project_state(project_id, name, brief, repo_name, repo_path, is_new_project=new)
+    app    = compile_project_graph()
+    config = _thread_config(project_id)
+
+    save_run_metadata(project_id, {
+        "project_id": project_id,
+        "project_name": name,
+        "repo_name": repo_name,
+        "is_new_project": new,
+        "project_status": "planning",
+        "started_at": datetime.utcnow().isoformat(),
+    })
+
+    console.print(f"\n[dim]Iniciando Agente 0 (Arquitecto)...[/dim]")
+
+    try:
+        for chunk in app.stream(state, config=config, stream_mode="updates"):
+            node_name  = list(chunk.keys())[0]
+            node_output = chunk[node_name]
+
+            if node_name == "__interrupt__":
+                interrupt_data = node_output[0].value
+                _handle_project_interrupt(app, config, interrupt_data, project_id)
+                return
+
+            _print_project_progress(node_name, node_output)
+
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Proyecto pausado. Usa 'resume-project' para continuar.[/yellow]")
+        console.print(f"[dim]Project ID: {project_id}[/dim]")
+
+
+def _handle_project_interrupt(app, config: dict, interrupt_data: dict, project_id: str) -> None:
+    tipo = interrupt_data.get("tipo", "unknown")
+
+    if tipo == "project_roadmap_approval":
+        console.print(Panel(
+            Markdown(interrupt_data.get("mensaje", "")),
+            title="📐 Roadmap listo — Revisión requerida",
+            border_style="cyan",
+        ))
+        console.print("\n[bold]Tu respuesta:[/bold] ", end="")
+        respuesta = input().strip()
+
+        for chunk in app.stream(
+            {"founder_approved_roadmap": respuesta == "Roadmap aprobado. Iniciar proyecto."},
+            config=config, stream_mode="updates",
+        ):
+            node_name = list(chunk.keys())[0]
+            if node_name == "__interrupt__":
+                _handle_project_interrupt(app, config, chunk[node_name][0].value, project_id)
+                return
+            _print_project_progress(node_name, chunk[node_name])
+
+    elif tipo == "project_suggestions":
+        console.print(Panel(
+            interrupt_data.get("mensaje", ""),
+            title="💡 Sugerencias del PM",
+            border_style="yellow",
+        ))
+        console.print("[bold]Tu decisión (CONTINUAR / CERRAR / PAUSA):[/bold] ", end="")
+        respuesta = input().strip()
+
+        for chunk in app.stream(respuesta, config=config, stream_mode="updates"):
+            node_name = list(chunk.keys())[0]
+            if node_name == "__interrupt__":
+                _handle_project_interrupt(app, config, chunk[node_name][0].value, project_id)
+                return
+            _print_project_progress(node_name, chunk[node_name])
+
+
+def _print_project_progress(node_name: str, output: dict) -> None:
+    labels = {
+        "a0_arquitecto":        "📐 A0 — Arquitecto",
+        "human_approve_roadmap":"⛔ Esperando aprobación de roadmap",
+        "pick_next_feature":    "🎯 Seleccionando siguiente feature",
+        "run_feature_pipeline": "⚙️  Ejecutando pipeline de feature",
+        "pm_evaluador":         "🔍 PM Evaluador",
+        "advance_index":        "→  Avanzando",
+        "present_suggestions":  "💡 Sugerencias del PM",
+        "project_complete":     "🏁 Proyecto completado",
+    }
+    label = labels.get(node_name, f"⚡ {node_name}")
+    costs = output.get("cost_entries", [])
+    cost_str = f" [dim](${sum(e.get('cost_usd',0) for e in costs):.4f})[/dim]" if costs else ""
+    errors = output.get("errors", [])
+
+    # Mostrar feature actual si está disponible
+    backlog = output.get("backlog", [])
+    idx     = output.get("current_feature_index")
+    feat_str = ""
+    if idx is not None and backlog and idx < len(backlog):
+        feat_str = f" [dim]→ {backlog[idx]['name'][:40]}[/dim]"
+
+    if errors:
+        console.print(f"  {label} [red]✗[/red]{cost_str}")
+    else:
+        console.print(f"  {label} [green]✓[/green]{feat_str}{cost_str}")
+
+
+# ── Comando: resume-project ───────────────────────────────────────────────────
+
+def cmd_resume_project(project_id: str) -> None:
+    from tools.file_tools import read_run_metadata
+    meta = read_run_metadata(project_id)
+    if not meta:
+        console.print(f"[red]Proyecto no encontrado: {project_id}[/red]")
+        return
+
+    console.print(Panel(
+        f"Reanudando proyecto: [cyan]{meta.get('project_name', project_id)}[/cyan]\n"
+        f"Estado: [yellow]{meta.get('project_status', '?')}[/yellow]\n"
+        f"Progreso: {meta.get('features_completed', '?')}/{meta.get('features_total', '?')} features",
+        title="🔄 Resumiendo Project Loop",
+    ))
+
+    from graph_project import compile_project_graph
+    app    = compile_project_graph()
+    config = _thread_config(project_id)
+
+    for chunk in app.stream(None, config=config, stream_mode="updates"):
+        node_name = list(chunk.keys())[0]
+        if node_name == "__interrupt__":
+            _handle_project_interrupt(app, config, chunk[node_name][0].value, project_id)
+            return
+        _print_project_progress(node_name, chunk[node_name])
+
+
 # ── Comando: repos ───────────────────────────────────────────────────────────
 
 def cmd_repos() -> None:
@@ -324,8 +480,8 @@ def main() -> None:
     p_new.add_argument("name", help="Nombre descriptivo del feature")
     p_new.add_argument("--repo", required=True,
                        help="Nombre del repositorio destino (ej: omni-erp)")
-    p_new.add_argument("--lite", action="store_true",
-                       help="Modo lite: bugfix sin DB/MCP (más rápido y económico)")
+    p_new.add_argument("--mode", choices=["auto", "completo", "lite"], default="auto",
+                       help="Modo de ejecución (default: auto — el PM decide)")
 
     p_resume = sub.add_parser("resume", help="Reanuda un pipeline pausado")
     p_resume.add_argument("feature_id", help="ID del feature a reanudar")
@@ -336,10 +492,20 @@ def main() -> None:
     sub.add_parser("list", help="Lista todos los features")
     sub.add_parser("repos", help="Lista los repositorios disponibles")
 
+    p_proj = sub.add_parser("new-project", help="Crea un plan de proyecto y arranca el loop autónomo")
+    p_proj.add_argument("name",  help="Nombre del proyecto")
+    p_proj.add_argument("brief", help="Descripción del objetivo del proyecto (entre comillas)")
+    p_proj.add_argument("--repo", required=True, help="Repositorio destino")
+    p_proj.add_argument("--new",  action="store_true",
+                        help="Proyecto desde cero (A0 propone stack + arquitectura)")
+
+    p_rp = sub.add_parser("resume-project", help="Reanuda un Project Loop pausado")
+    p_rp.add_argument("project_id")
+
     args = parser.parse_args()
 
     if args.cmd == "new-feature":
-        cmd_new_feature(args.name, args.lite, args.repo)
+        cmd_new_feature(args.name, args.mode, args.repo)
     elif args.cmd == "resume":
         cmd_resume(args.feature_id)
     elif args.cmd == "status":
@@ -348,6 +514,10 @@ def main() -> None:
         cmd_list()
     elif args.cmd == "repos":
         cmd_repos()
+    elif args.cmd == "new-project":
+        cmd_new_project(args.name, args.brief, args.repo, args.new)
+    elif args.cmd == "resume-project":
+        cmd_resume_project(args.project_id)
 
 
 if __name__ == "__main__":
