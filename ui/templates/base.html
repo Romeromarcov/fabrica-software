@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="es" data-bs-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Fábrica de Software{% endblock %} — Omni ERP</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+  <style>
+    :root {
+      --brand: #7c3aed;
+      --brand-light: #a78bfa;
+    }
+    body { background: #0f0f13; font-family: 'Segoe UI', system-ui, sans-serif; }
+    .sidebar {
+      width: 220px; min-height: 100vh;
+      background: #16161d;
+      border-right: 1px solid #2a2a3a;
+      position: fixed; top: 0; left: 0;
+    }
+    .sidebar .brand {
+      padding: 1.25rem 1rem;
+      border-bottom: 1px solid #2a2a3a;
+    }
+    .sidebar .brand span { color: var(--brand-light); font-weight: 700; font-size: 1rem; }
+    .sidebar .brand small { color: #666; font-size: .7rem; display: block; }
+    .sidebar nav a {
+      display: flex; align-items: center; gap: .6rem;
+      padding: .6rem 1rem; color: #aaa; text-decoration: none;
+      border-radius: 6px; margin: .15rem .5rem;
+      transition: all .15s;
+    }
+    .sidebar nav a:hover, .sidebar nav a.active {
+      background: #7c3aed22; color: var(--brand-light);
+    }
+    .sidebar nav a.active { font-weight: 600; }
+    .main { margin-left: 220px; padding: 2rem; }
+    .card { background: #16161d; border: 1px solid #2a2a3a; border-radius: 12px; }
+    .stat-card { border-left: 3px solid var(--brand); }
+    .stat-card .stat-value { font-size: 1.8rem; font-weight: 700; color: #fff; }
+    .stat-card .stat-label { font-size: .8rem; color: #888; text-transform: uppercase; letter-spacing: .05em; }
+    .badge-status-completado  { background: #16a34a22; color: #4ade80; border: 1px solid #16a34a55; }
+    .badge-status-detenido    { background: #dc262622; color: #f87171; border: 1px solid #dc262655; }
+    .badge-status-iniciando,
+    .badge-status-building,
+    .badge-status-approved    { background: #d9770622; color: #fb923c; border: 1px solid #d9770655; }
+    .badge-status-awaiting_approval { background: #7c3aed22; color: #a78bfa; border: 1px solid #7c3aed55; }
+    .table { --bs-table-bg: transparent; --bs-table-color: #ccc; }
+    .table th { color: #666; font-weight: 500; font-size: .8rem; text-transform: uppercase; letter-spacing: .05em; border-color: #2a2a3a; }
+    .table td { border-color: #2a2a3a; vertical-align: middle; }
+    .table tbody tr:hover { background: #ffffff08; }
+    .form-control, .form-select {
+      background: #1e1e28; border-color: #2a2a3a; color: #ddd;
+    }
+    .form-control:focus, .form-select:focus {
+      background: #1e1e28; border-color: var(--brand); color: #fff;
+      box-shadow: 0 0 0 3px #7c3aed33;
+    }
+    .btn-brand { background: var(--brand); color: #fff; border: none; }
+    .btn-brand:hover { background: #6d28d9; color: #fff; }
+    .key-input { font-family: monospace; letter-spacing: .05em; }
+    pre { background: #0a0a10; border-radius: 8px; padding: 1rem; color: #aaa; font-size: .8rem; max-height: 400px; overflow-y: auto; }
+    .agent-pill {
+      display: inline-flex; align-items: center; gap: .3rem;
+      background: #ffffff0a; border: 1px solid #2a2a3a;
+      border-radius: 20px; padding: .2rem .7rem;
+      font-size: .75rem; color: #aaa;
+    }
+    .agent-pill.done { border-color: #16a34a55; color: #4ade80; background: #16a34a0d; }
+    #log-box {
+      background: #0a0a10; border-radius: 8px; padding: 1rem;
+      height: 260px; overflow-y: auto; font-family: monospace;
+      font-size: .78rem; color: #7ec8e3; border: 1px solid #2a2a3a;
+    }
+    .toast-container { z-index: 9999; }
+  </style>
+  {% block head %}{% endblock %}
+</head>
+<body>
+
+<div class="sidebar d-flex flex-column">
+  <div class="brand">
+    <span>⚙ Omni ERP</span>
+    <small>Fábrica de Software</small>
+  </div>
+  <nav class="pt-2 flex-grow-1">
+    <a href="/" class="{% if active_page == 'dashboard' %}active{% endif %}">
+      <i class="bi bi-grid-1x2"></i> Dashboard
+    </a>
+    <a href="/new" class="{% if active_page == 'new' %}active{% endif %}">
+      <i class="bi bi-plus-circle"></i> Nuevo Feature
+    </a>
+    <a href="/config" class="{% if active_page == 'config' %}active{% endif %}">
+      <i class="bi bi-sliders"></i> Configuración
+    </a>
+  </nav>
+  <div class="p-3 border-top" style="border-color:#2a2a3a!important">
+    <small class="text-muted d-block">v2.0 — Mayo 2026</small>
+  </div>
+</div>
+
+<div class="main">
+  {% block content %}{% endblock %}
+</div>
+
+<div class="toast-container position-fixed bottom-0 end-0 p-3">
+  <div id="liveToast" class="toast align-items-center border-0" role="alert">
+    <div class="d-flex">
+      <div class="toast-body" id="toastMsg"></div>
+      <button type="button" class="btn-close me-2 m-auto" data-bs-dismiss="toast"></button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script src="/static/app.js"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

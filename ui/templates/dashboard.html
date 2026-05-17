@@ -1,0 +1,196 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block head %}
+<style>
+  .run-row td:first-child { font-family: monospace; font-size: .78rem; color: #888; }
+  .chart-wrap { position: relative; height: 220px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-4">
+  <div>
+    <h4 class="mb-0 fw-semibold">Dashboard</h4>
+    <small class="text-muted">Fábrica de Software Multi-Repo</small>
+  </div>
+  <a href="/new" class="btn btn-brand btn-sm px-3">
+    <i class="bi bi-plus-circle me-1"></i> Nuevo Feature
+  </a>
+</div>
+
+<!-- Stat Cards -->
+<div class="row g-3 mb-4">
+  <div class="col-md-3">
+    <div class="card stat-card p-3">
+      <div class="stat-value">${{ "%.4f"|format(total_cost) }}</div>
+      <div class="stat-label">Costo Total USD</div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card stat-card p-3">
+      <div class="stat-value">{{ runs|length }}</div>
+      <div class="stat-label">Runs Totales</div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card stat-card p-3">
+      <div class="stat-value">
+        {{ runs|selectattr("status", "equalto", "completado")|list|length }}
+      </div>
+      <div class="stat-label">Completados</div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card stat-card p-3">
+      <div class="stat-value">
+        {{ runs|selectattr("status", "in", ["iniciando","building","approved"])|list|length }}
+      </div>
+      <div class="stat-label">En Progreso</div>
+    </div>
+  </div>
+</div>
+
+<!-- Charts Row -->
+<div class="row g-3 mb-4">
+  <div class="col-md-8">
+    <div class="card p-3">
+      <div class="mb-2 fw-semibold" style="font-size:.85rem">Costo diario (USD)</div>
+      <div class="chart-wrap"><canvas id="chartDaily"></canvas></div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card p-3">
+      <div class="mb-2 fw-semibold" style="font-size:.85rem">Costo por agente</div>
+      <div class="chart-wrap"><canvas id="chartAgent"></canvas></div>
+    </div>
+  </div>
+</div>
+
+<!-- Runs Table -->
+<div class="card">
+  <div class="p-3 border-bottom d-flex align-items-center justify-content-between" style="border-color:#2a2a3a!important">
+    <span class="fw-semibold" style="font-size:.9rem">Features Recientes</span>
+    <span class="text-muted" style="font-size:.75rem">{{ runs|length }} runs</span>
+  </div>
+  {% if runs %}
+  <div class="table-responsive">
+    <table class="table mb-0">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Feature</th>
+          <th>Repo</th>
+          <th>Modo</th>
+          <th>Estado</th>
+          <th>Costo</th>
+          <th>Fecha</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in runs %}
+        <tr>
+          <td>{{ r.feature_id[:20] }}…</td>
+          <td>{{ r.get("feature_name", r.feature_id) }}</td>
+          <td>
+            <span class="badge bg-secondary bg-opacity-25 text-secondary" style="font-size:.7rem">
+              {{ r.get("repo_name", "—") }}
+            </span>
+          </td>
+          <td>
+            <span class="badge bg-secondary bg-opacity-25 text-secondary" style="font-size:.7rem">
+              {{ r.get("mode", "?") }}
+            </span>
+          </td>
+          <td>
+            <span class="badge badge-status-{{ r.get('status','?') }} rounded-pill px-2">
+              {{ r.get("status", "?") }}
+            </span>
+          </td>
+          <td style="font-family:monospace;font-size:.8rem">
+            ${{ "%.4f"|format(r.get("total_cost_usd", 0)) }}
+          </td>
+          <td style="font-size:.78rem;color:#888">
+            {{ (r.get("started_at") or "")[:19] }}
+          </td>
+          <td>
+            <a href="/feature/{{ r.feature_id }}" class="btn btn-sm btn-outline-secondary btn-sm py-0 px-2" style="font-size:.75rem">
+              Ver <i class="bi bi-arrow-right"></i>
+            </a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="p-5 text-center text-muted">
+    <i class="bi bi-inbox" style="font-size:2rem;opacity:.3"></i>
+    <p class="mt-2 mb-0" style="font-size:.85rem">No hay runs todavía. <a href="/new" class="text-decoration-none" style="color:var(--brand-light)">Crear primer feature →</a></p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+window._dashInit = async function() {
+  const res = await fetch("/api/costs");
+  const data = await res.json();
+
+  // Daily cost chart
+  const dailyCtx = document.getElementById("chartDaily");
+  if (dailyCtx && Object.keys(data.daily).length) {
+    const labels = Object.keys(data.daily).sort();
+    const values = labels.map(d => data.daily[d]);
+    new Chart(dailyCtx, {
+      type: "line",
+      data: {
+        labels,
+        datasets: [{
+          label: "USD",
+          data: values,
+          borderColor: "#7c3aed",
+          backgroundColor: "#7c3aed22",
+          fill: true,
+          tension: 0.35,
+          pointRadius: 3,
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { ticks: { color: "#666", font: { size: 10 } }, grid: { color: "#2a2a3a" } },
+          y: { ticks: { color: "#666", font: { size: 10 }, callback: v => "$"+v.toFixed(4) }, grid: { color: "#2a2a3a" } }
+        }
+      }
+    });
+  }
+
+  // By-agent donut
+  const agCtx = document.getElementById("chartAgent");
+  if (agCtx && Object.keys(data.by_agent).length) {
+    const agLabels = Object.keys(data.by_agent);
+    const agValues = agLabels.map(k => data.by_agent[k]);
+    const palette = ["#7c3aed","#a78bfa","#6d28d9","#4c1d95","#8b5cf6","#c4b5fd","#ede9fe","#ddd6fe"];
+    new Chart(agCtx, {
+      type: "doughnut",
+      data: {
+        labels: agLabels,
+        datasets: [{ data: agValues, backgroundColor: palette, borderWidth: 0 }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { position: "bottom", labels: { color: "#888", font: { size: 10 }, boxWidth: 10 } }
+        }
+      }
+    });
+  }
+};
+window._dashInit();
+</script>
+{% endblock %}

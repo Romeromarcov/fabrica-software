@@ -1,0 +1,199 @@
+{% extends "base.html" %}
+
+{% block title %}Configuración{% endblock %}
+
+{% block head %}
+<style>
+  .provider-badge {
+    display: inline-flex; align-items: center; gap: .3rem;
+    font-size: .68rem; padding: .15rem .5rem; border-radius: 20px;
+    font-weight: 600; letter-spacing: .02em;
+  }
+  .pb-anthropic { background: #7c3aed22; color: #a78bfa; border: 1px solid #7c3aed44; }
+  .pb-google    { background: #0ea5e922; color: #38bdf8; border: 1px solid #0ea5e944; }
+  .pb-zhipu     { background: #16a34a22; color: #4ade80; border: 1px solid #16a34a44; }
+  .pb-kimi      { background: #d9770622; color: #fb923c; border: 1px solid #d9770644; }
+  .agent-row td { vertical-align: middle; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+  <h4 class="mb-0 fw-semibold">Configuración</h4>
+  <small class="text-muted">API Keys, modelos por agente y límites del orquestador</small>
+</div>
+
+{% if saved %}
+<div class="alert border-0 mb-4 py-2 px-3 d-flex align-items-center gap-2"
+     style="background:#16a34a22;color:#4ade80;font-size:.85rem">
+  <i class="bi bi-check-circle-fill"></i> Configuración guardada.
+  Reinicia el contenedor Docker si usas modelos cargados desde variables de entorno.
+</div>
+{% endif %}
+
+<form method="POST" action="/config">
+
+  <!-- ── API Keys ─────────────────────────────────────────────────────────── -->
+  <div class="card mb-3">
+    <div class="p-3 border-bottom d-flex align-items-center gap-2" style="border-color:#2a2a3a!important">
+      <i class="bi bi-key" style="color:var(--brand-light)"></i>
+      <span class="fw-semibold" style="font-size:.9rem">API Keys</span>
+    </div>
+    <div class="p-3">
+      <div class="row g-3">
+
+        <div class="col-md-6">
+          <label class="form-label d-flex align-items-center gap-2" style="font-size:.78rem;color:#888">
+            <span class="provider-badge pb-anthropic">Anthropic</span>
+            Agentes 4 · 5 · 6 · 7 · 8
+          </label>
+          <input type="password" name="anthropic_api_key" class="form-control key-input"
+                 value="{{ cfg.ANTHROPIC_API_KEY }}" placeholder="sk-ant-api03-…" autocomplete="off">
+        </div>
+
+        <div class="col-md-6">
+          <label class="form-label d-flex align-items-center gap-2" style="font-size:.78rem;color:#888">
+            <span class="provider-badge pb-google">Google</span>
+            Agente 1 · PM / Planificador
+          </label>
+          <input type="password" name="google_api_key" class="form-control key-input"
+                 value="{{ cfg.GOOGLE_API_KEY }}" placeholder="AIzaSy…" autocomplete="off">
+          <div class="form-text" style="font-size:.68rem;color:#444">
+            Obtener en <span style="color:#666">aistudio.google.com</span>
+          </div>
+        </div>
+
+        <div class="col-md-6">
+          <label class="form-label d-flex align-items-center gap-2" style="font-size:.78rem;color:#888">
+            <span class="provider-badge pb-zhipu">Z.ai</span>
+            Agente 2 · Backend (GLM)
+          </label>
+          <input type="password" name="zhipu_api_key" class="form-control key-input"
+                 value="{{ cfg.ZHIPU_API_KEY }}" placeholder="xxxxxxxx.yyyyyy" autocomplete="off">
+          <div class="form-text" style="font-size:.68rem;color:#444">
+            Obtener en <span style="color:#666">platform.z.ai</span>
+          </div>
+        </div>
+
+        <div class="col-md-6">
+          <label class="form-label d-flex align-items-center gap-2" style="font-size:.78rem;color:#888">
+            <span class="provider-badge pb-kimi">Kimi</span>
+            Agente 3 · Frontend (K2)
+          </label>
+          <input type="password" name="kimi_api_key" class="form-control key-input"
+                 value="{{ cfg.KIMI_API_KEY }}" placeholder="sk-…" autocomplete="off">
+          <div class="form-text" style="font-size:.68rem;color:#444">
+            Obtener en <span style="color:#666">platform.kimi.ai</span>
+          </div>
+        </div>
+
+        <div class="col-md-6">
+          <label class="form-label d-flex align-items-center gap-2" style="font-size:.78rem;color:#888">
+            <span class="provider-badge pb-anthropic" style="background:#ffffff0a;color:#666;border-color:#2a2a3a">LangSmith</span>
+            Trazabilidad (opcional)
+          </label>
+          <input type="password" name="langchain_api_key" class="form-control key-input"
+                 value="{{ cfg.LANGCHAIN_API_KEY }}" placeholder="ls__…" autocomplete="off">
+          <div class="mt-2">
+            <div class="form-check form-switch mb-0">
+              <input class="form-check-input" type="checkbox" name="langchain_tracing"
+                     id="tracingSwitch" {% if cfg.LANGCHAIN_TRACING_V2 == "true" %}checked{% endif %}>
+              <label class="form-check-label" for="tracingSwitch" style="font-size:.78rem;color:#888">
+                Activar LangSmith tracing
+              </label>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Modelos por agente ─────────────────────────────────────────────── -->
+  <div class="card mb-3">
+    <div class="p-3 border-bottom d-flex align-items-center gap-2" style="border-color:#2a2a3a!important">
+      <i class="bi bi-cpu" style="color:var(--brand-light)"></i>
+      <span class="fw-semibold" style="font-size:.9rem">Modelos por Agente</span>
+    </div>
+    <div class="p-1">
+      <table class="table table-sm mb-0 agent-row">
+        <thead>
+          <tr>
+            <th style="width:40px">#</th>
+            <th>Agente</th>
+            <th>Proveedor</th>
+            <th>Modelo (editable)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% set agents = [
+            ("A1", "MODEL_A1", "PM / Planificador",  "google",    "gemini-3.1-pro-preview"),
+            ("A2", "MODEL_A2", "Backend Developer",   "zhipu",     "glm-5.1"),
+            ("A3", "MODEL_A3", "Frontend Developer",  "kimi",      "kimi-k2.6"),
+            ("A4", "MODEL_A4", "QA Test",             "anthropic", "claude-sonnet-4-6"),
+            ("A5", "MODEL_A5", "Refactor + Doc",      "anthropic", "claude-sonnet-4-6"),
+            ("A6", "MODEL_A6", "DB Architect",        "anthropic", "claude-sonnet-4-6"),
+            ("A7", "MODEL_A7", "SecOps",              "anthropic", "claude-sonnet-4-6"),
+            ("A8", "MODEL_A8", "MCP Toolsmith",       "anthropic", "claude-sonnet-4-6"),
+          ] %}
+          {% for num, field, label, provider, default in agents %}
+          <tr>
+            <td style="color:#555;font-size:.78rem">{{ num }}</td>
+            <td style="font-size:.82rem">{{ label }}</td>
+            <td>
+              <span class="provider-badge pb-{{ provider }}">{{ provider }}</span>
+            </td>
+            <td>
+              <input type="text" name="{{ field }}" class="form-control form-control-sm key-input"
+                     value="{{ cfg.get(field, default) }}" style="font-size:.78rem">
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── Límites ────────────────────────────────────────────────────────── -->
+  <div class="card mb-4">
+    <div class="p-3 border-bottom d-flex align-items-center gap-2" style="border-color:#2a2a3a!important">
+      <i class="bi bi-sliders" style="color:var(--brand-light)"></i>
+      <span class="fw-semibold" style="font-size:.9rem">Límites y Tiempos</span>
+    </div>
+    <div class="p-3">
+      <div class="row g-3">
+        <div class="col-md-4">
+          <label class="form-label" style="font-size:.78rem;color:#888;text-transform:uppercase;letter-spacing:.05em">
+            Max iter. QA — Completo
+          </label>
+          <input type="number" name="max_qa_completo" class="form-control"
+                 value="{{ cfg.MAX_QA_ITER_COMPLETO }}" min="1" max="10">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label" style="font-size:.78rem;color:#888;text-transform:uppercase;letter-spacing:.05em">
+            Max iter. QA — Lite
+          </label>
+          <input type="number" name="max_qa_lite" class="form-control"
+                 value="{{ cfg.MAX_QA_ITER_LITE }}" min="1" max="10">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label" style="font-size:.78rem;color:#888;text-transform:uppercase;letter-spacing:.05em">
+            Timeout checkpoint (seg)
+          </label>
+          <input type="number" name="checkpoint_timeout" class="form-control"
+                 value="{{ cfg.CHECKPOINT_TIMEOUT_SECONDS }}" min="60" step="60">
+          <div class="form-text" style="font-size:.7rem;color:#555">
+            = {{ (cfg.CHECKPOINT_TIMEOUT_SECONDS | int) // 60 }} min de espera máxima al Founder
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <button type="submit" class="btn btn-brand px-4">
+    <i class="bi bi-floppy me-1"></i> Guardar configuración
+  </button>
+  <a href="/" class="btn btn-outline-secondary ms-2 px-4">Cancelar</a>
+
+</form>
+{% endblock %}

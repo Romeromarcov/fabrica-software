@@ -1,0 +1,244 @@
+{% extends "base.html" %}
+
+{% block title %}{{ feature_id[:24] }}{% endblock %}
+
+{% block head %}
+<style>
+  .output-tab-content pre { max-height: 500px; }
+  .approve-section { border: 1px solid #7c3aed55; background: #7c3aed0a; border-radius: 10px; }
+  .meta-pill {
+    display: inline-flex; align-items: center; gap: .3rem;
+    background: #ffffff08; border: 1px solid #2a2a3a;
+    border-radius: 20px; padding: .15rem .7rem;
+    font-size: .72rem; color: #888;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Header -->
+<div class="d-flex align-items-start justify-content-between mb-4">
+  <div>
+    <a href="/" class="text-muted text-decoration-none" style="font-size:.8rem">
+      <i class="bi bi-arrow-left me-1"></i> Dashboard
+    </a>
+    <h4 class="mt-1 mb-1 fw-semibold">{{ meta.get("feature_name", feature_id) }}</h4>
+    <div class="d-flex gap-2 flex-wrap">
+      <span class="meta-pill"><i class="bi bi-hash"></i>{{ feature_id }}</span>
+      <span class="meta-pill"><i class="bi bi-clock"></i>{{ (meta.get("started_at") or "")[:19] }}</span>
+      <span class="meta-pill"><i class="bi bi-lightning"></i>{{ meta.get("mode", "?") }}</span>
+      <span class="badge badge-status-{{ meta.get('status','?') }} rounded-pill px-2">
+        {{ meta.get("status", "?") }}
+      </span>
+    </div>
+  </div>
+  <div class="text-end">
+    <div class="fw-bold" style="font-size:1.4rem;color:#fff">
+      ${{ "%.4f"|format(meta.get("total_cost_usd", 0)) }}
+    </div>
+    <div style="font-size:.72rem;color:#888">costo total USD</div>
+  </div>
+</div>
+
+<div class="row g-3">
+
+  <!-- Left column: log + approve -->
+  <div class="col-md-5">
+
+    <!-- Live log -->
+    <div class="card mb-3">
+      <div class="p-3 border-bottom d-flex align-items-center justify-content-between" style="border-color:#2a2a3a!important">
+        <span class="fw-semibold" style="font-size:.85rem"><i class="bi bi-terminal me-1"></i>Log en tiempo real</span>
+        <span id="logStatus" class="badge" style="background:#2a2a3a;color:#888;font-size:.65rem">conectando…</span>
+      </div>
+      <div class="p-2">
+        <div id="log-box"></div>
+      </div>
+    </div>
+
+    <!-- Approve / Pause -->
+    {% if meta.get("status") in ["awaiting_approval", "building", "approved"] %}
+    <div class="approve-section p-3 mb-3">
+      <div class="fw-semibold mb-1" style="font-size:.85rem;color:var(--brand-light)">
+        <i class="bi bi-pause-circle me-1"></i> Acción requerida
+      </div>
+      <p class="text-muted mb-3" style="font-size:.78rem">
+        El pipeline está esperando tu aprobación para continuar. Revisa el MASTER PLAN y decide.
+      </p>
+      <div class="d-flex gap-2">
+        <button class="btn btn-brand btn-sm flex-grow-1"
+                onclick="sendApproval('approve')">
+          <i class="bi bi-check-circle me-1"></i> Aprobar
+        </button>
+        <button class="btn btn-outline-danger btn-sm"
+                onclick="sendApproval('pausa')">
+          <i class="bi bi-stop-circle me-1"></i> PAUSA
+        </button>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- QA Escalation -->
+    {% if meta.get("status") == "awaiting_approval" and meta.get("qa_escalated") %}
+    <div class="card p-3 mb-3" style="border-color:#dc262655">
+      <div class="fw-semibold mb-1" style="font-size:.85rem;color:#f87171">
+        <i class="bi bi-exclamation-triangle-fill me-1"></i> QA Escalado al Founder
+      </div>
+      <p class="text-muted mb-3" style="font-size:.78rem">
+        Se agotaron las iteraciones de QA. Decide cómo continuar.
+      </p>
+      <div class="d-flex flex-column gap-2">
+        <button class="btn btn-sm btn-outline-warning" onclick="sendApproval('rediseñar')">
+          <i class="bi bi-arrow-clockwise me-1"></i> REDISEÑAR (A2+A3 desde cero)
+        </button>
+        <button class="btn btn-sm btn-outline-success" onclick="sendApproval('aceptar')">
+          <i class="bi bi-check me-1"></i> ACEPTAR con deuda técnica
+        </button>
+        <button class="btn btn-sm btn-outline-danger" onclick="sendApproval('cancelar')">
+          <i class="bi bi-x me-1"></i> CANCELAR feature
+        </button>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Cost breakdown -->
+    {% if meta.get("cost_by_agent") %}
+    <div class="card p-3">
+      <div class="mb-2 fw-semibold" style="font-size:.85rem">Costo por agente</div>
+      <table class="table table-sm mb-0">
+        <thead><tr><th>Agente</th><th class="text-end">USD</th></tr></thead>
+        <tbody>
+          {% for agent, cost in meta.get("cost_by_agent", {}).items() %}
+          <tr>
+            <td style="font-size:.78rem">{{ agent }}</td>
+            <td class="text-end" style="font-family:monospace;font-size:.78rem">${{ "%.4f"|format(cost) }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+
+  </div>
+
+  <!-- Right column: master plan + agent outputs -->
+  <div class="col-md-7">
+
+    <!-- Master Plan -->
+    {% if master_plan %}
+    <div class="card mb-3">
+      <div class="p-3 border-bottom" style="border-color:#2a2a3a!important">
+        <span class="fw-semibold" style="font-size:.85rem"><i class="bi bi-file-text me-1"></i>MASTER PLAN</span>
+      </div>
+      <div class="p-3">
+        <pre id="masterPlanPre">{{ master_plan }}</pre>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Agent outputs -->
+    {% if outputs %}
+    <div class="card">
+      <div class="p-3 border-bottom" style="border-color:#2a2a3a!important">
+        <span class="fw-semibold" style="font-size:.85rem"><i class="bi bi-layers me-1"></i>Salidas por Agente</span>
+      </div>
+      <div class="p-3">
+        <ul class="nav nav-pills gap-1 mb-3" id="outputTabs">
+          {% for agent_key in outputs %}
+          <li class="nav-item">
+            <button class="nav-link {% if loop.first %}active{% endif %} py-1 px-2"
+                    style="font-size:.75rem"
+                    onclick="showOutput('{{ agent_key }}', this)">
+              {{ agent_key }}
+            </button>
+          </li>
+          {% endfor %}
+        </ul>
+        <div id="outputContent">
+          {% for agent_key, content in outputs.items() %}
+          <div class="output-tab-content" id="output-{{ agent_key }}"
+               style="{% if not loop.first %}display:none{% endif %}">
+            <pre>{{ content }}</pre>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+    {% else %}
+    <div class="card p-4 text-center text-muted">
+      <i class="bi bi-hourglass-split" style="font-size:1.5rem;opacity:.3"></i>
+      <p class="mt-2 mb-0" style="font-size:.82rem">Los agentes aún no han generado salidas.</p>
+    </div>
+    {% endif %}
+
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Tab switcher
+function showOutput(key, btn) {
+  document.querySelectorAll(".output-tab-content").forEach(el => el.style.display = "none");
+  document.querySelectorAll("#outputTabs .nav-link").forEach(b => b.classList.remove("active"));
+  const el = document.getElementById("output-" + key);
+  if (el) el.style.display = "block";
+  btn.classList.add("active");
+}
+
+// Approve action
+async function sendApproval(action) {
+  const fd = new FormData();
+  fd.append("action", action);
+  const res = await fetch("/feature/{{ feature_id }}/approve", { method: "POST", body: fd });
+  if (res.ok) {
+    window._showToast("Acción '" + action + "' enviada al orquestador.");
+  }
+}
+
+// SSE log streaming
+const featureId = "{{ feature_id }}";
+const logBox = document.getElementById("log-box");
+const logStatus = document.getElementById("logStatus");
+
+function appendLog(line) {
+  const span = document.createElement("div");
+  span.textContent = line;
+  logBox.appendChild(span);
+  logBox.scrollTop = logBox.scrollHeight;
+}
+
+{% set terminal_statuses = ["completado", "detenido"] %}
+{% if meta.get("status") not in terminal_statuses %}
+const es = new EventSource("/stream/" + featureId);
+logStatus.textContent = "en vivo";
+logStatus.style.background = "#16a34a22";
+logStatus.style.color = "#4ade80";
+
+es.onmessage = function(e) {
+  const line = e.data;
+  if (line.startsWith("[DONE]") || line === "[TIMEOUT]") {
+    es.close();
+    logStatus.textContent = "finalizado";
+    logStatus.style.background = "#2a2a3a";
+    logStatus.style.color = "#888";
+    // Reload para mostrar salidas actualizadas
+    setTimeout(() => window.location.reload(), 1500);
+    return;
+  }
+  appendLog(line);
+};
+
+es.onerror = function() {
+  logStatus.textContent = "sin conexión";
+  logStatus.style.background = "#dc262622";
+  logStatus.style.color = "#f87171";
+};
+{% else %}
+logStatus.textContent = "{{ meta.get('status') }}";
+logStatus.style.background = "#2a2a3a";
+logStatus.style.color = "#888";
+appendLog("— run finalizado —");
+{% endif %}
+</script>
+{% endblock %}

@@ -1,0 +1,54 @@
+services:
+
+  # ── OpenClaw — agentes con herramientas reales (filesystem + terminal) ──────
+  openclaw:
+    image: ghcr.io/openclaw/openclaw:latest
+    container_name: openclaw
+    ports:
+      - "18789:18789"
+    volumes:
+      # Config de OpenClaw con los 9 perfiles de agente (usuario node, no root)
+      - C:/Users/PC/Proyectos/.openclaw:/home/node/.openclaw
+      # Workspace: SOLO C:\Users\PC\Proyectos — acceso restringido
+      - C:/Users/PC/Proyectos:/workspace
+    env_file:
+      - C:/Users/PC/Proyectos/.openclaw/.env
+    environment:
+      HOME: /home/node
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:18789/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ── Fábrica de Software — orquestador LangGraph + Web UI ────────────────────
+  fabrica:
+    build: .
+    container_name: fabrica-software
+    ports:
+      - "7860:7860"
+    volumes:
+      # Todos los repos montados bajo /workspace (multi-repo)
+      - C:/Users/PC/Proyectos:/workspace
+      # .env montado para que la UI de Config pueda escribirlo
+      - ./.env:/app/.env
+      # Persistencia de runs y estado LangGraph (visible desde el host)
+      - ./data:/data
+    env_file:
+      - .env
+    environment:
+      WORKSPACES_ROOT: /workspace
+      RUNS_DIR: /data/runs
+      DB_PATH: /data/fabrica_state.db
+    depends_on:
+      openclaw:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7860/"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

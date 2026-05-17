@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+
+{% block title %}Nuevo Feature{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+  <h4 class="mb-0 fw-semibold">Nuevo Feature</h4>
+  <small class="text-muted">Lanza el pipeline completo o Lite para cualquier repositorio</small>
+</div>
+
+{% if not api_key_ok %}
+<div class="alert border-0 mb-4 py-2 px-3 d-flex align-items-center gap-2"
+     style="background:#dc262622;color:#f87171;font-size:.85rem">
+  <i class="bi bi-exclamation-triangle-fill"></i>
+  No hay una Anthropic API Key válida configurada.
+  <a href="/config" class="ms-1" style="color:#f87171">Ir a Configuración →</a>
+</div>
+{% endif %}
+
+<div class="row justify-content-center">
+  <div class="col-md-7">
+    <div class="card p-4">
+
+      <form method="POST" action="/new" id="newFeatureForm">
+
+        <!-- Selector de repositorio -->
+        <div class="mb-4">
+          <label class="form-label fw-semibold" style="font-size:.85rem">
+            Repositorio Destino
+          </label>
+          {% if repos %}
+          <select name="repo_name" class="form-select"
+                  {% if not api_key_ok %}disabled{% endif %} required>
+            <option value="" disabled selected>Selecciona un repositorio…</option>
+            {% for r in repos %}
+            <option value="{{ r.name }}">{{ r.name }}</option>
+            {% endfor %}
+          </select>
+          <div class="form-text" style="font-size:.72rem;color:#555">
+            Repositorios detectados en <code>WORKSPACES_ROOT</code>.
+          </div>
+          {% else %}
+          <div class="alert border-0 py-2 px-3" style="background:#dc262622;color:#f87171;font-size:.82rem">
+            <i class="bi bi-exclamation-triangle-fill me-1"></i>
+            No se detectaron repositorios git. Verifica <code>WORKSPACES_ROOT</code>.
+          </div>
+          {% endif %}
+        </div>
+
+        <div class="mb-4">
+          <label class="form-label fw-semibold" style="font-size:.85rem">
+            Nombre del Feature
+          </label>
+          <input type="text" name="feature_name" id="featureName"
+                 class="form-control form-control-lg"
+                 placeholder="ej. Módulo de Facturación Electrónica"
+                 required autofocus
+                 {% if not api_key_ok %}disabled{% endif %}>
+          <div class="form-text" style="font-size:.72rem;color:#555">
+            Describe el feature claramente — esto se convierte en el título del MASTER_PLAN.
+          </div>
+        </div>
+
+        <div class="mb-4">
+          <label class="form-label fw-semibold" style="font-size:.85rem">Modo de Ejecución</label>
+          <div class="row g-3 mt-0">
+
+            <div class="col-6">
+              <input type="radio" class="btn-check" name="mode" id="modeCompleto"
+                     value="completo" checked {% if not api_key_ok %}disabled{% endif %}>
+              <label class="btn btn-outline-secondary w-100 text-start p-3" for="modeCompleto"
+                     style="border-color:#2a2a3a;height:auto">
+                <div class="fw-semibold mb-1" style="font-size:.85rem">
+                  <i class="bi bi-diagram-3 me-1" style="color:var(--brand-light)"></i> Completo
+                </div>
+                <div style="font-size:.72rem;color:#888;line-height:1.4">
+                  A1 → A6/A8 → A2/A3 → A7 → A4 → A5 → PR<br>
+                  Incluye DB, MCP y SecOps. Recomendado para features nuevos.
+                </div>
+              </label>
+            </div>
+
+            <div class="col-6">
+              <input type="radio" class="btn-check" name="mode" id="modeLite"
+                     value="lite" {% if not api_key_ok %}disabled{% endif %}>
+              <label class="btn btn-outline-secondary w-100 text-start p-3" for="modeLite"
+                     style="border-color:#2a2a3a;height:auto">
+                <div class="fw-semibold mb-1" style="font-size:.85rem">
+                  <i class="bi bi-lightning me-1" style="color:#fb923c"></i> Lite
+                </div>
+                <div style="font-size:.72rem;color:#888;line-height:1.4">
+                  A1 → A2/A3 → A4 → A5 → PR<br>
+                  Sin DB ni MCP. Ideal para bugfixes y pequeños ajustes.
+                </div>
+              </label>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Cost estimate -->
+        <div class="p-3 mb-4 rounded" style="background:#0a0a10;border:1px solid #2a2a3a">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <span style="font-size:.78rem;color:#888">Estimación de costo</span>
+            <span id="costBadge" class="badge" style="background:#7c3aed22;color:#a78bfa;border:1px solid #7c3aed55;font-size:.72rem">
+              Completo ~$0.08–0.25 USD
+            </span>
+          </div>
+          <div style="font-size:.72rem;color:#555;line-height:1.5">
+            Varía según longitud del contexto y número de iteraciones QA.<br>
+            El costo real se muestra en detalle una vez finalizado el run.
+          </div>
+        </div>
+
+        <div class="d-flex gap-2">
+          <button type="submit" class="btn btn-brand px-4 flex-grow-1"
+                  id="submitBtn" {% if not api_key_ok %}disabled{% endif %}>
+            <i class="bi bi-play-fill me-1"></i> Iniciar Pipeline
+          </button>
+          <a href="/" class="btn btn-outline-secondary px-3">Cancelar</a>
+        </div>
+
+      </form>
+    </div>
+
+    <!-- Pipeline diagram -->
+    <div class="card mt-3 p-3">
+      <div class="mb-2" style="font-size:.78rem;color:#888;text-transform:uppercase;letter-spacing:.05em">
+        Flujo del pipeline
+      </div>
+      <div id="pipelineDiagram" style="font-size:.72rem;color:#666;line-height:1.8;font-family:monospace">
+        <!-- se actualiza con JS según modo -->
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const diagrams = {
+  completo: "A1 (PM/Plan) → STOP (aprobación) → A6 (DB) + A8 (MCP) → A2 (Backend) + A3 (Frontend) → A7 (SecOps Rev.1) → CHECKPOINT A → A4 (QA) → A7 (SecOps Rev.2) → CHECKPOINT B → A5 (Refactor+Doc) → PR",
+  lite:     "A1 (PM/Plan) → STOP (aprobación) → A2 (Backend) + A3 (Frontend) → A4 (QA) → A5 (Refactor+Doc) → PR",
+};
+
+function updateUI() {
+  const mode = document.querySelector("input[name=mode]:checked")?.value || "completo";
+  document.getElementById("pipelineDiagram").textContent = diagrams[mode];
+  document.getElementById("costBadge").textContent =
+    mode === "completo" ? "Completo ~$0.08–0.25 USD" : "Lite ~$0.02–0.08 USD";
+}
+
+document.querySelectorAll("input[name=mode]").forEach(r => r.addEventListener("change", updateUI));
+updateUI();
+
+// Deshabilitar botón al enviar para evitar doble submit
+document.getElementById("newFeatureForm")?.addEventListener("submit", function() {
+  const btn = document.getElementById("submitBtn");
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status"></span>Iniciando…';
+});
+</script>
+{% endblock %}
