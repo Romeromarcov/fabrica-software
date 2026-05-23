@@ -8,8 +8,16 @@ from config import MODEL_A5
 def a5_frontend(state: FabricaState) -> dict:
     from tools.architecture_record import adr_context_block
     from tools.project_memory import get_memory_context
+    from tools.stack_reader import read_stack, get_frontend_instructions
     adr_block    = adr_context_block(state["repo_path"])
     memory_block = get_memory_context(state.get("project_id"))
+
+    # Instrucciones del stack frontend real del proyecto
+    stack = read_stack(state["repo_path"])
+    stack_block = ""
+    frontend_instructions = get_frontend_instructions(stack)
+    if frontend_instructions:
+        stack_block = f"\n## INSTRUCCIONES DE STACK\n{frontend_instructions}\n"
 
     qa_context = ""
     if state.get("qa_report") and state["qa_iterations"] > 0:
@@ -23,7 +31,7 @@ Corrige ÚNICAMENTE los bugs listados en el frontend.
 
     task = f"""
 Eres el Agente 5 — Frontend Developer.
-{adr_block}{memory_block}
+{adr_block}{memory_block}{stack_block}
 MASTER_PLAN del feature (especialmente secciones 5 y 6 — UI/UX):
 ---
 {state['master_plan']}
@@ -36,18 +44,24 @@ ENDPOINTS DEL BACKEND (Agente 4) — usa estos para los services:
 {qa_context}
 
 Tu tarea: implementa el frontend completo.
-Entrega en este orden:
-1. `src/types/[modulo].ts` — interfaces TypeScript (sin `any`)
-2. `src/services/[modulo]Service.ts` — usando api.ts, nunca fetch directo
-3. `src/hooks/use[Feature].ts` — TanStack Query, nunca useEffect para servidor
-4. `src/components/[Feature]/` — componentes MUI directos, máx. 300 líneas cada uno
-5. `src/pages/[Feature]Page.tsx` — composición de componentes
-6. Fragmento de route para agregar a routes/
+Sigue las instrucciones de stack de arriba para la estructura de archivos.
+Para CADA archivo de código usa EXACTAMENTE este formato (sin excepción):
 
-Para cada archivo:
+```[extensión]
+// === ruta/relativa/archivo.ext ===
+[código completo del archivo]
+```
+
+Ejemplo para React/TypeScript:
 ```typescript
-// === src/[ruta]/[archivo].ts ===
-[código completo]
+// === src/types/modulo.ts ===
+export interface ModuloItem { ... }
+```
+
+Ejemplo para Vue:
+```vue
+// === src/components/ModuloCard.vue ===
+<template>...</template>
 ```
 """
     output, cost = call_agent(

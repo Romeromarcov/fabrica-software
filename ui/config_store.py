@@ -35,6 +35,10 @@ DEFAULTS = {
     "MODEL_A6": "claude-sonnet-4-6",        # A6 Revisor/Refactor — Anthropic
     "MODEL_A7": "claude-sonnet-4-6",        # A7 QA Test — Anthropic
     "MODEL_A8": "claude-sonnet-4-6",        # A8 SecOps — Anthropic
+    # A9 y A10 no usan LLM
+    "MODEL_A11": "claude-sonnet-4-6",       # A11 DevOps — Anthropic
+    # Comportamiento del pipeline
+    "WRITE_TO_REPO": "true",               # false = dry-run sin escribir archivos
     # Límites del pipeline
     "MAX_QA_ITER_COMPLETO":       "3",
     "MAX_QA_ITER_LITE":           "2",
@@ -75,9 +79,10 @@ MODEL_FORBIDDEN_PREFIX: dict[str, tuple[str, ...]] = {
     "MODEL_A3": ("glm-", "kimi-"),
     "MODEL_A4": ("claude-",),
     "MODEL_A5": ("claude-",),
-    "MODEL_A6": ("glm-", "kimi-"),
-    "MODEL_A7": ("glm-", "kimi-"),
-    "MODEL_A8": ("glm-", "kimi-"),
+    "MODEL_A6":  ("glm-", "kimi-"),
+    "MODEL_A7":  ("glm-", "kimi-"),
+    "MODEL_A8":  ("glm-", "kimi-"),
+    "MODEL_A11": ("glm-", "kimi-"),   # A11 DevOps también debe ser Anthropic
 }
 
 SENSITIVE = {

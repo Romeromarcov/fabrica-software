@@ -65,6 +65,14 @@ class FabricaState(TypedDict):
     # ── PR Final ──────────────────────────────────────────────────────────────
     pr_message: Optional[str]
 
+    # ── Code Writer (A10) ────────────────────────────────────────────────────
+    files_written: list[str]         # Rutas relativas de archivos escritos al repo
+    needs_devops: bool               # True = A11 DevOps debe ejecutarse
+
+    # ── DevOps (A11) ─────────────────────────────────────────────────────────
+    devops_output: Optional[str]     # Output del agente DevOps
+    migration_note: Optional[str]    # Nota de migraciones detectadas por A11
+
     # ── Control interno ───────────────────────────────────────────────────────
     current_agent: str
     # operator.add permite que múltiples nodos appendeen a esta lista sin conflictos
@@ -112,6 +120,10 @@ def initial_state(
         refactor_doc_output=None,
         refactor_doc_approved=False,
         pr_message=None,
+        files_written=[],
+        needs_devops=False,
+        devops_output=None,
+        migration_note=None,
         current_agent="inicio",
         errors=[],
         cost_entries=[],

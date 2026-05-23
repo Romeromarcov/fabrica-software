@@ -25,6 +25,18 @@ def a0_arquitecto(state: ProjectState) -> dict:
     # ── Leer archivos subidos por el Founder ──────────────────────────────────
     uploads_block = uploads_as_context(state["project_id"])
 
+    # ── Snapshot del repo real (solo en modo continuar proyecto) ──────────────
+    repo_snapshot_block = ""
+    if not is_new and repo_path:
+        try:
+            from tools.stack_reader import read_stack
+            from tools.repo_scanner import get_repo_context_for_a0
+            stack = read_stack(repo_path)
+            repo_snapshot_block = "\n" + get_repo_context_for_a0(repo_path, stack=stack) + "\n"
+        except Exception as _scan_exc:
+            import logging as _log
+            _log.getLogger(__name__).warning("repo_scanner: %s", _scan_exc)
+
     if is_new:
         task = f"""
 Eres el Agente 0 — Arquitecto de Proyecto.
@@ -38,6 +50,8 @@ El Founder quiere CREAR UN PROYECTO NUEVO desde cero.
 {uploads_block}
 
 Tu tarea es generar el plan maestro completo del proyecto. Debes entregar:
+
+
 
 ## PARTE 1 — STACK TECNOLÓGICO
 
@@ -125,13 +139,14 @@ El Founder quiere generar un PLAN DE DESARROLLO para un proyecto existente.
 **Repositorio:** {repo_path}
 
 {uploads_block}
-
+{repo_snapshot_block}
 Tu tarea es analizar el estado actual del proyecto y generar el roadmap de features a implementar.
 
 ## ANÁLISIS DEL ESTADO ACTUAL
 
 Lee los documentos de contexto (PROJECT_CONTEXT, DECISION_LOG, CODING_STANDARDS)
-para entender qué existe hoy, qué decisiones se tomaron y qué está pendiente.
+y el snapshot de código real del repositorio adjunto arriba para entender
+qué existe hoy, qué decisiones se tomaron y qué está pendiente.
 
 Identifica:
 1. Módulos ya implementados (con su estado de madurez)
@@ -222,6 +237,35 @@ Después del JSON, escribe EXACTAMENTE este bloque (entre las marcas ```markdown
         try:
             adr_content = f"# Architecture — {state['project_name']}\n\n{output[:3000]}"
             write_adr(repo_path, adr_content)
+        except Exception:
+            pass
+
+    # ── Generar STACK.md para proyectos nuevos ────────────────────────────────
+    if is_new and repo_path:
+        try:
+            from tools.stack_reader import generate_stack_md
+            # Detectar backend y frontend del output del arquitecto
+            be = "django"  # default
+            fe = "react"   # default
+            out_low = output.lower()
+            for b in ("fastapi", "express", "laravel", "flask"):
+                if b in out_low:
+                    be = b
+                    break
+            for f in ("nextjs", "next.js", "vue", "angular", "svelte"):
+                if f.replace(".", "") in out_low.replace(".", ""):
+                    fe = f.replace(".", "")
+                    break
+            stack_content = generate_stack_md(
+                project_name=state["project_name"],
+                backend=be, frontend=fe,
+            )
+            from pathlib import Path as _Path
+            stack_file = _Path(repo_path) / "STACK.md"
+            stack_file.parent.mkdir(parents=True, exist_ok=True)
+            stack_file.write_text(stack_content, encoding="utf-8")
+        except Exception:
+            pass  # Best-effort — no bloquear si el repo no existe aún
         except Exception:
             pass
 

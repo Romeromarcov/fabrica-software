@@ -4,16 +4,21 @@ Grafo LangGraph de la Fábrica de Software.
 Pipeline:
 
   COMPLETO: A1 PM → Stop ⛔ → A2 DB → A3 MCP → A4 Backend → A5 Frontend
-              → A6 Refactor ↺(QA falla) → A7 QA → A8 SecOps ↺(vulnerabilidades) → A1 PM Final
+              → A6 Refactor ↺(QA falla) → A7 QA → A8 SecOps ↺(vulnerabilidades)
+              → A9 Sandbox → A10 CodeWriter → A11 DevOps [condicional] → A1 PM Final
 
   LITE:     A1 PM → Stop ⛔ → A4 Backend → A5 Frontend
-              → A6 Refactor ↺(QA falla) → A7 QA → A8 SecOps ↺(vulnerabilidades) → A1 PM Final
+              → A6 Refactor ↺(QA falla) → A7 QA → A8 SecOps ↺(vulnerabilidades)
+              → A9 Sandbox → A10 CodeWriter → A11 DevOps [condicional] → A1 PM Final
 
 Loops y escalaciones:
   • QA falla → vuelve a A6 (que lee el qa_report y corrige)
   • Máx. iteraciones QA↔A6 → qa_escalation ⚠️ → humano
   • SecOps encuentra vulnerabilidades → corrige código → retest A7 QA
   • Máx. iteraciones SecOps↔QA (MAX_SECOPS_ITER=2) → qa_escalation ⚠️ → humano
+  • Sandbox falla → vuelve a A6 (lee sandbox_results)
+  • A10 escribe archivos al repo real
+  • A11 actualiza deps/infra solo cuando needs_devops=True
   • Notificación Telegram al completar y al escalar
 """
 from __future__ import annotations
@@ -34,6 +39,8 @@ from nodes.a6_refactor     import a6_refactor
 from nodes.a7_qa           import a7_qa
 from nodes.a8_secops       import a8_secops
 from nodes.a9_sandbox      import a9_sandbox
+from nodes.a10_code_writer import a10_code_writer
+from nodes.a11_devops      import a11_devops
 
 # ── Nodos humanos ─────────────────────────────────────────────────────────────
 from nodes.human_nodes import stop_protocol, qa_escalation
@@ -90,15 +97,24 @@ def _route_after_secops(state: FabricaState) -> str:
 def _route_after_sandbox(state: FabricaState) -> str:
     """
     Sandbox:
-      todos los checks pasaron (o sin herramientas) → PR Final
+      todos los checks pasaron (o sin herramientas) → A10 Code Writer
       hay fallos y hay margen → A6 Refactor (lee sandbox_results y corrige)
       agotó iteraciones → escala humano
     """
     if state["sandbox_passed"]:
-        return "passed"
+        return "passed"   # → a10_code_writer
     if state.get("sandbox_iterations", 0) >= MAX_SANDBOX_ITER:
         return "escalar"
     return "reintentar"
+
+
+def _route_after_code_writer(state: FabricaState) -> str:
+    """
+    Code Writer:
+      necesita devops (deps/infra nuevas) → A11 DevOps
+      no necesita → PR Final directamente
+    """
+    return "devops" if state.get("needs_devops") else "pr_final"
 
 
 # ── Nodo terminal ─────────────────────────────────────────────────────────────
@@ -136,6 +152,8 @@ def build_graph() -> StateGraph:
     g.add_node("qa_escalation",     qa_escalation)       # ⚠️ escala humano (QA o SecOps)
     g.add_node("a8_secops",         a8_secops)           # post-QA: auditoría + corrección
     g.add_node("a9_sandbox",        a9_sandbox)          # post-SecOps: tests reales + lint
+    g.add_node("a10_code_writer",   a10_code_writer)     # escribe archivos al repo real
+    g.add_node("a11_devops",        a11_devops)          # actualiza deps/infra [condicional]
     g.add_node("a1_pr_final",       a1_pr_final)         # PM cierre: cumplimiento+docs+PR
     g.add_node("pipeline_detenido", pipeline_detenido)
 
@@ -199,18 +217,31 @@ def build_graph() -> StateGraph:
         },
     )
 
-    # 9. Sandbox: passed → PR Final | fallos → A6 Refactor | agotó → escala
+    # 9. Sandbox: passed → A10 CodeWriter | fallos → A6 Refactor | agotó → escala
     g.add_conditional_edges(
         "a9_sandbox",
         _route_after_sandbox,
         {
-            "passed":    "a1_pr_final",
-            "reintentar": "a6_refactor",    # A6 lee sandbox_results y corrige
-            "escalar":   "qa_escalation",
+            "passed":     "a10_code_writer",   # → escribe archivos al repo real
+            "reintentar": "a6_refactor",       # A6 lee sandbox_results y corrige
+            "escalar":    "qa_escalation",
         },
     )
 
-    # 10. PM Final → FIN
+    # 10. Code Writer → DevOps (condicional) | PR Final (directo)
+    g.add_conditional_edges(
+        "a10_code_writer",
+        _route_after_code_writer,
+        {
+            "devops":   "a11_devops",     # actualiza deps/infra
+            "pr_final": "a1_pr_final",    # directo al PR
+        },
+    )
+
+    # 11. DevOps → PR Final
+    g.add_edge("a11_devops", "a1_pr_final")
+
+    # 12. PM Final → FIN
     g.add_edge("a1_pr_final",       END)
     g.add_edge("pipeline_detenido", END)
 

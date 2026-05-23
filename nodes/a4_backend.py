@@ -8,8 +8,16 @@ from config import MODEL_A4
 def a4_backend(state: FabricaState) -> dict:
     from tools.architecture_record import adr_context_block
     from tools.project_memory import get_memory_context
+    from tools.stack_reader import read_stack, get_backend_instructions
     adr_block    = adr_context_block(state["repo_path"])
     memory_block = get_memory_context(state.get("project_id"))
+
+    # Inyectar instrucciones del stack real del proyecto
+    stack = read_stack(state["repo_path"])
+    stack_block = ""
+    backend_instructions = get_backend_instructions(stack)
+    if backend_instructions:
+        stack_block = f"\n## INSTRUCCIONES DE STACK\n{backend_instructions}\n"
 
     qa_context = ""
     if state.get("qa_report") and state["qa_iterations"] > 0:
@@ -23,7 +31,7 @@ Corrige ÚNICAMENTE los bugs listados. No cambies lo que ya funciona.
 
     task = f"""
 Eres el Agente 4 — Backend Developer.
-{adr_block}{memory_block}
+{adr_block}{memory_block}{stack_block}
 MASTER_PLAN del feature:
 ---
 {state['master_plan']}
@@ -38,18 +46,26 @@ SECURITY CLEARANCE (Agente 8 Rev.1) — esquema aprobado, puedes construir sobre
 {qa_context}
 
 Tu tarea: implementa el backend completo.
-Entrega en este orden:
-1. `apps/[modulo]/models.py` — usando exactamente el esquema del Agente 2
-2. `apps/[modulo]/serializers.py` — separados por caso de uso (list vs detalle)
-3. `apps/[modulo]/services.py` — toda la lógica de negocio aquí
-4. `apps/[modulo]/views.py` — ViewSets que delegan a services
-5. `apps/[modulo]/signals.py` — auditoría via LogAuditoria
-6. `apps/[modulo]/urls.py` — router registration
+Sigue las instrucciones de stack de arriba para la estructura de archivos.
+Para CADA archivo de código usa EXACTAMENTE este formato (sin excepción):
 
-Para cada archivo, usa el formato:
+```[extensión]
+# === ruta/relativa/archivo.ext ===
+[código completo del archivo]
+```
+
+Ejemplo para Django:
 ```python
-# === apps/[modulo]/[archivo].py ===
-[código completo]
+# === apps/modulo/models.py ===
+from django.db import models
+...
+```
+
+Ejemplo para FastAPI:
+```python
+# === app/models/modulo.py ===
+from sqlalchemy import Column, Integer
+...
 ```
 """
     output, cost = call_agent(

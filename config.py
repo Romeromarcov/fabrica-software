@@ -57,9 +57,17 @@ MODEL_A6 = os.getenv("MODEL_A6", "claude-sonnet-4-6") # A6 Revisor / Refactor
 MODEL_A7 = os.getenv("MODEL_A7", "claude-sonnet-4-6") # A7 QA Test
 MODEL_A8 = os.getenv("MODEL_A8", "claude-sonnet-4-6") # A8 SecOps
 
+MODEL_A9  = "no-llm"                                         # A9 Sandbox — sin LLM
+MODEL_A10 = "no-llm"                                         # A10 Code Writer — sin LLM
+MODEL_A11 = os.getenv("MODEL_A11", "claude-sonnet-4-6")     # A11 DevOps — Anthropic
+
 MODEL_PM       = MODEL_A1
 MODEL_STANDARD = "claude-sonnet-4-6"
 MODEL_FAST     = os.getenv("MODEL_FAST", "claude-haiku-4-5-20251001")
+
+# ── Flags de comportamiento del pipeline ──────────────────────────────────────
+# WRITE_TO_REPO: si False, A10 hace dry-run (loguea sin escribir)
+WRITE_TO_REPO = os.getenv("WRITE_TO_REPO", "true").lower() == "true"
 
 # ── Límites del pipeline ──────────────────────────────────────────────────────
 MAX_QA_ITER_COMPLETO       = int(os.getenv("MAX_QA_ITER_COMPLETO",       "3"))

@@ -7,7 +7,13 @@ from config import MAX_QA_ITER_COMPLETO, MAX_QA_ITER_LITE, MODEL_A7
 
 def a7_qa(state: FabricaState) -> dict:
     from tools.architecture_record import adr_context_block
+    from tools.stack_reader import read_stack, get_qa_instructions
     adr_block = adr_context_block(state["repo_path"])
+
+    # Instrucciones de testing del stack real
+    stack = read_stack(state["repo_path"])
+    qa_instructions = get_qa_instructions(stack)
+    stack_block = f"\n## INSTRUCCIONES DE TESTING\n{qa_instructions}\n" if qa_instructions else ""
 
     iteration    = state["qa_iterations"] + 1
     max_iter     = MAX_QA_ITER_COMPLETO if state["mode"] == "completo" else MAX_QA_ITER_LITE
@@ -25,7 +31,7 @@ def a7_qa(state: FabricaState) -> dict:
 
     task = f"""
 Eres el Agente 7 — QA Test. Esta es la iteración QA {iteration} de máximo {max_iter}.
-{adr_block}{retest_note}
+{adr_block}{stack_block}{retest_note}
 CRITERIOS DE ACEPTACIÓN (del MASTER_PLAN):
 ---
 {state['master_plan']}
@@ -42,15 +48,20 @@ CÓDIGO FRONTEND:
 ---
 
 Tu tarea: genera los tests completos y verifica los criterios de aceptación.
+Sigue las instrucciones de testing del stack de arriba.
+Si no hay instrucciones específicas de stack, usa las mejores prácticas del framework detectado.
 
-OBLIGATORIO en este orden:
-1. Test de aislamiento multi-tenant (CRÍTICO — sin esto no hay QA pass)
-2. Tests de permisos (403 para usuarios sin permiso)
-3. Tests del happy path
-4. Tests de casos límite (stock=0, campos vacíos, valores extremos)
-5. Tests de soft delete (registros inactivos no aparecen en listados)
-6. Tests de auditoría (LogAuditoria generado en acciones write)
-7. Tests de frontend (loading, error state, datos vacíos)
+MÍNIMO obligatorio para cualquier stack:
+1. Tests de autenticación/permisos (401/403 para usuarios sin acceso)
+2. Tests del happy path de cada endpoint o componente
+3. Tests de casos límite (vacíos, nulos, valores extremos)
+4. Tests de estados de error
+
+Para cada test file usa el formato estándar:
+```[extensión]
+# === tests/test_[modulo].py === (o ruta equivalente del stack)
+[código de tests completo]
+```
 
 Al final de tu output, escribe UNA de estas dos líneas exactas:
 - "QA_RESULT: PASSED" — si el código supera todos los criterios
