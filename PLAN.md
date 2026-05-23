@@ -123,7 +123,7 @@ TAREA 1 (Code Writer)
 
 | Tarea | Estado | Archivos afectados |
 |-------|--------|-------------------|
-| T1 — Code Writer | 🔲 Pendiente | tools/code_writer.py, nodes/a10_code_writer.py, graph.py, state.py |
-| T2 — DevOps | 🔲 Pendiente | nodes/a11_devops.py, graph.py, state.py, human_nodes.py |
-| T3 — Stack-agnostic | 🔲 Pendiente | tools/stack_reader.py, nodes/a4/a5/a7.py, a0_arquitecto.py |
-| T4 — Repo Scanner | 🔲 Pendiente | tools/repo_scanner.py, nodes/a0_arquitecto.py |
+| T1 — Code Writer | ✅ Completado | tools/code_writer.py, nodes/a10_code_writer.py, graph.py, state.py, config.py |
+| T2 — DevOps | ✅ Completado | nodes/a11_devops.py, graph.py, state.py, config.py, .env.example |
+| T3 — Stack-agnostic | ✅ Completado | tools/stack_reader.py, nodes/a4/a5/a7/a0.py |
+| T4 — Repo Scanner | ✅ Completado | tools/repo_scanner.py, nodes/a0_arquitecto.py |
