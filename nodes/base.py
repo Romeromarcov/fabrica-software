@@ -103,32 +103,42 @@ class _FakeUsage:
 
 def _provider(model: str) -> str:
     m = model.lower()
-    if m.startswith("claude-"):                           return "anthropic"
-    if m.startswith("gemini-"):                           return "google"
-    if m.startswith("glm-") or m.startswith("chatglm"):  return "zhipu"
+    if m.startswith("claude-"):                              return "anthropic"
+    if m.startswith("gemini-3.5-"):                         return "google-native"  # SDK nativo
+    if m.startswith("gemini-"):                             return "google"          # OpenAI-compat
+    if m.startswith("glm-") or m.startswith("chatglm"):    return "zhipu"
     if m.startswith("kimi-") or m.startswith("moonshot-"): return "kimi"
     return "anthropic"
 
 
-from functools import lru_cache
-
-_PROVIDER_KEYS = {
-    "google": lambda: GOOGLE_API_KEY,
-    "zhipu":  lambda: ZHIPU_API_KEY,
-    "kimi":   lambda: KIMI_API_KEY,
+_PROVIDER_KEY_NAMES = {
+    "google": "GOOGLE_API_KEY",
+    "zhipu":  "ZHIPU_API_KEY",
+    "kimi":   "KIMI_API_KEY",
 }
 
 
-@lru_cache(maxsize=1)
 def _anthropic_client():
+    """A-07: lee la key en cada llamada para capturar cambios de config en runtime."""
+    import os as _os
     from anthropic import Anthropic
-    return Anthropic(api_key=ANTHROPIC_API_KEY)
+    import httpx as _httpx
+    return Anthropic(
+        api_key=_os.getenv("ANTHROPIC_API_KEY", ANTHROPIC_API_KEY),
+        timeout=_httpx.Timeout(300.0, connect=15.0),   # A-10: 5 min máximo por llamada
+    )
 
 
-@lru_cache(maxsize=4)
 def _openai_client(provider: str):
+    """A-07: sin lru_cache — lee la key fresca en cada llamada."""
+    import os as _os
     from openai import OpenAI
-    return OpenAI(base_url=PROVIDER_URLS[provider], api_key=_PROVIDER_KEYS[provider]())
+    key = _os.getenv(_PROVIDER_KEY_NAMES.get(provider, ""), "")
+    return OpenAI(
+        base_url=PROVIDER_URLS[provider],
+        api_key=key,
+        timeout=300.0,   # A-10: 5 min máximo
+    )
 
 
 def _call_anthropic(*, agent_key, agent_label, model, static_keys, extra_context, task_content):
@@ -157,12 +167,78 @@ def _call_anthropic(*, agent_key, agent_label, model, static_keys, extra_context
         messages=[{"role": "user", "content": user_content}],
         extra_headers={"anthropic-beta": "prompt-caching-2024-07-31"},
     )
-    text = response.content[0].text
+    # M-03: acceso seguro en caso de respuesta sin bloques de texto
+    text = next((b.text for b in response.content if hasattr(b, "text") and b.text), "")
     cost_entry = make_cost_entry(agent_label, model, response.usage)
     logger.info(
         "%s OK — %d in / %d out / %d cache → $%.4f",
         agent_label, response.usage.input_tokens, response.usage.output_tokens,
         getattr(response.usage, "cache_read_input_tokens", 0), cost_entry["cost_usd"],
+    )
+    return text, cost_entry
+
+
+def _call_google_native(*, agent_key, agent_label, model, static_keys, extra_context, task_content):
+    """
+    Llama a Gemini 3.5+ via SDK nativo google-genai.
+    Habilita Thinking (MEDIUM) para razonamiento más profundo en A0/A1.
+    Fallback a OpenAI-compat si el SDK no está disponible.
+    """
+    try:
+        from google import genai as gai
+        from google.genai import types as gtypes
+    except ImportError:
+        logger.warning("google-genai no instalado — usando fallback OpenAI-compat para %s", model)
+        return _call_openai_compat(
+            provider="google", agent_key=agent_key, agent_label=agent_label,
+            model=model, static_keys=static_keys, extra_context=extra_context,
+            task_content=task_content,
+        )
+
+    client = gai.Client(api_key=GOOGLE_API_KEY)
+    system_prompt = read_system_prompt(agent_key)
+
+    # Armar bloque de usuario: contexto estático + extra + tarea
+    parts: list[str] = []
+    for key in static_keys:
+        try:
+            parts.append(f"## {key.upper().replace('_', ' ')}\n\n{read_static(key)}")
+        except FileNotFoundError:
+            pass
+    if extra_context:
+        for label, content in extra_context.items():
+            parts.append(f"## {label}\n\n{content}")
+    parts.append(f"## TU TAREA\n\n{task_content}")
+
+    contents = [
+        gtypes.Content(
+            role="user",
+            parts=[gtypes.Part.from_text(text="\n\n---\n\n".join(parts))],
+        )
+    ]
+
+    gen_cfg = gtypes.GenerateContentConfig(
+        system_instruction=system_prompt or None,
+        thinking_config=gtypes.ThinkingConfig(thinking_level="MEDIUM"),
+        max_output_tokens=8192,
+    )
+
+    response = client.models.generate_content(
+        model=model,
+        contents=contents,
+        config=gen_cfg,
+    )
+
+    text = response.text or ""
+    usage = response.usage_metadata
+    input_tokens  = getattr(usage, "prompt_token_count",     0) or 0
+    output_tokens = getattr(usage, "candidates_token_count", 0) or 0
+    thoughts_tok  = getattr(usage, "thoughts_token_count",   0) or 0
+
+    cost_entry = make_cost_entry(agent_label, model, _FakeUsage(input_tokens, output_tokens))
+    logger.info(
+        "%s [Gemini Native] OK — %d in / %d out / %d thoughts → $%.4f",
+        agent_label, input_tokens, output_tokens, thoughts_tok, cost_entry["cost_usd"],
     )
     return text, cost_entry
 
@@ -225,6 +301,23 @@ def call_agent(
     if extra_context:
         resolved_extra.update(extra_context)
 
+    # ── Inyectar skills del proyecto ──────────────────────────────────────────
+    if repo_path:
+        try:
+            from tools.skill_tools import list_skills, select_skills_for_task, build_skills_context
+            skills = list_skills(repo_path)
+            if skills:
+                relevant = select_skills_for_task(skills, task_content)
+                if relevant:
+                    skills_block = build_skills_context(relevant)
+                    resolved_extra["SKILLS DEL PROYECTO"] = skills_block
+                    logger.debug(
+                        "%s: inyectando %d skills: %s",
+                        agent_label, len(relevant), [s["name"] for s in relevant],
+                    )
+        except Exception as _skill_exc:
+            logger.warning("Error al cargar skills del proyecto: %s", _skill_exc)
+
     if USE_OPENCLAW:
         logger.info("→ %s [OpenClaw] | repo: %s", agent_label, repo_path or "—")
         return _call_openclaw(
@@ -241,4 +334,6 @@ def call_agent(
     )
     if provider == "anthropic":
         return _call_anthropic(**kwargs)
+    if provider == "google-native":
+        return _call_google_native(**kwargs)
     return _call_openai_compat(provider=provider, **kwargs)

@@ -308,12 +308,42 @@ function handleDrop(e) {
   addFiles(e.dataTransfer.files);
 }
 
-// ── Submit ────────────────────────────────────────────────────────────────────
-document.getElementById("newProjectForm")?.addEventListener("submit", function() {
-  const btn = document.getElementById("submitBtn");
+// ── Submit (BUG-016: usa fetch+FormData para compatibilidad con Firefox) ───────
+document.getElementById("newProjectForm")?.addEventListener("submit", async function(e) {
+  e.preventDefault();
+  const form = e.target;
+  const btn  = document.getElementById("submitBtn");
   const count = selectedFiles.files.length;
+
   btn.disabled = true;
   btn.innerHTML = `<span class="spinner-border spinner-border-sm me-2" role="status"></span>Generando roadmap${count ? ` (con ${count} archivo${count>1?'s':''})` : ''}…`;
+
+  // Construir FormData manualmente para incluir los archivos del DataTransfer
+  const fd = new FormData();
+  fd.append("project_name",  form.querySelector("[name=project_name]").value);
+  fd.append("project_brief", form.querySelector("[name=project_brief]").value);
+  fd.append("repo_name",     form.querySelector("[name=repo_name]").value);
+  const isNewRadio = form.querySelector("[name=is_new_project]:checked");
+  fd.append("is_new_project", isNewRadio ? isNewRadio.value : "false");
+  Array.from(selectedFiles.files).forEach(f => fd.append("files", f, f.name));
+
+  try {
+    const resp = await fetch("/project/new", { method: "POST", body: fd });
+    if (resp.redirected) {
+      window.location.href = resp.url;
+    } else if (resp.ok) {
+      window.location.href = resp.url || "/";
+    } else {
+      const txt = await resp.text();
+      btn.disabled = false;
+      btn.innerHTML = `<i class="bi bi-diagram-3 me-1"></i> Generar Roadmap y Lanzar`;
+      alert("Error al crear el proyecto: " + txt);
+    }
+  } catch (err) {
+    btn.disabled = false;
+    btn.innerHTML = `<i class="bi bi-diagram-3 me-1"></i> Generar Roadmap y Lanzar`;
+    alert("Error de red: " + err);
+  }
 });
 </script>
 {% endblock %}

@@ -37,6 +37,17 @@ def human_approve_roadmap(state: ProjectState) -> dict:
         "roadmap_ready_at": datetime.utcnow().isoformat(),
     })
 
+    # Notificar al Founder por Telegram con los comandos para responder
+    try:
+        from tools.telegram import notify_approval_needed
+        notify_approval_needed(
+            project_name=state["project_name"],
+            project_id=state["project_id"],
+            interrupt_type="project_roadmap_approval",
+        )
+    except Exception:
+        pass  # La notificación es best-effort
+
     founder_input: str = interrupt({
         "tipo": "project_roadmap_approval",
         "mensaje": (
@@ -72,10 +83,10 @@ def human_approve_roadmap(state: ProjectState) -> dict:
 def pick_next_feature(state: ProjectState) -> dict:
     """Selecciona el siguiente feature pendiente del backlog."""
     backlog = state.get("backlog", [])
-    idx     = state.get("current_feature_index", 0)
 
-    # Buscar el primer pendiente desde current_feature_index en adelante
-    for i in range(idx, len(backlog)):
+    # BUG-005: buscar desde el inicio del backlog (no desde current_feature_index)
+    # para no perderse features que quedaron en "pending" por reordenación
+    for i in range(len(backlog)):
         if backlog[i]["status"] == "pending":
             updated = list(backlog)
             updated[i] = FeatureTask(**{**backlog[i], "status": "running"})
@@ -153,6 +164,10 @@ def run_feature_pipeline(state: ProjectState) -> dict:
                 })
                 break
 
+        # BUG-017: pequeño margen para que a1_pr_final termine de escribir metadata.json
+        import time as _time
+        _time.sleep(1)
+
         # Verificar status final del feature
         meta_path = RUNS_DIR / feature_id / "metadata.json"
         if meta_path.exists():
@@ -164,17 +179,20 @@ def run_feature_pipeline(state: ProjectState) -> dict:
         logger.exception("Error ejecutando feature %s: %s", feature_id, e)
         final_status = "failed"
 
-    # Actualizar backlog con el feature_id y estado inicial
+    # Actualizar backlog con el feature_id.
+    # BUG-004: dejamos "running" (no "pending") para que si pm_evaluador falla,
+    # el feature no sea re-ejecutado indefinidamente.
+    # pm_evaluador actualiza el estado a "completed" o "failed".
     backlog[idx] = FeatureTask(**{
         **feature,
         "feature_id": feature_id,
-        "status": final_status if final_status == "failed" else "pending",
-        # Lo deja en "pending" para que pm_evaluador actualice a "completed"/"failed"
+        "status": final_status if final_status == "failed" else "running",
     })
 
     cost_entries = []
+    meta_path = RUNS_DIR / feature_id / "metadata.json"
     try:
-        run_meta = json.loads((RUNS_DIR / feature_id / "metadata.json").read_text())
+        run_meta = json.loads(meta_path.read_text())
         cost_usd = run_meta.get("total_cost_usd", 0)
         cost_entries = [{"agent": feature["name"], "cost_usd": cost_usd}]
     except Exception:
@@ -198,19 +216,27 @@ def advance_index(state: ProjectState) -> dict:
 def present_suggestions(state: ProjectState) -> dict:
     """
     Se activa cuando el backlog se vacía.
-    Muestra el resumen del proyecto y las sugerencias del PM para que el Founder
-    decida si quiere añadir más features o cerrar el proyecto.
+    Muestra el resumen y sugerencias del PM. Notifica por Telegram al Founder.
     """
+    from tools.telegram import notify_suggestions
+
     completed = sum(1 for f in state["backlog"] if f["status"] == "completed")
     failed    = sum(1 for f in state["backlog"] if f["status"] == "failed")
     total     = len(state["backlog"])
     sug_text  = "\n".join(state.get("suggestions", [])) or "Ninguna"
 
     save_run_metadata(state["project_id"], {
-        "project_status": "awaiting_suggestions_review",
+        "project_status":  "awaiting_suggestions_review",
         "final_completed": completed,
-        "final_failed": failed,
+        "final_failed":    failed,
     })
+
+    # Notificar al Founder por Telegram antes de suspender (incluye comandos)
+    notify_suggestions(
+        project_name=state["project_name"],
+        suggestions=state.get("suggestions", []),
+        project_id=state["project_id"],
+    )
 
     founder_input: str = interrupt({
         "tipo": "project_suggestions",
@@ -274,22 +300,40 @@ def present_suggestions(state: ProjectState) -> dict:
 # ── Nodo terminal ─────────────────────────────────────────────────────────────
 
 def project_complete(state: ProjectState) -> dict:
+    from tools.telegram import notify_project_done, send_message
+
     completed = sum(1 for f in state["backlog"] if f["status"] == "completed")
     total     = len(state["backlog"])
     cost      = sum(e.get("cost_usd", 0) for e in state.get("cost_entries", []))
+    status    = state.get("project_status", "completed")
 
     save_run_metadata(state["project_id"], {
-        "project_status": state.get("project_status", "completed"),
-        "completed_at": datetime.utcnow().isoformat(),
+        "project_status":     status,
+        "completed_at":       datetime.utcnow().isoformat(),
         "features_completed": completed,
-        "features_total": total,
-        "total_cost_usd": round(cost, 6),
+        "features_total":     total,
+        "total_cost_usd":     round(cost, 6),
     })
 
     logger.info(
-        "Proyecto %s finalizado: %d/%d features | $%.4f",
-        state["project_name"], completed, total, cost,
+        "Proyecto %s → %s: %d/%d features | $%.4f",
+        state["project_name"], status, completed, total, cost,
     )
+
+    # I-06: diferenciar mensaje según si fue cancelado o completado
+    if status in ("cancelled", "failed") or not state.get("founder_approved_roadmap"):
+        send_message(
+            f"❌ *Proyecto cancelado*\n"
+            f"*Proyecto:* {state['project_name']}\n"
+            f"El roadmap fue rechazado o el proyecto fue cancelado antes de iniciar."
+        )
+    else:
+        notify_project_done(
+            project_name=state["project_name"],
+            completed=completed,
+            total=total,
+            cost_usd=cost,
+        )
     return {}
 
 
@@ -304,8 +348,8 @@ def _route_after_approval(state: ProjectState) -> str:
 def _route_check_backlog(state: ProjectState) -> str:
     """¿Hay más features pendientes en el backlog?"""
     backlog = state.get("backlog", [])
-    idx     = state.get("current_feature_index", 0)
-    has_pending = any(f["status"] == "pending" for f in backlog[idx:])
+    # BUG-005: buscar en TODO el backlog, no solo desde current_feature_index
+    has_pending = any(f["status"] == "pending" for f in backlog)
 
     if has_pending:
         return "continuar"
@@ -313,7 +357,7 @@ def _route_check_backlog(state: ProjectState) -> str:
     # ¿Hubo algún bloqueante duro (feature fallido sin qa_escalation resuelta)?
     failed = [f for f in backlog if f["status"] == "failed"]
     if failed:
-        logger.warning("%d features fallidos — el proyecto se detiene", len(failed))
+        logger.warning("%d features fallidos en el proyecto", len(failed))
 
     return "fin_backlog"
 

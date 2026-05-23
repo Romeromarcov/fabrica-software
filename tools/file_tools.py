@@ -48,16 +48,33 @@ def save_agent_output(feature_id: str, agent_name: str, content: str) -> str:
     return str(path)
 
 
+_meta_lock = __import__("threading").Lock()
+
+
 def save_run_metadata(feature_id: str, metadata: dict) -> None:
+    """M-06 + A-01: escritura atómica con lock por proceso para evitar race conditions."""
     run_dir = RUNS_DIR / feature_id
     run_dir.mkdir(parents=True, exist_ok=True)
     meta_path = run_dir / "metadata.json"
-    existing = {}
-    if meta_path.exists():
-        existing = json.loads(meta_path.read_text())
-    existing.update(metadata)
-    existing["updated_at"] = datetime.utcnow().isoformat()
-    meta_path.write_text(json.dumps(existing, indent=2, ensure_ascii=False))
+    with _meta_lock:
+        existing: dict = {}
+        if meta_path.exists():
+            try:
+                existing = json.loads(meta_path.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError):
+                existing = {}
+        existing.update(metadata)
+        existing["updated_at"] = datetime.utcnow().isoformat()
+        try:
+            text = json.dumps(existing, indent=2, ensure_ascii=False, default=str)
+        except Exception as e:
+            import logging as _log
+            _log.getLogger(__name__).error("save_run_metadata: serialización fallida: %s", e)
+            return
+        # Escritura atómica vía archivo temporal
+        tmp = meta_path.with_suffix(".tmp")
+        tmp.write_text(text, encoding="utf-8")
+        tmp.replace(meta_path)
 
 
 def read_run_metadata(feature_id: str) -> dict:

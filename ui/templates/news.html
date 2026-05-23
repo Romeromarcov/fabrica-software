@@ -1,0 +1,425 @@
+{% extends "base.html" %}
+{% block title %}Agente de Noticias{% endblock %}
+
+{% block head %}
+<style>
+  .topic-chip {
+    display: inline-flex; align-items: center; gap: .35rem;
+    background: #1e1e28; border: 1px solid #2a2a3a;
+    border-radius: 20px; padding: .25rem .75rem;
+    font-size: .78rem; color: #ccc;
+  }
+  .topic-chip button {
+    background: none; border: none; color: #555; padding: 0;
+    cursor: pointer; font-size: .9rem; line-height: 1;
+  }
+  .topic-chip button:hover { color: #f87171; }
+  .news-section-title {
+    font-size: .7rem; color: #555; text-transform: uppercase;
+    letter-spacing: .06em; margin-bottom: .75rem;
+  }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .status-dot.on  { background: #4ade80; box-shadow: 0 0 6px #4ade8088; }
+  .status-dot.off { background: #555; }
+  .report-btn {
+    width: 100%; display: flex; align-items: center; justify-content: center; gap: .5rem;
+    padding: .55rem 1rem; border-radius: 8px; font-size: .82rem; font-weight: 500;
+    cursor: pointer; transition: all .15s; border: 1px solid; background: transparent;
+  }
+  .report-btn:disabled { opacity: .4; cursor: not-allowed; }
+  .mono { font-family: monospace; font-size: .78rem; }
+  .pill-provider {
+    font-size: .68rem; padding: .15rem .5rem; border-radius: 20px; font-weight: 600;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="mb-4 d-flex align-items-center justify-content-between">
+  <div>
+    <h4 class="mb-0 fw-semibold">Agente de Noticias</h4>
+    <small class="text-muted">Reporte diario por Telegram — motor de IA configurable</small>
+  </div>
+  <div class="d-flex align-items-center gap-3">
+    <span id="status-badge" class="badge px-3 py-2"
+          style="font-size:.8rem;background:#1e1e28;border:1px solid #2a2a3a;color:#888">
+      Cargando…
+    </span>
+    <!-- Toggle inmediato (AJAX) -->
+    <div class="form-check form-switch mb-0" title="Activar/desactivar sin guardar el form">
+      <input class="form-check-input" type="checkbox" id="liveToggle" role="switch"
+             style="width:2.8rem;height:1.4rem;cursor:pointer"
+             {% if nc.enabled %}checked{% endif %}
+             onchange="toggleAgent(this.checked)">
+    </div>
+  </div>
+</div>
+
+{% if saved %}
+<div class="alert border-0 mb-3 py-2 px-3 d-flex align-items-center gap-2"
+     style="background:#16a34a22;color:#4ade80;font-size:.85rem">
+  <i class="bi bi-check-circle-fill"></i> Configuración guardada y scheduler actualizado.
+</div>
+{% endif %}
+
+<!-- ── Cards de estado ─────────────────────────────────────────────────────── -->
+<div class="row g-3 mb-3">
+  <div class="col-md-3">
+    <div class="card p-3 h-100">
+      <div class="news-section-title">Próximo Reporte</div>
+      <div id="next-run" style="font-size:1rem;font-weight:600;color:#fff">—</div>
+      <div style="font-size:.7rem;color:#555;margin-top:.2rem">Hora Venezuela (UTC-4)</div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card p-3 h-100">
+      <div class="news-section-title">Proveedor / Modelo</div>
+      <div class="mono" style="color:#a78bfa">{{ nc.provider }}</div>
+      <div class="mono" style="font-size:.7rem;color:#555;margin-top:.15rem">{{ nc.model }}</div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card p-3 h-100">
+      <div class="news-section-title">Temas</div>
+      <div style="font-size:1rem;font-weight:600;color:#fff">{{ nc.topics|length }}</div>
+      <div style="font-size:.7rem;color:#555;margin-top:.2rem">tópicos activos</div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card p-3 h-100">
+      <div class="news-section-title">Telegram</div>
+      <div class="d-flex align-items-center gap-2">
+        <i class="bi bi-telegram" style="color:#38bdf8"></i>
+        <span style="font-size:.82rem;color:#ccc">
+          {% if nc.tg_custom %}Bot propio{% else %}Bot de la Fábrica{% endif %}
+        </span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Formulario de configuración ──────────────────────────────────────────── -->
+<form method="POST" action="/news" id="newsForm">
+
+  <!-- Campo oculto para topics (se llena con JS) -->
+  <input type="hidden" name="news_topics" id="topicsJson" value="">
+
+  <div class="row g-3">
+
+    <!-- ── Columna izquierda ──────────────────────────────────────────────── -->
+    <div class="col-lg-8">
+
+      <!-- Programación -->
+      <div class="card mb-3">
+        <div class="p-3 border-bottom d-flex align-items-center gap-2" style="border-color:#2a2a3a!important">
+          <i class="bi bi-clock" style="color:var(--brand-light)"></i>
+          <span class="fw-semibold" style="font-size:.9rem">Programación</span>
+        </div>
+        <div class="p-3">
+          <label class="news-section-title">Hora de envío diario</label>
+          <div class="d-flex align-items-center gap-3">
+            <input type="range" class="form-range flex-grow-1" name="news_hour"
+                   id="hourRange" min="0" max="23" step="1" value="{{ nc.hour }}"
+                   oninput="document.getElementById('hourDisp').textContent=(parseInt(this.value)<10?'0':'')+this.value+':00'">
+            <span id="hourDisp" class="mono px-2 py-1 rounded"
+                  style="background:#1e1e28;border:1px solid #2a2a3a;color:#a78bfa;min-width:55px;text-align:center">
+              {{ nc.hour_disp }}
+            </span>
+          </div>
+          <div style="font-size:.7rem;color:#444;margin-top:.4rem">Hora Venezuela (UTC-4)</div>
+        </div>
+      </div>
+
+      <!-- Modelo de IA -->
+      <div class="card mb-3">
+        <div class="p-3 border-bottom d-flex align-items-center gap-2" style="border-color:#2a2a3a!important">
+          <i class="bi bi-cpu" style="color:var(--brand-light)"></i>
+          <span class="fw-semibold" style="font-size:.9rem">Modelo de IA</span>
+        </div>
+        <div class="p-3">
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="news-section-title">Proveedor</label>
+              <select name="news_provider" id="providerSelect" class="form-select mono"
+                      onchange="updateProviderDefaults(this.value)">
+                <option value="anthropic" {% if nc.provider=='anthropic' %}selected{% endif %}>
+                  Anthropic (Claude) ★ Búsqueda web real
+                </option>
+                <option value="google" {% if nc.provider=='google' %}selected{% endif %}>
+                  Google (Gemini)
+                </option>
+                <option value="openai" {% if nc.provider=='openai' %}selected{% endif %}>
+                  OpenAI (GPT)
+                </option>
+                <option value="zhipu" {% if nc.provider=='zhipu' %}selected{% endif %}>
+                  Z.ai (GLM)
+                </option>
+                <option value="kimi" {% if nc.provider=='kimi' %}selected{% endif %}>
+                  Moonshot (Kimi)
+                </option>
+                <option value="custom" {% if nc.provider=='custom' %}selected{% endif %}>
+                  Custom (OpenAI-compatible)
+                </option>
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="news-section-title">Nombre del modelo</label>
+              <input type="text" name="news_model" id="modelInput" class="form-control mono"
+                     value="{{ nc.model }}" placeholder="ej: claude-haiku-4-5-20251001">
+            </div>
+            <div class="col-md-6">
+              <label class="news-section-title">API Key (opcional)</label>
+              <input type="password" name="news_api_key" class="form-control mono"
+                     value="{{ nc.api_key }}"
+                     placeholder="Vacío = usa la key del proveedor en Configuración">
+              <div style="font-size:.68rem;color:#444;margin-top:.3rem">
+                Si está vacío, usa la API Key del proveedor configurada en la página principal.
+              </div>
+            </div>
+            <div class="col-md-6" id="customUrlRow" style="display:{% if nc.provider=='custom' %}block{% else %}none{% endif %}">
+              <label class="news-section-title">URL del endpoint</label>
+              <input type="text" name="news_api_url" class="form-control mono"
+                     value="{{ nc.api_url }}" placeholder="https://api.example.com/v1/">
+            </div>
+          </div>
+          <div id="searchNote" class="mt-3 p-2 rounded"
+               style="background:#0f172a;border:1px solid #1e293b;font-size:.72rem;color:#475569">
+            <i class="bi bi-info-circle me-1"></i>
+            <span id="searchNoteText">
+              {% if nc.provider=='anthropic' %}
+                ★ Anthropic con web_search tool busca noticias en tiempo real (recomendado).
+              {% else %}
+                ⚠ Este proveedor no tiene búsqueda web nativa — el agente usará el conocimiento del modelo.
+              {% endif %}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Temas de noticias -->
+      <div class="card mb-3">
+        <div class="p-3 border-bottom d-flex align-items-center gap-2" style="border-color:#2a2a3a!important">
+          <i class="bi bi-tags" style="color:var(--brand-light)"></i>
+          <span class="fw-semibold" style="font-size:.9rem">Temas Monitoreados</span>
+        </div>
+        <div class="p-3">
+          <div id="topicsContainer" class="d-flex flex-wrap gap-2 mb-3">
+            {% for topic in nc.topics %}
+            <span class="topic-chip" data-topic="{{ topic }}">
+              {{ topic }}
+              <button type="button" onclick="removeTopic(this)" title="Eliminar">×</button>
+            </span>
+            {% endfor %}
+          </div>
+          <div class="d-flex gap-2">
+            <input type="text" id="newTopicInput" class="form-control"
+                   placeholder="Ej: Tecnología blockchain en Venezuela" style="font-size:.85rem"
+                   onkeydown="if(event.key==='Enter'){event.preventDefault();addTopic()}">
+            <button type="button" class="btn btn-outline-secondary px-3" onclick="addTopic()"
+                    style="font-size:.82rem;white-space:nowrap">
+              <i class="bi bi-plus-lg"></i> Añadir
+            </button>
+          </div>
+          <div style="font-size:.7rem;color:#444;margin-top:.4rem">
+            Presiona Enter o haz clic en Añadir. Cambios se guardan al enviar el formulario.
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /col-lg-8 -->
+
+    <!-- ── Columna derecha ────────────────────────────────────────────────── -->
+    <div class="col-lg-4">
+
+      <!-- Telegram -->
+      <div class="card mb-3">
+        <div class="p-3 border-bottom d-flex align-items-center gap-2" style="border-color:#2a2a3a!important">
+          <i class="bi bi-telegram" style="color:#38bdf8"></i>
+          <span class="fw-semibold" style="font-size:.9rem">Telegram</span>
+        </div>
+        <div class="p-3">
+          <div class="d-flex align-items-center justify-content-between mb-3">
+            <div style="font-size:.82rem;color:#ccc">Bot propio (separado de la Fábrica)</div>
+            <div class="form-check form-switch mb-0">
+              <input class="form-check-input" type="checkbox" name="tg_custom" id="tgCustomSwitch"
+                     role="switch" {% if nc.tg_custom %}checked{% endif %}
+                     onchange="document.getElementById('tgCustomFields').style.display=this.checked?'block':'none'">
+            </div>
+          </div>
+          <div id="tgCustomFields" style="display:{% if nc.tg_custom %}block{% else %}none{% endif %}">
+            <div class="mb-2">
+              <label class="news-section-title">Bot Token</label>
+              <input type="password" name="news_tg_token" class="form-control mono"
+                     value="{{ nc.tg_token }}" placeholder="1234567890:ABC-…">
+            </div>
+            <div>
+              <label class="news-section-title">Chat ID</label>
+              <input type="text" name="news_tg_chat" class="form-control mono"
+                     value="{{ nc.tg_chat }}" placeholder="-100123456789">
+            </div>
+          </div>
+          {% if not nc.tg_custom %}
+          <div style="font-size:.72rem;color:#555">
+            Usa el mismo bot configurado en
+            <a href="/config" style="color:#666">Configuración</a>.
+          </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Guardar -->
+      <div class="card mb-3">
+        <div class="p-3">
+          <button type="submit" class="btn btn-brand w-100 mb-2"
+                  onclick="prepareTopics()">
+            <i class="bi bi-floppy me-1"></i> Guardar configuración
+          </button>
+          <div style="font-size:.7rem;color:#555;text-align:center">
+            El toggle de arriba aplica en tiempo real sin guardar el formulario.
+          </div>
+        </div>
+      </div>
+
+      <!-- Envío manual -->
+      <div class="card">
+        <div class="p-3 border-bottom d-flex align-items-center gap-2" style="border-color:#2a2a3a!important">
+          <i class="bi bi-send" style="color:var(--brand-light)"></i>
+          <span class="fw-semibold" style="font-size:.9rem">Envío Manual</span>
+        </div>
+        <div class="p-3 d-flex flex-column gap-2">
+          <button type="button" class="report-btn" id="btnNews"
+                  style="border-color:#16a34a44;color:#4ade80" onclick="triggerReport('news')">
+            <i class="bi bi-newspaper"></i> Noticias ahora
+          </button>
+          <button type="button" class="report-btn" id="btnAI"
+                  style="border-color:#7c3aed44;color:#a78bfa" onclick="triggerReport('ai_models')">
+            <i class="bi bi-robot"></i> Modelos IA ahora
+          </button>
+          <button type="button" class="report-btn" id="btnAll"
+                  style="border-color:#0ea5e944;color:#38bdf8" onclick="triggerReport('all')">
+            <i class="bi bi-collection-fill"></i> Ambos reportes
+          </button>
+          <div id="sendStatus" style="display:none;font-size:.78rem"
+               class="p-2 rounded text-center mt-1"></div>
+        </div>
+      </div>
+
+    </div><!-- /col-lg-4 -->
+  </div><!-- /row -->
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ── Estado del scheduler ──────────────────────────────────────────────────────
+async function loadStatus() {
+  try {
+    const d = await fetch('/api/news/status').then(r => r.json());
+    const badge = document.getElementById('status-badge');
+    const toggle = document.getElementById('liveToggle');
+    if (d.enabled && d.scheduler_running) {
+      badge.innerHTML = '<span class="status-dot on me-1"></span> Activo';
+      badge.style.color = '#4ade80'; badge.style.borderColor = '#16a34a44';
+    } else {
+      badge.innerHTML = '<span class="status-dot off me-1"></span> Inactivo';
+      badge.style.color = '#888'; badge.style.borderColor = '#2a2a3a';
+    }
+    // Sincronizar toggle con estado real
+    if (toggle) toggle.checked = d.enabled;
+    const nr = document.getElementById('next-run');
+    nr.textContent = d.next_run || (d.enabled ? 'Iniciando…' : 'Desactivado');
+    if (!d.enabled) nr.style.color = '#555';
+  } catch(e) {}
+}
+loadStatus();
+
+// ── Toggle inmediato AJAX ─────────────────────────────────────────────────────
+async function toggleAgent(enabled) {
+  const badge = document.getElementById('status-badge');
+  badge.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>';
+  try {
+    await fetch('/api/news/toggle', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({enabled})
+    });
+    await loadStatus();
+  } catch(e) {
+    badge.textContent = 'Error';
+  }
+}
+
+// ── Provider defaults ─────────────────────────────────────────────────────────
+const PROVIDER_MODELS = {
+  anthropic: 'claude-haiku-4-5-20251001',
+  google:    'gemini-2.0-flash',
+  openai:    'gpt-4o-mini',
+  zhipu:     'glm-5.1',
+  kimi:      'kimi-k2.6',
+  custom:    '',
+};
+const SEARCH_PROVIDERS = new Set(['anthropic']);
+
+function updateProviderDefaults(prov) {
+  const modelInput = document.getElementById('modelInput');
+  if (PROVIDER_MODELS[prov]) modelInput.value = PROVIDER_MODELS[prov];
+  document.getElementById('customUrlRow').style.display = prov === 'custom' ? 'block' : 'none';
+  const note = document.getElementById('searchNoteText');
+  note.textContent = SEARCH_PROVIDERS.has(prov)
+    ? '★ Anthropic con web_search tool busca noticias en tiempo real (recomendado).'
+    : '⚠ Este proveedor no tiene búsqueda web nativa — el agente usará el conocimiento del modelo.';
+}
+
+// ── Gestión de topics ─────────────────────────────────────────────────────────
+function addTopic() {
+  const input = document.getElementById('newTopicInput');
+  const val = input.value.trim();
+  if (!val) return;
+  const container = document.getElementById('topicsContainer');
+  // Verificar duplicado
+  const existing = [...container.querySelectorAll('[data-topic]')].map(el => el.dataset.topic);
+  if (existing.includes(val)) { input.value = ''; return; }
+  const chip = document.createElement('span');
+  chip.className = 'topic-chip';
+  chip.dataset.topic = val;
+  chip.innerHTML = val + ' <button type="button" onclick="removeTopic(this)" title="Eliminar">×</button>';
+  container.appendChild(chip);
+  input.value = '';
+}
+
+function removeTopic(btn) {
+  btn.parentElement.remove();
+}
+
+function prepareTopics() {
+  const chips = document.querySelectorAll('#topicsContainer [data-topic]');
+  const topics = [...chips].map(c => c.dataset.topic);
+  document.getElementById('topicsJson').value = JSON.stringify(topics);
+}
+
+// ── Envío manual ──────────────────────────────────────────────────────────────
+async function triggerReport(type) {
+  ['btnNews','btnAI','btnAll'].forEach(id => {
+    document.getElementById(id).disabled = true;
+  });
+  const st = document.getElementById('sendStatus');
+  st.style.display = 'block';
+  st.style.color = '#fb923c'; st.style.background = '#d9770618';
+  st.style.border = '1px solid #d9770644';
+  st.textContent = '⏳ Generando reporte… puede tardar 30-90 segundos';
+  try {
+    const d = await fetch('/api/news/run?report_type=' + type, {method:'POST'}).then(r=>r.json());
+    if (d.ok) {
+      st.style.color='#4ade80'; st.style.background='#16a34a18'; st.style.border='1px solid #16a34a44';
+      st.textContent = '✅ Reporte enviado por Telegram';
+    } else throw new Error(JSON.stringify(d));
+  } catch(e) {
+    st.style.color='#f87171'; st.style.background='#dc262618'; st.style.border='1px solid #dc262644';
+    st.textContent = '❌ Error: ' + (e.message || 'revisar logs');
+  }
+  setTimeout(() => {
+    ['btnNews','btnAI','btnAll'].forEach(id => { document.getElementById(id).disabled=false; });
+  }, 3000);
+}
+</script>
+{% endblock %}

@@ -1,15 +1,20 @@
-"""Agente 3 — Frontend Developer."""
+"""Agente 5 — Frontend Developer."""
 from state import FabricaState
 from nodes.base import call_agent
 from tools.file_tools import save_agent_output
-from config import MODEL_A3
+from config import MODEL_A5
 
 
-def a3_frontend(state: FabricaState) -> dict:
+def a5_frontend(state: FabricaState) -> dict:
+    from tools.architecture_record import adr_context_block
+    from tools.project_memory import get_memory_context
+    adr_block    = adr_context_block(state["repo_path"])
+    memory_block = get_memory_context(state.get("project_id"))
+
     qa_context = ""
     if state.get("qa_report") and state["qa_iterations"] > 0:
         qa_context = f"""
-REPORTE DE BUGS DEL AGENTE 4 (iteración {state['qa_iterations']}):
+REPORTE DE BUGS DEL AGENTE 7 (iteración {state['qa_iterations']}):
 ---
 {state['qa_report']}
 ---
@@ -17,14 +22,14 @@ Corrige ÚNICAMENTE los bugs listados en el frontend.
 """
 
     task = f"""
-Eres el Agente 3 — Frontend Developer.
-
+Eres el Agente 5 — Frontend Developer.
+{adr_block}{memory_block}
 MASTER_PLAN del feature (especialmente secciones 5 y 6 — UI/UX):
 ---
 {state['master_plan']}
 ---
 
-ENDPOINTS DEL BACKEND (Agente 2) — usa estos para los services:
+ENDPOINTS DEL BACKEND (Agente 4) — usa estos para los services:
 ---
 {state.get('backend_code', '')}
 ---
@@ -46,16 +51,16 @@ Para cada archivo:
 ```
 """
     output, cost = call_agent(
-        agent_key="a3_frontend",
-        agent_label="Agente 3 Frontend",
+        agent_key="a5-frontend",
+        agent_label="Agente 5 Frontend",
         task_content=task,
-        model=MODEL_A3,
+        model=MODEL_A5,
         include_static=["coding_standards"],
         repo_path=state["repo_path"],
     )
-    save_agent_output(state["feature_id"], f"a3_frontend_iter{state['qa_iterations']}", output)
+    save_agent_output(state["feature_id"], f"a5_frontend_iter{state['qa_iterations']}", output)
     return {
         "frontend_code": output,
-        "current_agent": "a3_frontend",
+        "current_agent": "a5_frontend",
         "cost_entries": [cost],
     }

@@ -3,35 +3,94 @@ from pathlib import Path
 
 ENV_PATH = Path(__file__).parent.parent / ".env"
 
+DEFAULT_TOPICS = (
+    "Inteligencia Artificial,"
+    "Blockchain y Web3,"
+    "Mercado Crypto,"
+    "Marketing Digital,"
+    "Negocios Globales,"
+    "Petróleo e Hidrocarburos,"
+    "Geopolítica,"
+    "Finanzas Venezuela"
+)
+
 DEFAULTS = {
-    # API Keys
+    # API Keys — Fábrica de Software
     "ANTHROPIC_API_KEY": "",
     "GOOGLE_API_KEY":    "",
     "ZHIPU_API_KEY":     "",
     "KIMI_API_KEY":      "",
     "LANGCHAIN_API_KEY": "",
     "LANGCHAIN_TRACING_V2": "false",
-    # Modelos por agente
-    "MODEL_A1": "gemini-3.1-pro-preview",
-    "MODEL_A2": "glm-5.1",
-    "MODEL_A3": "kimi-k2.6",
-    "MODEL_A4": "claude-sonnet-4-6",
-    "MODEL_A5": "claude-sonnet-4-6",
-    "MODEL_A6": "claude-sonnet-4-6",
-    "MODEL_A7": "claude-sonnet-4-6",
-    "MODEL_A8": "claude-sonnet-4-6",
-    # Límites
+    # Telegram — compartido por Fábrica y Agente de Noticias
+    "TELEGRAM_BOT_TOKEN": "",
+    "TELEGRAM_CHAT_ID":   "",
+    # Modelos por agente (orden del workflow)
+    "MODEL_A0": "gemini-3.5-flash",          # A0 Arquitecto — Google (thinking)
+    "MODEL_A1": "gemini-3.5-flash",          # A1 PM — Google (thinking)
+    "MODEL_A2": "claude-sonnet-4-6",        # A2 DB Architect — Anthropic
+    "MODEL_A3": "claude-sonnet-4-6",        # A3 MCP Toolsmith — Anthropic
+    "MODEL_A4": "glm-5.1",                  # A4 Backend — Z.ai
+    "MODEL_A5": "kimi-k2.6",               # A5 Frontend — Kimi
+    "MODEL_A6": "claude-sonnet-4-6",        # A6 Revisor/Refactor — Anthropic
+    "MODEL_A7": "claude-sonnet-4-6",        # A7 QA Test — Anthropic
+    "MODEL_A8": "claude-sonnet-4-6",        # A8 SecOps — Anthropic
+    # Límites del pipeline
     "MAX_QA_ITER_COMPLETO":       "3",
     "MAX_QA_ITER_LITE":           "2",
+    "MAX_SECOPS_ITER":            "2",
+    "MAX_SANDBOX_ITER":           "2",
     "CHECKPOINT_TIMEOUT_SECONDS": "1800",
+    # Agente de Noticias — configuración completa
+    "NEWS_AGENT_ENABLED":  "true",
+    "NEWS_AGENT_HOUR":     "8",
+    "NEWS_AGENT_PROVIDER": "anthropic",          # anthropic | google | openai | custom
+    "NEWS_AGENT_MODEL":    "claude-haiku-4-5-20251001",
+    "NEWS_AGENT_API_KEY":  "",                   # vacío = usa la key del proveedor
+    "NEWS_AGENT_API_URL":  "",                   # solo para proveedor "custom"
+    "NEWS_AGENT_TOPICS":   DEFAULT_TOPICS,
+    "NEWS_AGENT_TG_TOKEN": "",                   # vacío = usa TELEGRAM_BOT_TOKEN
+    "NEWS_AGENT_TG_CHAT":  "",                   # vacío = usa TELEGRAM_CHAT_ID
+    # Seguridad & Acceso — producción
+    "UI_USERNAME":   "",          # Basic Auth usuario (vacío = sin auth)
+    "UI_PASSWORD":   "",          # Basic Auth contraseña
+    "GITHUB_TOKEN":  "",          # PAT para git push + gh pr create
+    "GITHUB_ACTOR":  "",          # Usuario/org GitHub (para autenticar push)
+    # Auditor Periódico de Codebase
+    "AUDITOR_ENABLED":    "true",
+    "AUDITOR_WEEKDAY":    "0",                   # 0=lunes … 6=domingo
+    "AUDITOR_HOUR":       "7",
+    "AUDITOR_MAX_FILES":  "30",
+    "AUDITOR_MODEL":      "claude-sonnet-4-6",
+    "AUDITOR_REPO":       "all",                 # "all" o nombre exacto del repo
+}
+
+# Conjunto de claves conocidas (para separar "extra keys" definidas por el usuario)
+KNOWN_KEYS = set(DEFAULTS.keys())
+
+# Prefijos de proveedor que NO son válidos para cada agente.
+# Evita que un swap accidental en el formulario se persista en .env
+MODEL_FORBIDDEN_PREFIX: dict[str, tuple[str, ...]] = {
+    "MODEL_A2": ("glm-", "kimi-"),
+    "MODEL_A3": ("glm-", "kimi-"),
+    "MODEL_A4": ("claude-",),
+    "MODEL_A5": ("claude-",),
+    "MODEL_A6": ("glm-", "kimi-"),
+    "MODEL_A7": ("glm-", "kimi-"),
+    "MODEL_A8": ("glm-", "kimi-"),
 }
 
 SENSITIVE = {
-    "ANTHROPIC_API_KEY": ("sk-ant-", "sk-ant-****"),
-    "GOOGLE_API_KEY":    ("AIza",    "AIza****"),
-    "ZHIPU_API_KEY":     ("",        "****"),
-    "KIMI_API_KEY":      ("sk-",     "sk-****"),
-    "LANGCHAIN_API_KEY": ("ls__",    "ls__****"),
+    "ANTHROPIC_API_KEY":  ("sk-ant-", "sk-ant-****"),
+    "GOOGLE_API_KEY":     ("AIza",    "AIza****"),
+    "ZHIPU_API_KEY":      ("",        "****"),
+    "KIMI_API_KEY":       ("sk-",     "sk-****"),
+    "LANGCHAIN_API_KEY":  ("ls__",    "ls__****"),
+    "TELEGRAM_BOT_TOKEN": ("",        "****"),
+    "NEWS_AGENT_API_KEY": ("",        "****"),
+    "NEWS_AGENT_TG_TOKEN":("",        "****"),
+    "UI_PASSWORD":        ("",        "****"),
+    "GITHUB_TOKEN":       ("ghp_",    "ghp_****"),
 }
 
 
@@ -58,13 +117,41 @@ class ConfigStore:
             return {k: _mask(k, v) for k, v in cfg.items()}
         return cfg
 
+    def load_extra_keys(self) -> dict:
+        """Devuelve las claves del .env que NO están en DEFAULTS (definidas por el usuario)."""
+        extra = {}
+        if not ENV_PATH.exists():
+            return extra
+        for line in ENV_PATH.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            k, _, v = line.partition("=")
+            k = k.strip()
+            if k not in KNOWN_KEYS:
+                extra[k] = v.strip()
+        return extra
+
     def save(self, new_cfg: dict) -> None:
         current = self.load(masked=False)
+        # Cargar también las extra keys para no borrarlas al guardar
+        extra = self.load_extra_keys()
+        current.update(extra)
+
         # Solo sobreescribir keys sensibles si el valor no es una máscara
         for key in SENSITIVE:
             new_val = new_cfg.get(key, "")
             if new_val and ("****" in new_val):
                 new_cfg.pop(key, None)  # ignorar — el usuario no tocó este campo
+
+        # Guardia de modelos: rechazar valores con proveedor incorrecto.
+        # Esto previene que un swap accidental en el formulario se persista.
+        for model_key, forbidden in MODEL_FORBIDDEN_PREFIX.items():
+            new_val = new_cfg.get(model_key, "")
+            if new_val and any(new_val.startswith(prefix) for prefix in forbidden):
+                # Revertir al valor por defecto en lugar de persistir el error
+                new_cfg[model_key] = DEFAULTS[model_key]
+
         current.update({k: str(v) for k, v in new_cfg.items()})
 
         lines = ["# Fábrica de Software — Omni ERP — configuración generada por la UI", ""]

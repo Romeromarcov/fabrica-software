@@ -158,38 +158,56 @@ def checkpoint_b(state: FabricaState) -> dict:
 
 def qa_escalation(state: FabricaState) -> dict:
     """
-    Escalación al Founder cuando QA agota el máximo de iteraciones sin pasar.
-    Presenta los bugs al Founder y espera instrucción.
+    Escalación al Founder cuando QA o SecOps agota el máximo de iteraciones.
+    Notifica por Telegram y suspende hasta que el Founder responda.
     """
-    max_iter = MAX_QA_ITER_COMPLETO if state["mode"] == "completo" else MAX_QA_ITER_LITE
+    from tools.telegram import notify_escalation
+
+    max_iter    = MAX_QA_ITER_COMPLETO if state["mode"] == "completo" else MAX_QA_ITER_LITE
+    secops_iter = state.get("secops_iterations", 0)
+
+    if secops_iter > 0:
+        razon = (
+            f"SecOps agotó {secops_iter} iteraciones de corrección↔QA. "
+            f"Vulnerabilidad no resuelta automáticamente."
+        )
+    else:
+        razon = f"QA agotó {max_iter} iteraciones sin pasar."
 
     save_run_metadata(state["feature_id"], {
-        "status": "qa_escalated",
-        "qa_escalated_at": datetime.utcnow().isoformat(),
+        "status":         "escalated",
+        "escalated_at":   datetime.utcnow().isoformat(),
+        "escalation_reason": razon,
     })
+
+    # Notificar al humano por Telegram antes de suspender
+    notify_escalation(
+        feature_name=state["feature_name"],
+        reason=razon,
+        project_name=state.get("project_id"),
+    )
 
     founder_input: str = interrupt({
         "tipo": "qa_escalation",
         "mensaje": (
             f"\n{'!'*60}\n"
-            f"⚠️  QA AGOTÓ {max_iter} ITERACIONES — {state['feature_name']}\n"
+            f"⚠️  ESCALACIÓN — {state['feature_name']}\n"
             f"{'!'*60}\n\n"
-            f"BUGS PENDIENTES:\n"
-            f"{state.get('qa_report', 'Ver output del Agente 4')}\n\n"
+            f"MOTIVO: {razon}\n\n"
+            f"ÚLTIMO REPORTE:\n"
+            f"{state.get('qa_report', 'Ver outputs del pipeline')[:1500]}\n\n"
             f"Opciones:\n"
-            f"  REDISEÑAR  — volver a Agente 2/3 con enfoque diferente\n"
-            f"  ACEPTAR    — aceptar deuda técnica y documentar los bugs\n"
-            f"  CANCELAR   — cancelar el feature\n\n"
-            f"Escribe tu decisión:"
+            f"  REDISEÑAR — reiniciar con enfoque diferente\n"
+            f"  ACEPTAR   — aceptar deuda técnica y continuar\n"
+            f"  CANCELAR  — cancelar el feature\n"
         ),
         "feature_id": state["feature_id"],
     })
 
     decision = founder_input.strip().upper()
-    save_run_metadata(state["feature_id"], {"qa_decision": decision})
+    save_run_metadata(state["feature_id"], {"escalation_decision": decision})
 
-    # El graph router usará el estado para decidir qué hacer con esta decisión
     return {
         "current_agent": "qa_escalation",
-        "errors": [f"QA escalado. Decisión del Founder: {decision}"],
+        "errors": [f"Escalación. Decisión del Founder: {decision}"],
     }

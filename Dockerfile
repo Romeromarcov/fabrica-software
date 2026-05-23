@@ -2,7 +2,7 @@ FROM python:3.12-slim
 
 # ── System deps + Node.js + gh CLI ───────────────────────────────────────────
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      git curl ca-certificates gnupg \
+      git curl ca-certificates gnupg tzdata \
     # Node.js 22 LTS (para instalar openclaw CLI via npm)
     && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y nodejs \
@@ -17,6 +17,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # ── OpenClaw CLI (necesario para invocar agentes como subprocess) ─────────────
 RUN npm install -g openclaw@latest
+
+# ── Herramientas de calidad de código (Sandbox A9) ───────────────────────────
+# TypeScript compiler — para tsc --noEmit en proyectos TS del cliente
+RUN npm install -g typescript
+# vitest / jest se instalan por proyecto; tsc ya está disponible globalmente
+
+# ── Zona horaria Venezuela (UTC-4) ───────────────────────────────────────────
+ENV TZ=America/Caracas
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 # ── Python deps ───────────────────────────────────────────────────────────────
 WORKDIR /app

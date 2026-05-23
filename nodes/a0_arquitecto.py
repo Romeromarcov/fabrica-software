@@ -14,7 +14,7 @@ from project_state import ProjectState, FeatureTask, Phase
 from nodes.base import call_agent
 from tools.file_tools import save_run_metadata
 from tools.file_parser import uploads_as_context
-from config import MODEL_A1   # El Arquitecto usa el mismo modelo que el PM
+from config import MODEL_A0
 
 
 def a0_arquitecto(state: ProjectState) -> dict:
@@ -87,6 +87,32 @@ del output (entre las marcas ```json y ```):
 
 Ordena el backlog por dependencias y prioridad (1 = más urgente).
 Para cada feature, suggested_mode debe ser "completo" (nuevo esquema DB / MCP) o "lite" (no requiere DB nueva).
+
+## PARTE 4 — ARCHITECTURE.md
+
+Después del JSON, escribe EXACTAMENTE este bloque (entre las marcas ```markdown y ```):
+
+```markdown
+# Architecture — {state['project_name']}
+
+## Stack Tecnológico
+[stack elegido con versiones]
+
+## Patrones de Diseño
+[patrones: repository, service layer, etc.]
+
+## Convenciones de Código
+[naming, estructura de archivos, etc.]
+
+## Entidades Principales
+[tablas/modelos principales y sus relaciones]
+
+## Principios de API
+[formato, autenticación, errores estándar]
+
+## Decisiones Clave
+[decisiones arquitectónicas no negociables]
+```
 """
     else:
         task = f"""
@@ -144,16 +170,60 @@ Prioriza features que:
 - Desbloquean otros features (dependencias)
 - Tienen mayor valor de negocio
 - Reducen deuda técnica crítica
+
+## PARTE 4 — ARCHITECTURE.md
+
+Después del JSON, escribe EXACTAMENTE este bloque (entre las marcas ```markdown y ```):
+
+```markdown
+# Architecture — {state['project_name']}
+
+## Stack Tecnológico
+[stack existente con versiones identificadas]
+
+## Patrones de Diseño
+[patrones detectados en el código existente]
+
+## Convenciones de Código
+[naming y estructura de archivos observados]
+
+## Entidades Principales
+[tablas/modelos principales identificados]
+
+## Principios de API
+[formato, autenticación y convenciones de endpoints existentes]
+
+## Decisiones Clave
+[decisiones arquitectónicas no negociables detectadas en el código]
+```
 """
 
     output, cost = call_agent(
         agent_key="a1_pm",          # Reutiliza el perfil PM de OpenClaw
         agent_label="Agente 0 Arquitecto",
         task_content=task,
-        model=MODEL_A1,
+        model=MODEL_A0,
         include_static=["project_context", "coding_standards", "decision_log"],
         repo_path=repo_path,
     )
+
+    # ── Extraer y guardar Architecture Decision Record ────────────────────────
+    import re as _re
+    adr_match = _re.search(r'```markdown\n(# Architecture.*?)\n```', output, _re.DOTALL)
+    if adr_match:
+        from tools.architecture_record import write_adr
+        try:
+            write_adr(repo_path, adr_match.group(1).strip())
+        except Exception:
+            pass  # Best-effort
+    elif is_new and output:
+        # Fallback: use the full output minus the JSON as ADR
+        from tools.architecture_record import write_adr
+        try:
+            adr_content = f"# Architecture — {state['project_name']}\n\n{output[:3000]}"
+            write_adr(repo_path, adr_content)
+        except Exception:
+            pass
 
     # ── Parsear el JSON del roadmap ───────────────────────────────────────────
     phases: list[Phase] = []

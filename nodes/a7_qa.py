@@ -1,28 +1,42 @@
-"""Agente 4 — QA Test. Genera tests y detecta bugs. Respeta el max_retries."""
+"""Agente 7 — QA Test. Genera tests y detecta bugs. Respeta el max_retries."""
 from state import FabricaState
 from nodes.base import call_agent
 from tools.file_tools import save_agent_output
-from config import MAX_QA_ITER_COMPLETO, MAX_QA_ITER_LITE, MODEL_A4
+from config import MAX_QA_ITER_COMPLETO, MAX_QA_ITER_LITE, MODEL_A7
 
 
-def a4_qa(state: FabricaState) -> dict:
-    iteration = state["qa_iterations"] + 1
-    max_iter = MAX_QA_ITER_COMPLETO if state["mode"] == "completo" else MAX_QA_ITER_LITE
+def a7_qa(state: FabricaState) -> dict:
+    from tools.architecture_record import adr_context_block
+    adr_block = adr_context_block(state["repo_path"])
+
+    iteration    = state["qa_iterations"] + 1
+    max_iter     = MAX_QA_ITER_COMPLETO if state["mode"] == "completo" else MAX_QA_ITER_LITE
+    secops_iter  = state.get("secops_iterations", 0)
+
+    # Contexto adicional según el origen del retest
+    retest_note = ""
+    if secops_iter > 0:
+        retest_note = (
+            f"\n⚠️  RETEST POST-SECOPS (iteración SecOps {secops_iter}):\n"
+            f"SecOps aplicó correcciones de seguridad al código. Verifica que:\n"
+            f"1. Las vulnerabilidades de seguridad reportadas estén corregidas\n"
+            f"2. La funcionalidad original siga operando correctamente\n"
+        )
 
     task = f"""
-Eres el Agente 4 — QA Test. Esta es la iteración {iteration} de máximo {max_iter}.
-
-CRITERIOS DE ACEPTACIÓN (del MASTER_PLAN — sección 7):
+Eres el Agente 7 — QA Test. Esta es la iteración QA {iteration} de máximo {max_iter}.
+{adr_block}{retest_note}
+CRITERIOS DE ACEPTACIÓN (del MASTER_PLAN):
 ---
 {state['master_plan']}
 ---
 
-CÓDIGO BACKEND (Agente 2):
+CÓDIGO BACKEND:
 ---
 {state.get('backend_code', '')}
 ---
 
-CÓDIGO FRONTEND (Agente 3):
+CÓDIGO FRONTEND:
 ---
 {state.get('frontend_code', '')}
 ---
@@ -46,14 +60,14 @@ Si el resultado es FAILED, incluye una sección "## BUGS ENCONTRADOS" con format
 BUG-001 | CRÍTICO | archivo.py:45 | descripción del bug
 """
     output, cost = call_agent(
-        agent_key="a4_qa",
-        agent_label=f"Agente 4 QA (iter {iteration})",
+        agent_key="a7-qa",
+        agent_label=f"Agente 7 QA (iter {iteration})",
         task_content=task,
-        model=MODEL_A4,
+        model=MODEL_A7,
         include_static=["coding_standards"],
         repo_path=state["repo_path"],
     )
-    save_agent_output(state["feature_id"], f"a4_qa_iter{iteration}", output)
+    save_agent_output(state["feature_id"], f"a7_qa_iter{iteration}", output)
 
     passed = "QA_RESULT: PASSED" in output
 
@@ -61,6 +75,6 @@ BUG-001 | CRÍTICO | archivo.py:45 | descripción del bug
         "qa_report": output,
         "qa_passed": passed,
         "qa_iterations": iteration,
-        "current_agent": "a4_qa",
+        "current_agent": "a7_qa",
         "cost_entries": [cost],
     }

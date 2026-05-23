@@ -14,6 +14,22 @@
   .pb-zhipu     { background: #16a34a22; color: #4ade80; border: 1px solid #16a34a44; }
   .pb-kimi      { background: #d9770622; color: #fb923c; border: 1px solid #d9770644; }
   .agent-row td { vertical-align: middle; }
+  .extra-provider-row {
+    display: grid; grid-template-columns: 1fr 1fr auto;
+    gap: .5rem; align-items: center;
+    padding: .5rem .6rem; border-radius: 8px;
+    background: #1a1a24; border: 1px solid #2a2a3a;
+    margin-bottom: .4rem;
+  }
+  .extra-provider-row input { background: #16161d; border-color: #2a2a3a; color: #ddd; }
+  .extra-provider-row input:focus { background: #1e1e28; border-color: var(--brand); color: #fff; }
+  .btn-remove-row {
+    background: none; border: 1px solid #2a2a3a; color: #555;
+    border-radius: 6px; width: 30px; height: 30px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; transition: all .15s; flex-shrink: 0;
+  }
+  .btn-remove-row:hover { border-color: #dc262655; color: #f87171; background: #dc262615; }
 </style>
 {% endblock %}
 
@@ -45,7 +61,7 @@
         <div class="col-md-6">
           <label class="form-label d-flex align-items-center gap-2" style="font-size:.78rem;color:#888">
             <span class="provider-badge pb-anthropic">Anthropic</span>
-            Agentes 4 · 5 · 6 · 7 · 8
+            Agentes 2 · 3 · 6 · 7 · 8
           </label>
           <input type="password" name="anthropic_api_key" class="form-control key-input"
                  value="{{ cfg.ANTHROPIC_API_KEY }}" placeholder="sk-ant-api03-…" autocomplete="off">
@@ -54,7 +70,7 @@
         <div class="col-md-6">
           <label class="form-label d-flex align-items-center gap-2" style="font-size:.78rem;color:#888">
             <span class="provider-badge pb-google">Google</span>
-            Agente 1 · PM / Planificador
+            Agentes A0 · A1 — Arquitecto / PM
           </label>
           <input type="password" name="google_api_key" class="form-control key-input"
                  value="{{ cfg.GOOGLE_API_KEY }}" placeholder="AIzaSy…" autocomplete="off">
@@ -66,7 +82,7 @@
         <div class="col-md-6">
           <label class="form-label d-flex align-items-center gap-2" style="font-size:.78rem;color:#888">
             <span class="provider-badge pb-zhipu">Z.ai</span>
-            Agente 2 · Backend (GLM)
+            Agente 4 · Backend (GLM)
           </label>
           <input type="password" name="zhipu_api_key" class="form-control key-input"
                  value="{{ cfg.ZHIPU_API_KEY }}" placeholder="xxxxxxxx.yyyyyy" autocomplete="off">
@@ -78,7 +94,7 @@
         <div class="col-md-6">
           <label class="form-label d-flex align-items-center gap-2" style="font-size:.78rem;color:#888">
             <span class="provider-badge pb-kimi">Kimi</span>
-            Agente 3 · Frontend (K2)
+            Agente 5 · Frontend (K2)
           </label>
           <input type="password" name="kimi_api_key" class="form-control key-input"
                  value="{{ cfg.KIMI_API_KEY }}" placeholder="sk-…" autocomplete="off">
@@ -106,6 +122,54 @@
         </div>
 
       </div>
+
+      <!-- ── Proveedores adicionales ───────────────────────────────────────── -->
+      <div class="mt-4 pt-3" style="border-top:1px solid #2a2a3a">
+        <div class="d-flex align-items-center justify-content-between mb-2">
+          <span style="font-size:.78rem;color:#888;text-transform:uppercase;letter-spacing:.05em">
+            <i class="bi bi-plug me-1"></i>Proveedores adicionales
+          </span>
+          <button type="button" class="btn btn-sm px-2 py-1" id="btnAddProvider"
+                  style="background:#7c3aed22;color:#a78bfa;border:1px solid #7c3aed44;font-size:.75rem"
+                  onclick="addProviderRow()">
+            <i class="bi bi-plus-lg me-1"></i>Agregar proveedor
+          </button>
+        </div>
+
+        <!-- cabeceras de columna -->
+        <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:.5rem;padding:0 .6rem;margin-bottom:.3rem">
+          <span style="font-size:.68rem;color:#555;text-transform:uppercase;letter-spacing:.04em">Variable de entorno</span>
+          <span style="font-size:.68rem;color:#555;text-transform:uppercase;letter-spacing:.04em">API Key</span>
+          <span style="width:30px"></span>
+        </div>
+
+        <div id="extraProvidersContainer">
+          {% for k, v in extra_keys.items() %}
+          <div class="extra-provider-row">
+            <input type="text" class="form-control form-control-sm key-input ep-name"
+                   value="{{ k }}" placeholder="OPENROUTER_API_KEY"
+                   oninput="this.value=this.value.toUpperCase().replace(/\s/g,'_')"
+                   autocomplete="off" spellcheck="false">
+            <input type="password" class="form-control form-control-sm key-input ep-value"
+                   value="{{ v }}" placeholder="sk-or-…" autocomplete="off">
+            <button type="button" class="btn-remove-row" onclick="this.closest('.extra-provider-row').remove()"
+                    title="Eliminar">×</button>
+          </div>
+          {% endfor %}
+        </div>
+
+        <div style="font-size:.7rem;color:#444;margin-top:.5rem">
+          <i class="bi bi-info-circle me-1"></i>
+          Ejemplos: <code style="color:#666">OPENROUTER_API_KEY</code>,
+          <code style="color:#666">MISTRAL_API_KEY</code>,
+          <code style="color:#666">COHERE_API_KEY</code>.
+          Disponibles como variables de entorno en todos los agentes.
+        </div>
+      </div>
+
+      <!-- hidden textarea que se rellena por JS antes del submit -->
+      <textarea name="extra_vars" id="extraVarsHidden" style="display:none"></textarea>
+
     </div>
   </div>
 
@@ -127,25 +191,29 @@
         </thead>
         <tbody>
           {% set agents = [
-            ("A1", "MODEL_A1", "PM / Planificador",  "google",    "gemini-3.1-pro-preview"),
-            ("A2", "MODEL_A2", "Backend Developer",   "zhipu",     "glm-5.1"),
-            ("A3", "MODEL_A3", "Frontend Developer",  "kimi",      "kimi-k2.6"),
-            ("A4", "MODEL_A4", "QA Test",             "anthropic", "claude-sonnet-4-6"),
-            ("A5", "MODEL_A5", "Refactor + Doc",      "anthropic", "claude-sonnet-4-6"),
-            ("A6", "MODEL_A6", "DB Architect",        "anthropic", "claude-sonnet-4-6"),
-            ("A7", "MODEL_A7", "SecOps",              "anthropic", "claude-sonnet-4-6"),
-            ("A8", "MODEL_A8", "MCP Toolsmith",       "anthropic", "claude-sonnet-4-6"),
+            ("A0", "MODEL_A0", "Arquitecto de Proyecto", "gemini-3.5-flash"),
+            ("A1", "MODEL_A1", "PM / Planificador",      "gemini-3.5-flash"),
+            ("A2", "MODEL_A2", "DB Architect",            "claude-sonnet-4-6"),
+            ("A3", "MODEL_A3", "MCP Toolsmith",           "claude-sonnet-4-6"),
+            ("A4", "MODEL_A4", "Backend Developer",       "glm-5.1"),
+            ("A5", "MODEL_A5", "Frontend Developer",      "kimi-k2.6"),
+            ("A6", "MODEL_A6", "Revisor / Refactor",      "claude-sonnet-4-6"),
+            ("A7", "MODEL_A7", "QA Test",                 "claude-sonnet-4-6"),
+            ("A8", "MODEL_A8", "SecOps",                  "claude-sonnet-4-6"),
           ] %}
-          {% for num, field, label, provider, default in agents %}
+          {% for num, field, label, default in agents %}
           <tr>
             <td style="color:#555;font-size:.78rem">{{ num }}</td>
             <td style="font-size:.82rem">{{ label }}</td>
             <td>
-              <span class="provider-badge pb-{{ provider }}">{{ provider }}</span>
+              <!-- Badge se actualiza dinámicamente según el modelo ingresado -->
+              <span class="provider-badge" id="badge-{{ num }}"></span>
             </td>
             <td>
-              <input type="text" name="{{ field }}" class="form-control form-control-sm key-input"
-                     value="{{ cfg.get(field, default) }}" style="font-size:.78rem">
+              <input type="text" name="{{ field }}" class="form-control form-control-sm key-input agent-model-input"
+                     value="{{ cfg.get(field, default) }}" style="font-size:.78rem"
+                     data-badge="badge-{{ num }}"
+                     oninput="updateProviderBadge(this)">
             </td>
           </tr>
           {% endfor %}
@@ -186,14 +254,644 @@
             = {{ (cfg.CHECKPOINT_TIMEOUT_SECONDS | int) // 60 }} min de espera máxima al Founder
           </div>
         </div>
+        <div class="col-md-4">
+          <label class="form-label" style="font-size:.78rem;color:#888;text-transform:uppercase;letter-spacing:.05em">
+            Max iter. SecOps ↔ QA
+          </label>
+          <input type="number" name="max_secops_iter" class="form-control"
+                 value="{{ cfg.get('MAX_SECOPS_ITER', '2') }}" min="1" max="5">
+          <div class="form-text" style="font-size:.7rem;color:#555">
+            Iteraciones SecOps→QA antes de escalar al Founder
+          </div>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label" style="font-size:.78rem;color:#888;text-transform:uppercase;letter-spacing:.05em">
+            Max iter. Sandbox
+          </label>
+          <input type="number" name="max_sandbox_iter" class="form-control"
+                 value="{{ cfg.get('MAX_SANDBOX_ITER', '2') }}" min="1" max="5">
+          <div class="form-text" style="font-size:.7rem;color:#555">
+            Tests reales antes de escalar al Founder
+          </div>
+        </div>
       </div>
     </div>
   </div>
 
-  <button type="submit" class="btn btn-brand px-4">
+  <!-- ── Auditor Periódico de Codebase ────────────────────────────────────── -->
+  <div class="card mb-4">
+    <div class="p-3 border-bottom d-flex align-items-center gap-2" style="border-color:#2a2a3a!important">
+      <i class="bi bi-search" style="color:var(--brand-light)"></i>
+      <span class="fw-semibold" style="font-size:.9rem">Auditor de Codebase</span>
+      <span class="ms-auto d-flex align-items-center gap-2">
+        <div class="form-check form-switch mb-0 d-flex align-items-center gap-2">
+          <input class="form-check-input" type="checkbox" role="switch"
+                 id="auditorToggleSwitch"
+                 {% if cfg.get('AUDITOR_ENABLED','true') == 'true' %}checked{% endif %}
+                 onchange="toggleAuditor(this.checked)">
+          <label class="form-check-label" for="auditorToggleSwitch"
+                 id="auditorToggleLabel" style="font-size:.78rem;color:#888">
+            {% if cfg.get('AUDITOR_ENABLED','true') == 'true' %}Periódico activo{% else %}Periódico inactivo{% endif %}
+          </label>
+        </div>
+        <input type="checkbox" name="auditor_enabled" id="auditorEnabledField"
+               {% if cfg.get('AUDITOR_ENABLED','true') == 'true' %}checked{% endif %} style="display:none">
+      </span>
+    </div>
+    <div class="p-3">
+
+      <!-- Fila 1: Programación periódica -->
+      <div class="mb-1" style="font-size:.73rem;text-transform:uppercase;letter-spacing:.08em;color:#555;font-weight:600">
+        Programación periódica
+      </div>
+      <div class="row g-3 mb-3">
+        <div class="col-md-3">
+          <label class="form-label" style="font-size:.78rem;color:#888">Día</label>
+          <select name="auditor_weekday" class="form-select form-select-sm">
+            {% set wd = cfg.get('AUDITOR_WEEKDAY','0')|string %}
+            <option value="0" {% if wd == '0' %}selected{% endif %}>Lunes</option>
+            <option value="1" {% if wd == '1' %}selected{% endif %}>Martes</option>
+            <option value="2" {% if wd == '2' %}selected{% endif %}>Miércoles</option>
+            <option value="3" {% if wd == '3' %}selected{% endif %}>Jueves</option>
+            <option value="4" {% if wd == '4' %}selected{% endif %}>Viernes</option>
+            <option value="5" {% if wd == '5' %}selected{% endif %}>Sábado</option>
+            <option value="6" {% if wd == '6' %}selected{% endif %}>Domingo</option>
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label" style="font-size:.78rem;color:#888">Hora (VET)</label>
+          <input type="number" name="auditor_hour" class="form-control form-control-sm"
+                 value="{{ cfg.get('AUDITOR_HOUR', '7') }}" min="0" max="23">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label" style="font-size:.78rem;color:#888">Máx. archivos</label>
+          <input type="number" name="auditor_max_files" class="form-control form-control-sm"
+                 value="{{ cfg.get('AUDITOR_MAX_FILES', '30') }}" min="5" max="200">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label" style="font-size:.78rem;color:#888">Modelo IA</label>
+          <input type="text" name="auditor_model" class="form-control form-control-sm"
+                 value="{{ cfg.get('AUDITOR_MODEL', 'claude-sonnet-4-6') }}"
+                 placeholder="claude-sonnet-4-6">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label" style="font-size:.78rem;color:#888">Repo periódico</label>
+          <select name="auditor_repo" class="form-select form-select-sm" id="auditorRepoSelect">
+            {% set ar = cfg.get('AUDITOR_REPO','all') %}
+            <option value="all" {% if ar == 'all' %}selected{% endif %}>Todos</option>
+            {% for r in repos %}
+            <option value="{{ r.name }}" {% if ar == r.name %}selected{% endif %}>{{ r.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <!-- Separador -->
+      <div style="height:1px;background:#2a2a3a;margin:.75rem 0"></div>
+
+      <!-- Fila 2: Auditoría on-demand -->
+      <div class="mb-2" style="font-size:.73rem;text-transform:uppercase;letter-spacing:.08em;color:#555;font-weight:600">
+        Auditoría on-demand
+      </div>
+      <div class="d-flex gap-2 align-items-center flex-wrap mb-3">
+        <!-- Selector de repo para el run -->
+        <select class="form-select form-select-sm" id="ondemandRepoSelect" style="width:180px">
+          <option value="all">🗂 Todos los repos</option>
+          {% for r in repos %}
+          <option value="{{ r.name }}">{{ r.name }}</option>
+          {% endfor %}
+        </select>
+
+        <!-- Toggle Telegram para el run -->
+        <div class="form-check form-switch mb-0 ms-1 d-flex align-items-center gap-1">
+          <input class="form-check-input" type="checkbox" role="switch"
+                 id="ondemandTelegram" checked>
+          <label class="form-check-label" for="ondemandTelegram"
+                 style="font-size:.78rem;color:#888">Enviar Telegram</label>
+        </div>
+
+        <button type="button" class="btn btn-brand btn-sm px-3 ms-auto"
+                onclick="runAuditorNow()" id="btnAuditorNow">
+          <i class="bi bi-play-circle me-1"></i>Ejecutar ahora
+        </button>
+      </div>
+
+      <!-- Panel de estado + resultado -->
+      <div id="auditorRunPanel" style="display:none">
+        <!-- Barra de progreso -->
+        <div id="auditorProgress" class="p-3 rounded d-flex align-items-center gap-3"
+             style="background:#0f172a;border:1px solid #1e293b;display:none!important">
+          <div class="spinner-border spinner-border-sm text-warning" role="status"></div>
+          <div>
+            <div style="font-size:.82rem;color:#fb923c;font-weight:600">Auditoría en curso…</div>
+            <div id="auditorProgressRepo" style="font-size:.75rem;color:#555"></div>
+          </div>
+        </div>
+
+        <!-- Resultado -->
+        <div id="auditorResult" style="display:none">
+          <div class="d-flex align-items-center justify-content-between mb-2">
+            <div id="auditorResultTitle" style="font-size:.82rem;font-weight:600;color:#a78bfa"></div>
+            <div class="d-flex gap-2">
+              <button class="btn btn-sm btn-outline-secondary"
+                      onclick="document.getElementById('auditorResultBody').style.display =
+                               document.getElementById('auditorResultBody').style.display === 'none' ? 'block' : 'none'">
+                <i class="bi bi-arrows-collapse"></i> Toggle
+              </button>
+              <button class="btn btn-sm btn-outline-secondary" onclick="copyAuditResult()">
+                <i class="bi bi-clipboard"></i> Copiar
+              </button>
+            </div>
+          </div>
+          <!-- Resultados por repo -->
+          <div id="auditorResultBody"></div>
+        </div>
+      </div>
+
+      <!-- Estado del scheduler -->
+      <div id="auditorStatusBadge" class="mt-2" style="font-size:.72rem;color:#555"></div>
+    </div>
+  </div>
+
+  <!-- ── Telegram ──────────────────────────────────────────────────────────── -->
+  <div class="card mb-4">
+    <div class="p-3 border-bottom d-flex align-items-center gap-2" style="border-color:#2a2a3a!important">
+      <i class="bi bi-telegram" style="color:var(--brand-light)"></i>
+      <span class="fw-semibold" style="font-size:.9rem">Notificaciones Telegram</span>
+      <span class="ms-auto badge" style="background:#1f1f2e;color:#555;font-size:.68rem">Opcional</span>
+    </div>
+    <div class="p-3">
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label" style="font-size:.78rem;color:#888;text-transform:uppercase;letter-spacing:.05em">
+            Bot Token
+          </label>
+          <input type="password" name="telegram_bot_token" class="form-control key-input"
+                 value="{{ cfg.get('TELEGRAM_BOT_TOKEN', '') }}" placeholder="1234567890:ABC-…" autocomplete="off">
+          <div class="form-text" style="font-size:.68rem;color:#444">
+            Crea un bot con <span style="color:#666">@BotFather → /newbot</span>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label" style="font-size:.78rem;color:#888;text-transform:uppercase;letter-spacing:.05em">
+            Chat ID
+          </label>
+          <input type="text" name="telegram_chat_id" class="form-control key-input"
+                 value="{{ cfg.get('TELEGRAM_CHAT_ID', '') }}" placeholder="-100123456789" autocomplete="off">
+          <div class="form-text" style="font-size:.68rem;color:#444">
+            Obtener via <span style="color:#666">api.telegram.org/bot&lt;TOKEN&gt;/getUpdates</span>
+          </div>
+        </div>
+      </div>
+      <!-- Estado del bot + botón de prueba -->
+      <div class="mt-3 d-flex align-items-center gap-3 flex-wrap">
+        <div id="botStatusBadge" style="font-size:.75rem"></div>
+        <button type="button" class="btn btn-sm btn-outline-secondary ms-auto"
+                id="btnBotTest" onclick="testBotConnection()">
+          <i class="bi bi-send me-1"></i>Enviar mensaje de prueba
+        </button>
+      </div>
+      <div class="mt-2 p-2 rounded" style="background:#0f172a;border:1px solid #1e293b;font-size:.72rem;color:#475569">
+        <i class="bi bi-info-circle me-1"></i>
+        El bot notifica al Founder cuando: un feature se completa, hay una escalación QA/SecOps,
+        se agota el backlog del proyecto y cuando hay nuevas sugerencias del PM.
+        Responde a <code>/ayuda</code>, <code>/status</code>, <code>/aprobar</code>, <code>/rechazar</code>, <code>/feature</code>.
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Seguridad & Acceso ────────────────────────────────────────────────── -->
+  <div class="card mb-4">
+    <div class="p-3 border-bottom d-flex align-items-center gap-2" style="border-color:#2a2a3a!important">
+      <i class="bi bi-shield-lock" style="color:var(--brand-light)"></i>
+      <span class="fw-semibold" style="font-size:.9rem">Seguridad & Acceso</span>
+      <span class="ms-auto badge" style="background:#1f1f2e;color:#555;font-size:.68rem">Producción</span>
+    </div>
+    <div class="p-3">
+      <div class="row g-3">
+
+        <!-- Basic Auth -->
+        <div class="col-12">
+          <div class="mb-1" style="font-size:.73rem;text-transform:uppercase;letter-spacing:.08em;color:#555;font-weight:600">
+            Basic Auth de la UI
+          </div>
+          <div class="form-text mb-2" style="font-size:.75rem;color:#666">
+            Si se configuran ambos campos, la UI pedirá usuario y contraseña. Déjalos vacíos para desactivar.
+          </div>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label" style="font-size:.78rem;color:#888">Usuario</label>
+          <input type="text" name="ui_username" class="form-control"
+                 value="{{ cfg.get('UI_USERNAME', '') }}" placeholder="admin" autocomplete="off">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label" style="font-size:.78rem;color:#888">Contraseña</label>
+          <input type="password" name="ui_password" class="form-control"
+                 value="{{ cfg.get('UI_PASSWORD', '') }}" placeholder="••••••••" autocomplete="new-password">
+          <div class="form-text" style="font-size:.68rem;color:#444">El cambio aplica en el próximo reinicio.</div>
+        </div>
+
+        <!-- Separador vertical -->
+        <div class="col-12"><div style="height:1px;background:#2a2a3a;margin:.25rem 0"></div></div>
+
+        <!-- GitHub Token -->
+        <div class="col-12">
+          <div class="mb-1" style="font-size:.73rem;text-transform:uppercase;letter-spacing:.08em;color:#555;font-weight:600">
+            GitHub Token (para PRs automáticos)
+          </div>
+        </div>
+        <div class="col-md-8">
+          <label class="form-label" style="font-size:.78rem;color:#888">Personal Access Token</label>
+          <input type="password" name="github_token" class="form-control key-input"
+                 value="{{ cfg.get('GITHUB_TOKEN', '') }}"
+                 placeholder="ghp_xxxxxxxxxxxxxxxxxxxx" autocomplete="off">
+          <div class="form-text" style="font-size:.68rem;color:#444">
+            Necesita permisos: <code>repo</code> + <code>workflow</code>.
+            Genera en <span style="color:#666">github.com → Settings → Developer settings → PAT</span>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label" style="font-size:.78rem;color:#888">Usuario/Org GitHub</label>
+          <input type="text" name="github_actor" class="form-control"
+                 value="{{ cfg.get('GITHUB_ACTOR', '') }}" placeholder="tu-usuario-o-org">
+          <div class="form-text" style="font-size:.68rem;color:#444">Para autenticar git push.</div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <button type="submit" class="btn btn-brand px-4" onclick="serializeExtraProviders()">
     <i class="bi bi-floppy me-1"></i> Guardar configuración
   </button>
   <a href="/" class="btn btn-outline-secondary ms-2 px-4">Cancelar</a>
 
 </form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ── Detección dinámica de proveedor por nombre de modelo ─────────────────────
+
+const PROVIDER_STYLES = {
+  anthropic:    { cls: 'pb-anthropic', label: 'anthropic' },
+  google:       { cls: 'pb-google',    label: 'google'    },
+  'google-native': { cls: 'pb-google', label: 'google ✦' }, // ✦ = thinking
+  zhipu:        { cls: 'pb-zhipu',     label: 'z.ai'      },
+  kimi:         { cls: 'pb-kimi',      label: 'kimi'      },
+};
+// badge extra para providers no listados arriba
+const PB_DEFAULT = { cls: '', label: '—' };
+
+function detectModelProvider(modelName) {
+  const m = (modelName || '').toLowerCase().trim();
+  if (!m) return PB_DEFAULT;
+  if (m.startsWith('claude-'))                                   return PROVIDER_STYLES.anthropic;
+  if (m.startsWith('gemini-3.5-'))                               return PROVIDER_STYLES['google-native'];
+  if (m.startsWith('gemini-'))                                   return PROVIDER_STYLES.google;
+  if (m.startsWith('glm-') || m.startsWith('chatglm'))          return PROVIDER_STYLES.zhipu;
+  if (m.startsWith('kimi-') || m.startsWith('moonshot-'))       return PROVIDER_STYLES.kimi;
+  // Detectar por substring (para modelos custom de proveedores conocidos)
+  if (m.includes('gpt'))                                         return { cls: 'pb-google',    label: 'openai'    };
+  if (m.includes('llama') || m.includes('mistral'))             return { cls: 'pb-zhipu',     label: 'custom'    };
+  return PB_DEFAULT;
+}
+
+function updateProviderBadge(input) {
+  const badgeId = input.getAttribute('data-badge');
+  if (!badgeId) return;
+  const badge = document.getElementById(badgeId);
+  if (!badge) return;
+  const { cls, label } = detectModelProvider(input.value);
+  // Quitar todas las clases pb-*
+  badge.className = 'provider-badge' + (cls ? ' ' + cls : '');
+  badge.textContent = label;
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  // Inicializar todos los badges con los valores actuales
+  document.querySelectorAll('.agent-model-input').forEach(updateProviderBadge);
+  // Cargar estado del bot
+  fetchBotStatus();
+});
+
+// ── Bot de Telegram ───────────────────────────────────────────────────────────
+
+async function fetchBotStatus() {
+  const el = document.getElementById('botStatusBadge');
+  if (!el) return;
+  try {
+    const r = await fetch('/api/bot/status');
+    const d = await r.json();
+    if (!d.configured) {
+      el.innerHTML = '<span style="color:#555"><i class="bi bi-circle me-1"></i>No configurado</span>';
+    } else if (d.thread_alive && d.bot_info) {
+      el.innerHTML = `<span style="color:#4ade80"><i class="bi bi-check-circle-fill me-1"></i>Conectado · @${d.bot_info.username} · chat ${d.chat_id}</span>`;
+    } else if (d.bot_info) {
+      el.innerHTML = `<span style="color:#fb923c"><i class="bi bi-exclamation-circle me-1"></i>Token válido pero polling inactivo — reinicia el contenedor</span>`;
+    } else {
+      el.innerHTML = '<span style="color:#f87171"><i class="bi bi-x-circle me-1"></i>Token inválido o sin conexión</span>';
+    }
+  } catch(e) {
+    el.innerHTML = '<span style="color:#555">No se pudo verificar el estado</span>';
+  }
+}
+
+async function testBotConnection() {
+  const btn = document.getElementById('btnBotTest');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Enviando…';
+  try {
+    const r = await fetch('/api/bot/send_test', { method: 'POST' });
+    if (r.ok) {
+      btn.innerHTML = '<i class="bi bi-check-circle me-1"></i>¡Mensaje enviado!';
+      btn.style.color = '#4ade80';
+      setTimeout(() => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-send me-1"></i>Enviar mensaje de prueba';
+        btn.style.color = '';
+      }, 3000);
+    } else {
+      const err = await r.json();
+      btn.innerHTML = `<i class="bi bi-x-circle me-1"></i>Error: ${err.detail || 'desconocido'}`;
+      btn.style.color = '#f87171';
+      setTimeout(() => { btn.disabled = false; btn.innerHTML = '<i class="bi bi-send me-1"></i>Enviar mensaje de prueba'; btn.style.color = ''; }, 4000);
+    }
+  } catch(e) {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-send me-1"></i>Enviar mensaje de prueba';
+  }
+}
+
+// ── Proveedores adicionales ────────────────────────────────────────────────────
+
+function addProviderRow(name, value) {
+  const row = document.createElement('div');
+  row.className = 'extra-provider-row';
+  row.innerHTML = `
+    <input type="text" class="form-control form-control-sm key-input ep-name"
+           value="${name||''}" placeholder="OPENROUTER_API_KEY"
+           oninput="this.value=this.value.toUpperCase().replace(/\\s/g,'_')"
+           autocomplete="off" spellcheck="false">
+    <input type="password" class="form-control form-control-sm key-input ep-value"
+           value="${value||''}" placeholder="sk-or-…" autocomplete="off">
+    <button type="button" class="btn-remove-row"
+            onclick="this.closest('.extra-provider-row').remove()" title="Eliminar">×</button>
+  `;
+  document.getElementById('extraProvidersContainer').appendChild(row);
+  row.querySelector('.ep-name').focus();
+}
+
+function serializeExtraProviders() {
+  const rows = document.querySelectorAll('.extra-provider-row');
+  const lines = [];
+  rows.forEach(row => {
+    const k = row.querySelector('.ep-name').value.trim().toUpperCase().replace(/\s/g,'_');
+    const v = row.querySelector('.ep-value').value.trim();
+    if (k) lines.push(`${k}=${v}`);
+  });
+  document.getElementById('extraVarsHidden').value = lines.join('\n');
+}
+
+// ── Auditor de codebase ───────────────────────────────────────────────────────
+
+async function toggleAuditor(enabled) {
+  const label = document.getElementById('auditorToggleLabel');
+  const field = document.getElementById('auditorEnabledField');
+  label.textContent = enabled ? 'Periódico activo' : 'Periódico inactivo';
+  field.checked = enabled;
+  try {
+    const r = await fetch('/api/auditor/toggle', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({enabled}),
+    });
+    const data = await r.json();
+    if (!data.ok) throw new Error('Error del servidor');
+    fetchAuditorStatus();
+  } catch(e) {
+    label.textContent = enabled ? 'Error al activar' : 'Error al desactivar';
+    console.error(e);
+  }
+}
+
+let _auditPollTimer = null;
+
+async function runAuditorNow() {
+  const btn       = document.getElementById('btnAuditorNow');
+  const repoSel   = document.getElementById('ondemandRepoSelect');
+  const tgToggle  = document.getElementById('ondemandTelegram');
+  const repo      = repoSel ? repoSel.value : 'all';
+  const telegram  = tgToggle ? tgToggle.checked : true;
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Iniciando…';
+
+  // Mostrar panel
+  const panel    = document.getElementById('auditorRunPanel');
+  const progress = document.getElementById('auditorProgress');
+  const result   = document.getElementById('auditorResult');
+  if (panel)    panel.style.display = 'block';
+  if (progress) { progress.style.display = 'flex'; progress.style.removeProperty('display'); progress.style.display = 'flex'; }
+  if (result)   result.style.display = 'none';
+
+  const progRepo = document.getElementById('auditorProgressRepo');
+  if (progRepo) progRepo.textContent = repo === 'all' ? 'Todos los repositorios' : `Repo: ${repo}`;
+
+  try {
+    const r = await fetch('/api/auditor/run', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ repo, telegram }),
+    });
+
+    if (r.status === 409) {
+      const d = await r.json();
+      showToast('⚠️ ' + d.message, 'warning');
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-play-circle me-1"></i>Ejecutar ahora';
+      return;
+    }
+
+    if (!r.ok) throw new Error((await r.json()).detail || r.statusText);
+
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>En curso…';
+
+    // Polling hasta que termine
+    if (_auditPollTimer) clearInterval(_auditPollTimer);
+    _auditPollTimer = setInterval(() => _pollAuditStatus(btn, repo), 3000);
+
+  } catch(e) {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-play-circle me-1"></i>Ejecutar ahora';
+    showToast('❌ Error: ' + e.message, 'danger');
+  }
+}
+
+async function _pollAuditStatus(btn, requestedRepo) {
+  try {
+    const r = await fetch('/api/auditor/status');
+    const d = await r.json();
+
+    if (!d.running) {
+      // Terminó
+      clearInterval(_auditPollTimer);
+      _auditPollTimer = null;
+
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-play-circle me-1"></i>Ejecutar ahora';
+
+      const progress = document.getElementById('auditorProgress');
+      if (progress) progress.style.display = 'none';
+
+      // Mostrar resultados
+      _renderAuditResults(d.last_results, requestedRepo);
+    } else {
+      // Actualizar texto de progreso
+      const progRepo = document.getElementById('auditorProgressRepo');
+      const repos = Object.keys(d.last_results || {});
+      const done  = repos.filter(k => d.last_results[k].finished_at).length;
+      if (progRepo && repos.length > 0)
+        progRepo.textContent = `${done}/${repos.length} repos completados`;
+    }
+  } catch(e) {}
+}
+
+function _renderAuditResults(results, requestedRepo) {
+  const container = document.getElementById('auditorResult');
+  const body      = document.getElementById('auditorResultBody');
+  const title     = document.getElementById('auditorResultTitle');
+  if (!container || !body) return;
+
+  const keys = requestedRepo === 'all' ? Object.keys(results) : [requestedRepo].filter(k => results[k]);
+  if (keys.length === 0) {
+    body.innerHTML = '<div style="font-size:.8rem;color:#555">Sin resultados disponibles todavía.</div>';
+  } else {
+    title.textContent = `✅ Auditoría completada — ${keys.length} repo(s)`;
+    body.innerHTML = keys.map(repo => {
+      const r = results[repo];
+      const hasCritical = r.summary && (r.summary.toLowerCase().includes('crítico') || r.summary.includes('🔴'));
+      const headerColor = hasCritical ? '#f87171' : '#4ade80';
+      const timeStr = r.finished_at ? new Date(r.finished_at).toLocaleTimeString('es-VE') : '';
+      return `
+        <div class="mb-3 p-3 rounded" style="background:#0a0a10;border:1px solid #${hasCritical ? 'dc262644' : '16a34a44'}">
+          <div class="d-flex align-items-center justify-content-between mb-2">
+            <span style="font-size:.8rem;font-weight:600;color:${headerColor}">
+              ${hasCritical ? '🔴' : '✅'} ${repo}
+            </span>
+            <span style="font-size:.7rem;color:#555">${timeStr}</span>
+          </div>
+          ${r.error
+            ? `<div style="font-size:.78rem;color:#f87171">Error: ${r.error}</div>`
+            : `<pre id="audit-pre-${repo}" style="max-height:300px;font-size:.75rem;overflow-y:auto;white-space:pre-wrap;word-break:break-word;background:transparent;border:none;padding:0;color:#ccc">Cargando informe completo…</pre>`
+          }
+          ${!r.error ? `
+          <button class="btn btn-sm btn-outline-secondary mt-2" style="font-size:.72rem"
+                  onclick="loadFullReport('${repo}')">
+            <i class="bi bi-arrows-expand me-1"></i>Ver informe completo
+          </button>` : ''}
+        </div>`;
+    }).join('');
+
+    // Pre-cargar el resumen en los pres
+    keys.forEach(repo => {
+      const pre = document.getElementById(`audit-pre-${repo}`);
+      if (pre && results[repo].summary) pre.textContent = results[repo].summary;
+    });
+  }
+
+  container.style.display = 'block';
+}
+
+async function loadFullReport(repo) {
+  try {
+    const r = await fetch(`/api/auditor/result/${encodeURIComponent(repo)}`);
+    if (!r.ok) throw new Error('No disponible');
+    const d = await r.json();
+    const pre = document.getElementById(`audit-pre-${repo}`);
+    if (pre) pre.textContent = d.report || '(Sin contenido)';
+  } catch(e) {
+    showToast('❌ ' + e.message, 'danger');
+  }
+}
+
+function copyAuditResult() {
+  const body = document.getElementById('auditorResultBody');
+  if (!body) return;
+  const text = body.innerText;
+  navigator.clipboard.writeText(text).then(
+    () => showToast('📋 Copiado al portapapeles', 'success'),
+    () => showToast('❌ No se pudo copiar', 'danger'),
+  );
+}
+
+async function fetchAuditorStatus() {
+  try {
+    const r = await fetch('/api/auditor/status');
+    const d = await r.json();
+    const el = document.getElementById('auditorStatusBadge');
+    if (!el) return;
+
+    let txt = '';
+    if (d.running) {
+      txt = `<span class="spinner-border spinner-border-sm me-1" style="width:.7rem;height:.7rem"></span>
+             <span style="color:#fb923c">Auditoría en curso…</span>`;
+    } else if (d.next_run) {
+      txt = `<i class="bi bi-clock me-1"></i>Próxima auditoría: <strong>${d.next_run}</strong> · ${d.model}`;
+    } else if (d.enabled) {
+      const repoLabel = d.repo_cfg === 'all' ? 'todos los repos' : d.repo_cfg;
+      txt = `<i class="bi bi-clock me-1"></i>Cada ${d.weekday_name} a las ${String(d.hour).padStart(2,'0')}:00 VET · ${repoLabel} · ${d.model}`;
+    } else {
+      txt = `<i class="bi bi-pause-circle me-1"></i>Periódico desactivado`;
+    }
+    el.innerHTML = txt;
+
+    // Si hay auditoría en curso y el panel ya estaba abierto, seguir posteando
+    if (d.running && !_auditPollTimer) {
+      const panel = document.getElementById('auditorRunPanel');
+      const progress = document.getElementById('auditorProgress');
+      if (panel) panel.style.display = 'block';
+      if (progress) progress.style.display = 'flex';
+    }
+  } catch(e) {}
+}
+
+document.addEventListener('DOMContentLoaded', fetchAuditorStatus);
+
+// Sugerencias rápidas de proveedores comunes
+const QUICK_PROVIDERS = [
+  {label:'OpenRouter', key:'OPENROUTER_API_KEY', ph:'sk-or-…'},
+  {label:'Mistral',    key:'MISTRAL_API_KEY',    ph:'…'},
+  {label:'Cohere',     key:'COHERE_API_KEY',     ph:'…'},
+  {label:'Together',   key:'TOGETHER_API_KEY',   ph:'…'},
+  {label:'Groq',       key:'GROQ_API_KEY',       ph:'gsk_…'},
+  {label:'DeepSeek',   key:'DEEPSEEK_API_KEY',   ph:'sk-…'},
+  {label:'Perplexity', key:'PERPLEXITY_API_KEY', ph:'pplx-…'},
+  {label:'xAI (Grok)', key:'XAI_API_KEY',        ph:'xai-…'},
+];
+
+// Añadir chips de sugerencias debajo del botón "Agregar proveedor"
+document.addEventListener('DOMContentLoaded', () => {
+  const existing = new Set(
+    [...document.querySelectorAll('.ep-name')].map(el => el.value.trim())
+  );
+  const container = document.getElementById('extraProvidersContainer');
+  const chips = document.createElement('div');
+  chips.className = 'd-flex flex-wrap gap-1 mt-2 mb-1';
+  chips.id = 'quickChips';
+  QUICK_PROVIDERS.forEach(p => {
+    if (existing.has(p.key)) return;  // ya existe, no mostrar chip
+    const c = document.createElement('button');
+    c.type = 'button';
+    c.textContent = '+ ' + p.label;
+    c.className = 'badge';
+    c.style.cssText = 'background:#7c3aed18;color:#7c3aed;border:1px solid #7c3aed33;cursor:pointer;font-size:.68rem;padding:.25rem .55rem;border-radius:12px';
+    c.onclick = () => { addProviderRow(p.key, ''); c.remove(); };
+    chips.appendChild(c);
+  });
+  if (chips.children.length > 0) {
+    container.insertAdjacentElement('afterend', chips);
+  }
+});
+</script>
 {% endblock %}

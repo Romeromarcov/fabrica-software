@@ -48,14 +48,19 @@ class FabricaState(TypedDict):
     qa_passed: bool
     qa_iterations: int
 
-    # ── SecOps revisión 2 ─────────────────────────────────────────────────────
-    security_clearance_2: bool        # Agente 7 — revisión 2
-    security_block_2: Optional[str]
-    checkpoint_b_approved: bool       # Founder no dijo PAUSA en Checkpoint B
+    # ── SecOps (único pase, post-QA) ─────────────────────────────────────────
+    security_clearance_2: bool        # True = sin vulnerabilidades / vulnerabilidades corregidas
+    security_block_2: Optional[str]   # Descripción de vulnerabilidades si las hay
+    secops_iterations: int            # Iteraciones del ciclo SecOps→QA (máx MAX_SECOPS_ITER)
 
-    # ── Filtro final ──────────────────────────────────────────────────────────
-    refactor_doc_output: Optional[str]   # Agente 5 (Refactor + Doc)
-    refactor_doc_approved: bool
+    # ── Sandbox de ejecución (post-SecOps, pre-PR) ────────────────────────────
+    sandbox_results: Optional[str]    # Resumen de resultados del sandbox
+    sandbox_passed: bool              # True = todos los checks pasaron (o sin herramientas)
+    sandbox_iterations: int           # Iteraciones del ciclo Sandbox→A6 (máx MAX_SANDBOX_ITER)
+
+    # ── Revisión y unificación de código (pre-QA) ────────────────────────────
+    refactor_doc_output: Optional[str]   # Agente 5 (Revisor/Unificador — corre antes de QA)
+    refactor_doc_approved: bool          # True = "✅ LISTO PARA QA" emitido
 
     # ── PR Final ──────────────────────────────────────────────────────────────
     pr_message: Optional[str]
@@ -100,7 +105,10 @@ def initial_state(
         qa_iterations=0,
         security_clearance_2=False,
         security_block_2=None,
-        checkpoint_b_approved=True,
+        secops_iterations=0,
+        sandbox_results=None,
+        sandbox_passed=False,
+        sandbox_iterations=0,
         refactor_doc_output=None,
         refactor_doc_approved=False,
         pr_message=None,

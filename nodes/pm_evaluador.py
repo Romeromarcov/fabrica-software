@@ -38,21 +38,21 @@ def _read_run_outputs(feature_id: str) -> str:
     if pr_path.exists():
         parts.append(f"\n### PR FINAL\n{pr_path.read_text(encoding='utf-8')[:2000]}")
 
-    # QA report
-    qa_files = sorted(run_dir.glob("output_a4_qa_iter*.md"))
+    # QA report — A-12: el QA lo genera A7, no A4
+    qa_files = sorted(run_dir.glob("output_a7_qa_iter*.md"))
     if qa_files:
         parts.append(f"\n### ÚLTIMO QA REPORT\n{qa_files[-1].read_text(encoding='utf-8')[:1500]}")
 
-    # A5 refactor (indica qué se cambió)
-    a5_path = run_dir / "output_a5_refactor_doc.md"
-    if a5_path.exists():
-        parts.append(f"\n### REPORTE A5\n{a5_path.read_text(encoding='utf-8')[:1000]}")
+    # Refactor doc — A-12: lo genera A6, no A5
+    a6_path = run_dir / "output_a6_refactor.md"
+    if a6_path.exists():
+        parts.append(f"\n### REPORTE REFACTOR (A6)\n{a6_path.read_text(encoding='utf-8')[:1000]}")
 
     return "\n\n".join(parts) if parts else "Sin outputs disponibles."
 
 
 def pm_evaluador(state: ProjectState) -> dict:
-    idx     = state["current_feature_index"] - 1   # ya fue incrementado antes de llamar aquí
+    idx     = state["current_feature_index"]   # advance_index corre DESPUÉS de pm_evaluador
     backlog = list(state["backlog"])
 
     if idx < 0 or idx >= len(backlog):

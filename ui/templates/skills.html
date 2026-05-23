@@ -1,0 +1,380 @@
+{% extends "base.html" %}
+
+{% block title %}Skills del Proyecto{% endblock %}
+
+{% block head %}
+<style>
+  .skill-card {
+    background: #1a1a24;
+    border: 1px solid #2a2a3a;
+    border-radius: 10px;
+    transition: border-color .15s;
+    cursor: pointer;
+  }
+  .skill-card:hover { border-color: var(--brand); }
+  .skill-card.active { border-color: var(--brand); background: #7c3aed0d; }
+
+  .skill-name {
+    font-family: monospace;
+    font-size: .85rem;
+    color: var(--brand-light);
+    font-weight: 600;
+  }
+  .skill-desc {
+    font-size: .78rem;
+    color: #888;
+    line-height: 1.5;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  #skill-editor { display: none; }
+  #skill-editor.open { display: block; }
+
+  .editor-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 1rem;
+  }
+  #skill-content-editor {
+    background: #0a0a10;
+    border: 1px solid #2a2a3a;
+    border-radius: 8px;
+    color: #ccc;
+    font-family: 'JetBrains Mono', 'Cascadia Code', 'Consolas', monospace;
+    font-size: .8rem;
+    line-height: 1.6;
+    resize: vertical;
+    min-height: 400px;
+    padding: .75rem 1rem;
+  }
+  #skill-content-editor:focus {
+    border-color: var(--brand);
+    outline: none;
+    box-shadow: 0 0 0 3px #7c3aed33;
+  }
+
+  .skill-badge {
+    display: inline-flex; align-items: center; gap: .3rem;
+    background: #7c3aed22; color: var(--brand-light);
+    border: 1px solid #7c3aed44;
+    border-radius: 20px; padding: .2rem .65rem;
+    font-size: .72rem; font-weight: 600;
+  }
+  .skill-count {
+    background: #ffffff12; color: #888;
+    border: 1px solid #2a2a3a;
+    border-radius: 20px; padding: .15rem .55rem;
+    font-size: .72rem;
+  }
+  .empty-state {
+    text-align: center; padding: 4rem 2rem; color: #555;
+  }
+  .empty-state i { font-size: 3rem; display: block; margin-bottom: 1rem; color: #333; }
+
+  /* Modal de nueva skill */
+  .modal-content { background: #1a1a24; border: 1px solid #2a2a3a; }
+  .modal-header { border-color: #2a2a3a; }
+  .modal-footer { border-color: #2a2a3a; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-4">
+  <div>
+    <h4 class="mb-0 fw-semibold">Skills del Proyecto</h4>
+    <small class="text-muted">Conocimiento especializado inyectado automáticamente en cada agente</small>
+  </div>
+  <div class="d-flex gap-2 align-items-center">
+
+    <!-- Selector de repo -->
+    {% if repos|length > 1 %}
+    <select class="form-select form-select-sm" style="width:180px"
+            onchange="window.location='/skills?repo='+this.value">
+      {% for r in repos %}
+      <option value="{{ r.name }}" {% if r.name == selected_repo %}selected{% endif %}>
+        {{ r.name }}
+      </option>
+      {% endfor %}
+    </select>
+    {% else %}
+    <span class="skill-badge">
+      <i class="bi bi-folder2-open"></i> {{ selected_repo or "—" }}
+    </span>
+    {% endif %}
+
+    <button class="btn btn-brand btn-sm px-3" data-bs-toggle="modal" data-bs-target="#modalNewSkill">
+      <i class="bi bi-plus-circle me-1"></i> Nueva Skill
+    </button>
+  </div>
+</div>
+
+<!-- Info banner -->
+<div class="alert alert-dark border mb-4" style="background:#7c3aed0d;border-color:#7c3aed33!important">
+  <div class="d-flex gap-3 align-items-start">
+    <i class="bi bi-lightbulb-fill" style="color:var(--brand-light);font-size:1.2rem;margin-top:.1rem"></i>
+    <div>
+      <div class="fw-semibold mb-1" style="color:var(--brand-light);font-size:.85rem">¿Cómo funcionan las skills?</div>
+      <div style="font-size:.8rem;color:#aaa;line-height:1.6">
+        Las skills son guías especializadas del dominio. Cuando un agente recibe una tarea,
+        la fábrica selecciona automáticamente las skills relevantes (por keywords) y las inyecta
+        en el contexto del prompt. Están guardadas en
+        <code style="background:#ffffff12;padding:.1rem .4rem;border-radius:4px">
+          {{ selected_repo }}/docs/skills/*/SKILL.md
+        </code>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3">
+
+  <!-- Columna izquierda: lista de skills -->
+  <div class="col-md-4">
+    <div class="d-flex align-items-center justify-content-between mb-2">
+      <span class="fw-semibold" style="font-size:.85rem">Skills activas</span>
+      <span class="skill-count">{{ skills|length }}</span>
+    </div>
+
+    {% if skills %}
+    <div class="d-flex flex-column gap-2" id="skill-list">
+      {% for s in skills %}
+      <div class="skill-card p-3" id="card-{{ loop.index }}"
+           onclick="openSkill('{{ s.name }}', this)">
+        <div class="skill-name mb-1">
+          <i class="bi bi-bookmark-fill me-1" style="font-size:.7rem"></i>
+          {{ s.name }}
+        </div>
+        <div class="skill-desc">{{ s.description[:200] }}</div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state" style="padding:3rem 1rem">
+      <i class="bi bi-bookmark-x"></i>
+      <div style="font-size:.85rem">Sin skills en este repo</div>
+      <div style="font-size:.78rem;color:#444;margin-top:.5rem">
+        Crea la primera con el botón "Nueva Skill"
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Columna derecha: editor de skill -->
+  <div class="col-md-8">
+    <div id="skill-editor-placeholder" class="empty-state" style="padding:5rem 2rem">
+      <i class="bi bi-pencil-square"></i>
+      <div style="font-size:.9rem;color:#555">Selecciona una skill para editarla</div>
+      <div style="font-size:.78rem;color:#444;margin-top:.5rem">
+        o crea una nueva con el botón de arriba
+      </div>
+    </div>
+
+    <div id="skill-editor">
+      <div class="editor-header">
+        <div>
+          <div class="skill-name" id="editor-title">—</div>
+          <div id="editor-path" style="font-size:.72rem;color:#555;font-family:monospace;margin-top:.2rem"></div>
+        </div>
+        <div class="d-flex gap-2">
+          <button class="btn btn-sm btn-outline-danger" onclick="deleteCurrentSkill()">
+            <i class="bi bi-trash3 me-1"></i> Eliminar
+          </button>
+          <button class="btn btn-sm btn-brand" onclick="saveCurrentSkill()">
+            <i class="bi bi-floppy me-1"></i> Guardar
+          </button>
+        </div>
+      </div>
+
+      <!-- Trigger description -->
+      <div class="mb-3">
+        <label class="form-label" style="font-size:.8rem;color:#888">
+          <i class="bi bi-search me-1"></i> Descripción / Trigger
+          <span class="text-muted ms-1" style="font-size:.73rem">
+            — define cuándo se inyecta esta skill (keywords para matching automático)
+          </span>
+        </label>
+        <input type="text" id="editor-desc" class="form-control form-control-sm"
+               placeholder="Use this skill whenever you...">
+      </div>
+
+      <!-- Contenido markdown -->
+      <div class="mb-3">
+        <label class="form-label" style="font-size:.8rem;color:#888">
+          <i class="bi bi-markdown me-1"></i> Contenido (Markdown)
+        </label>
+        <textarea id="skill-content-editor" class="form-control"></textarea>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Modal: Nueva Skill -->
+<div class="modal fade" id="modalNewSkill" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title fw-semibold">
+          <i class="bi bi-plus-circle me-2" style="color:var(--brand-light)"></i>
+          Nueva Skill
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label" style="font-size:.83rem">
+            Nombre de la skill <span class="text-danger">*</span>
+          </label>
+          <input type="text" id="new-skill-name" class="form-control"
+                 placeholder="omni-mi-nueva-skill">
+          <div class="form-text" style="font-size:.75rem">
+            Usa kebab-case. Ej: <code>omni-api-rest</code>, <code>omni-celery-tasks</code>
+          </div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label" style="font-size:.83rem">Trigger / Descripción</label>
+          <input type="text" id="new-skill-desc" class="form-control"
+                 placeholder="Use this skill whenever you...">
+          <div class="form-text" style="font-size:.75rem">
+            El agente usa esto para decidir si la skill es relevante para la tarea.
+          </div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label" style="font-size:.83rem">Contenido inicial (Markdown)</label>
+          <textarea id="new-skill-content" class="form-control" rows="10"
+                    style="font-family:monospace;font-size:.8rem;background:#0a0a10;color:#ccc;border-color:#2a2a3a"
+                    placeholder="# Skill: Mi Nueva Skill&#10;&#10;## Cuándo usar esta skill&#10;..."></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-sm btn-brand px-3" onclick="createNewSkill()">
+          <i class="bi bi-plus-circle me-1"></i> Crear Skill
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+const REPO = "{{ selected_repo }}";
+let currentSkillName = null;
+
+// ── Datos de skills desde el servidor ────────────────────────────────────────
+const SKILLS_DATA = {
+  {% for s in skills %}
+  "{{ s.name }}": {
+    name: "{{ s.name }}",
+    description: {{ s.description | tojson }},
+    path: {{ s.path | tojson }},
+    content: {{ s.content | tojson }},
+  },
+  {% endfor %}
+};
+
+function openSkill(name, cardEl) {
+  // Resaltar card activa
+  document.querySelectorAll('.skill-card').forEach(c => c.classList.remove('active'));
+  if (cardEl) cardEl.classList.add('active');
+
+  currentSkillName = name;
+  const skill = SKILLS_DATA[name];
+  if (!skill) return;
+
+  document.getElementById('skill-editor-placeholder').style.display = 'none';
+  const editor = document.getElementById('skill-editor');
+  editor.classList.add('open');
+
+  document.getElementById('editor-title').textContent  = skill.name;
+  document.getElementById('editor-path').textContent   = skill.path;
+  document.getElementById('editor-desc').value         = skill.description;
+  document.getElementById('skill-content-editor').value = skill.content;
+}
+
+async function saveCurrentSkill() {
+  if (!currentSkillName) return;
+  const desc    = document.getElementById('editor-desc').value.trim();
+  const content = document.getElementById('skill-content-editor').value;
+
+  try {
+    const r = await fetch(`/api/skills/${encodeURIComponent(currentSkillName)}`, {
+      method: 'PUT',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ repo: REPO, description: desc, content }),
+    });
+    if (!r.ok) throw new Error((await r.json()).detail || r.statusText);
+    showToast('✅ Skill guardada correctamente', 'success');
+    // Actualizar datos locales
+    SKILLS_DATA[currentSkillName].description = desc;
+    SKILLS_DATA[currentSkillName].content = content;
+    // Actualizar descripción visible en la card
+    const card = document.querySelector('.skill-card.active .skill-desc');
+    if (card) card.textContent = desc.substring(0, 200);
+  } catch(e) {
+    showToast('❌ Error al guardar: ' + e.message, 'danger');
+  }
+}
+
+async function deleteCurrentSkill() {
+  if (!currentSkillName) return;
+  if (!confirm(`¿Eliminar la skill "${currentSkillName}"? Esta acción no se puede deshacer.`)) return;
+
+  try {
+    const r = await fetch(`/api/skills/${encodeURIComponent(currentSkillName)}?repo=${encodeURIComponent(REPO)}`, {
+      method: 'DELETE',
+    });
+    if (!r.ok) throw new Error((await r.json()).detail || r.statusText);
+    showToast('🗑️ Skill eliminada', 'warning');
+    setTimeout(() => window.location.reload(), 1000);
+  } catch(e) {
+    showToast('❌ Error: ' + e.message, 'danger');
+  }
+}
+
+async function createNewSkill() {
+  const name    = document.getElementById('new-skill-name').value.trim();
+  const desc    = document.getElementById('new-skill-desc').value.trim();
+  const content = document.getElementById('new-skill-content').value.trim();
+
+  if (!name) {
+    showToast('⚠️ El nombre es obligatorio', 'warning');
+    return;
+  }
+
+  try {
+    const r = await fetch('/api/skills', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ repo: REPO, name, description: desc, content }),
+    });
+    if (!r.ok) throw new Error((await r.json()).detail || r.statusText);
+    showToast('✅ Skill creada — recargando...', 'success');
+    setTimeout(() => window.location.reload(), 900);
+  } catch(e) {
+    showToast('❌ Error: ' + e.message, 'danger');
+  }
+}
+
+function showToast(msg, type = 'success') {
+  const toast  = document.getElementById('liveToast');
+  const toastMsg = document.getElementById('toastMsg');
+  toastMsg.textContent = msg;
+  toast.className = `toast align-items-center border-0 text-bg-${type}`;
+  new bootstrap.Toast(toast, {delay: 3000}).show();
+}
+
+// Auto-abrir primera skill si hay alguna
+document.addEventListener('DOMContentLoaded', () => {
+  const firstCard = document.querySelector('.skill-card');
+  if (firstCard) {
+    const firstName = Object.keys(SKILLS_DATA)[0];
+    if (firstName) openSkill(firstName, firstCard);
+  }
+});
+</script>
+{% endblock %}

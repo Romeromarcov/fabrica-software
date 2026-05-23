@@ -107,6 +107,7 @@ def cmd_new_feature(feature_name: str, mode: str, repo_name: str) -> None:
 
 def _handle_interrupt(app, config: dict, interrupt_data: dict, feature_id: str) -> None:
     """Maneja cualquier interrupción humana del pipeline."""
+    from langgraph.types import Command
     tipo = interrupt_data.get("tipo", "unknown")
 
     if tipo == "stop_protocol":
@@ -118,9 +119,9 @@ def _handle_interrupt(app, config: dict, interrupt_data: dict, feature_id: str) 
         console.print("\n[bold]Tu respuesta:[/bold] ", end="")
         respuesta = input().strip()
 
-        # Reanudar el grafo con la respuesta del Founder
+        # Reanudar el grafo — el nodo recibe respuesta via interrupt() y calcula founder_approval
         for chunk in app.stream(
-            {"founder_approval": respuesta == "Plan aprobado. Pasa a ejecución."},
+            Command(resume=respuesta),
             config=config,
             stream_mode="updates",
         ):
@@ -140,11 +141,8 @@ def _handle_interrupt(app, config: dict, interrupt_data: dict, feature_id: str) 
         console.print("[dim]Presiona Enter para continuar (o escribe PAUSA):[/dim] ", end="")
         respuesta = input().strip()
 
-        aprobado = respuesta.upper() != "PAUSA"
-        key = f"checkpoint_{checkpoint_id.lower()}_approved"
-
         for chunk in app.stream(
-            {key: aprobado},
+            Command(resume=respuesta),
             config=config,
             stream_mode="updates",
         ):
@@ -162,27 +160,32 @@ def _handle_interrupt(app, config: dict, interrupt_data: dict, feature_id: str) 
         ))
         console.print("[bold]Tu decisión (REDISEÑAR / ACEPTAR / CANCELAR):[/bold] ", end="")
         respuesta = input().strip()
-        # Tras qa_escalation el pipeline termina en pipeline_detenido
-        # El Founder debe corregir manualmente y crear un nuevo run si elige REDISEÑAR
-        console.print(f"\n[yellow]Decisión registrada: {respuesta}[/yellow]")
-        console.print(f"[dim]Corre 'new-feature' con el mismo nombre para reiniciar.[/dim]")
+        for chunk in app.stream(
+            Command(resume=respuesta),
+            config=config,
+            stream_mode="updates",
+        ):
+            node_name = list(chunk.keys())[0]
+            if node_name == "__interrupt__":
+                _handle_interrupt(app, config, chunk[node_name][0].value, feature_id)
+                return
+            _print_node_progress(node_name, chunk[node_name])
 
 
 def _print_node_progress(node_name: str, output: dict) -> None:
     agent = output.get("current_agent", node_name)
     labels = {
-        "a1_planificador":  "📋 Agente 1 — Planificador",
-        "a6_db":            "🗄️  Agente 6 — DB Architect",
-        "a8_mcp":           "🔧 Agente 8 — MCP Toolsmith",
-        "a7_revision_1":    "🔒 Agente 7 — SecOps Rev.1",
-        "checkpoint_a":     "🔔 Checkpoint A",
-        "a2_backend":       "⚙️  Agente 2 — Backend",
-        "a3_frontend":      "🖥️  Agente 3 — Frontend",
-        "a4_qa":            "🧪 Agente 4 — QA",
-        "a7_revision_2":    "🔒 Agente 7 — SecOps Rev.2",
-        "checkpoint_b":     "🔔 Checkpoint B",
-        "a5_refactor_doc":  "✨ Agente 5 — Refactor+Doc",
-        "a1_pr_final":      "📦 Agente 1 — PR Final",
+        "a1_planificador":  "📋 A1 — Planificador",
+        "stop_protocol":    "⛔ Stop Protocol",
+        "a2_db":            "🗄️  A2 — DB Architect",
+        "a3_mcp":           "🔧 A3 — MCP Toolsmith",
+        "a4_backend":       "⚙️  A4 — Backend",
+        "a5_frontend":      "🖥️  A5 — Frontend",
+        "a6_refactor":      "✨ A6 — Revisor/Unificador",
+        "a7_qa":            "🧪 A7 — QA",
+        "qa_escalation":    "⚠️  QA Escalation",
+        "a8_secops":        "🔒 A8 — SecOps",
+        "a1_pr_final":      "📦 A1 — PR Final",
         "pipeline_detenido":"🚫 Pipeline Detenido",
     }
     label = labels.get(agent, f"⚡ {agent}")
@@ -313,20 +316,63 @@ def cmd_new_project(name: str, brief: str, repo_name: str, new: bool) -> None:
         console.print(f"[dim]Project ID: {project_id}[/dim]")
 
 
+def _wait_for_approval_file(project_id: str, interrupt_type: str) -> str:
+    """
+    BUG-009: En modo UI (subprocess), espera que el servidor escriba pending_approval.txt.
+    Devuelve el contenido del archivo (acción del usuario).
+    """
+    import time
+    from tools.file_tools import RUNS_DIR
+    run_dir = RUNS_DIR / project_id
+    approval_file = run_dir / "pending_approval.txt"
+
+    # Guardar el tipo de interrupción para que la UI pueda mostrarlo
+    (run_dir / "pending_interrupt_type.txt").write_text(interrupt_type)
+
+    console.print(f"[dim]Esperando respuesta desde la UI para: {interrupt_type}...[/dim]")
+    # C-01 fix: máximo 4 horas de espera (7200 s / 2 s por tick = 3600 ticks)
+    max_ticks = int(os.environ.get("APPROVAL_TIMEOUT_SECONDS", "14400")) // 2
+    for _ in range(max_ticks):
+        if approval_file.exists():
+            action = approval_file.read_text().strip()
+            approval_file.unlink()
+            (run_dir / "pending_interrupt_type.txt").unlink(missing_ok=True)
+            return action
+        time.sleep(2)
+    # Timeout alcanzado — limpiar y cancelar
+    (run_dir / "pending_interrupt_type.txt").unlink(missing_ok=True)
+    console.print("[red]Timeout: sin respuesta del Founder. Cancelando.[/red]")
+    return "CANCELAR"
+
+
 def _handle_project_interrupt(app, config: dict, interrupt_data: dict, project_id: str) -> None:
+    from langgraph.types import Command
+
     tipo = interrupt_data.get("tipo", "unknown")
+    # Detectar si corremos como subprocess desde la UI
+    ui_mode = bool(os.environ.get("PROJECT_ID_OVERRIDE"))
 
     if tipo == "project_roadmap_approval":
-        console.print(Panel(
-            Markdown(interrupt_data.get("mensaje", "")),
-            title="📐 Roadmap listo — Revisión requerida",
-            border_style="cyan",
-        ))
-        console.print("\n[bold]Tu respuesta:[/bold] ", end="")
-        respuesta = input().strip()
+        if ui_mode:
+            action = _wait_for_approval_file(project_id, tipo)
+            # La UI escribe "approve"/"cancel"; el bot puede enviar texto libre (cambios)
+            if action == "approve":
+                respuesta = "Roadmap aprobado. Iniciar proyecto."
+            elif action == "cancel":
+                respuesta = "CANCELAR"
+            else:
+                respuesta = action   # feedback libre desde Telegram o CLI
+        else:
+            console.print(Panel(
+                Markdown(interrupt_data.get("mensaje", "")),
+                title="📐 Roadmap listo — Revisión requerida",
+                border_style="cyan",
+            ))
+            console.print("\n[bold]Tu respuesta:[/bold] ", end="")
+            respuesta = input().strip()
 
         for chunk in app.stream(
-            {"founder_approved_roadmap": respuesta == "Roadmap aprobado. Iniciar proyecto."},
+            Command(resume=respuesta),   # BUG-014: Command(resume=...) no string directo
             config=config, stream_mode="updates",
         ):
             node_name = list(chunk.keys())[0]
@@ -336,15 +382,27 @@ def _handle_project_interrupt(app, config: dict, interrupt_data: dict, project_i
             _print_project_progress(node_name, chunk[node_name])
 
     elif tipo == "project_suggestions":
-        console.print(Panel(
-            interrupt_data.get("mensaje", ""),
-            title="💡 Sugerencias del PM",
-            border_style="yellow",
-        ))
-        console.print("[bold]Tu decisión (CONTINUAR / CERRAR / PAUSA):[/bold] ", end="")
-        respuesta = input().strip()
+        if ui_mode:
+            action = _wait_for_approval_file(project_id, tipo)
+            # La UI escribe "CONTINUAR"/"CERRAR"/"PAUSA"; el bot puede enviar texto libre
+            upper = action.upper()
+            if upper in ("CONTINUAR", "CERRAR", "PAUSA"):
+                respuesta = upper
+            else:
+                respuesta = action   # texto libre desde Telegram
+        else:
+            console.print(Panel(
+                interrupt_data.get("mensaje", ""),
+                title="💡 Sugerencias del PM",
+                border_style="yellow",
+            ))
+            console.print("[bold]Tu decisión (CONTINUAR / CERRAR / PAUSA):[/bold] ", end="")
+            respuesta = input().strip()
 
-        for chunk in app.stream(respuesta, config=config, stream_mode="updates"):
+        for chunk in app.stream(
+            Command(resume=respuesta),   # BUG-014: Command(resume=...) no string directo
+            config=config, stream_mode="updates",
+        ):
             node_name = list(chunk.keys())[0]
             if node_name == "__interrupt__":
                 _handle_project_interrupt(app, config, chunk[node_name][0].value, project_id)

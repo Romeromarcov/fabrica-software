@@ -1,0 +1,74 @@
+###############################################################################
+# docker-compose.prod.yml — Fábrica de Software (producción / VPS)
+#
+# USO:
+#   cp .env.example .env          # editar con tus keys y rutas
+#   docker compose -f docker-compose.prod.yml up -d
+#
+# Variables de entorno requeridas en .env:
+#   WORKSPACES_PATH   — ruta absoluta donde viven los repos del cliente
+#                       Ej: /home/ubuntu/proyectos   o   /opt/workspaces
+#   FABRICA_DATA_PATH — ruta donde se persisten runs y la DB de LangGraph
+#                       Ej: /opt/fabrica/data
+#   OPENCLAW_CONFIG   — ruta al directorio de config de OpenClaw
+#                       Ej: /home/ubuntu/.openclaw
+#   FABRICA_ENV_PATH  — ruta al archivo .env de la fábrica (para que la UI pueda escribirlo)
+#                       Ej: /opt/fabrica/.env
+###############################################################################
+
+services:
+
+  # ── OpenClaw — agentes con acceso real a filesystem + terminal ───────────────
+  openclaw:
+    image: ghcr.io/openclaw/openclaw:latest
+    container_name: openclaw
+    ports:
+      - "127.0.0.1:18789:18789"   # Solo localhost — no exponer al exterior
+    volumes:
+      - ${OPENCLAW_CONFIG:-/opt/openclaw}:/home/node/.openclaw
+      - ${WORKSPACES_PATH:-/opt/workspaces}:/workspace:rw
+    env_file:
+      - ${OPENCLAW_CONFIG:-/opt/openclaw}/.env
+    environment:
+      HOME: /home/node
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:18789/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ── Fábrica de Software ───────────────────────────────────────────────────────
+  fabrica:
+    image: ghcr.io/tu-org/fabrica-software:latest   # O usar build: . si builds locales
+    # build: .                                       # Descomentar para build local
+    container_name: fabrica-software
+    ports:
+      - "127.0.0.1:7860:7860"     # Solo localhost — Caddy hace el proxy HTTPS
+    volumes:
+      - ${WORKSPACES_PATH:-/opt/workspaces}:/workspace:rw
+      - ${FABRICA_DATA_PATH:-/opt/fabrica/data}:/data
+      - ${FABRICA_ENV_PATH:-/opt/fabrica/.env}:/app/.env
+    env_file:
+      - ${FABRICA_ENV_PATH:-/opt/fabrica/.env}
+    environment:
+      WORKSPACES_ROOT: /workspace
+      RUNS_DIR:        /data/runs
+      DB_PATH:         /data/fabrica_state.db
+      TZ:              America/Caracas
+    depends_on:
+      openclaw:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7860/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"

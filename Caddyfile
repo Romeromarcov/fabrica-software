@@ -1,0 +1,44 @@
+# Caddyfile — Fábrica de Software
+# Caddy obtiene y renueva SSL/TLS de Let's Encrypt automáticamente.
+#
+# INSTRUCCIONES:
+#   1. Reemplaza "fabrica.tudominio.com" con tu dominio real.
+#   2. Asegúrate de que el DNS apunta al IP del servidor.
+#   3. sudo apt install caddy  (o usa el binario de caddyserver.com)
+#   4. sudo caddy run --config /opt/fabrica/Caddyfile
+#
+# Para desarrollo local (sin dominio), usa:
+#   caddy reverse-proxy --from :80 --to localhost:7860
+
+fabrica.tudominio.com {
+    # Proxy al servidor de la Fábrica
+    reverse_proxy localhost:7860
+
+    # Headers de seguridad
+    header {
+        # Prevenir clickjacking
+        X-Frame-Options "SAMEORIGIN"
+        # Prevenir sniffing de MIME
+        X-Content-Type-Options "nosniff"
+        # HSTS — fuerza HTTPS por 1 año
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        # Referrer policy
+        Referrer-Policy "strict-origin-when-cross-origin"
+        # Remover headers de servidor
+        -Server
+    }
+
+    # Logs de acceso
+    log {
+        output file /var/log/caddy/fabrica.log {
+            roll_size 50mb
+            roll_keep 5
+        }
+        format json
+    }
+}
+
+# Redirección HTTP → HTTPS (Caddy lo hace automáticamente, pero es explícito aquí)
+# http://fabrica.tudominio.com {
+#     redir https://{host}{uri} permanent
+# }

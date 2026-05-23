@@ -12,13 +12,22 @@ DB_PATH     = Path(os.getenv("DB_PATH",  str(FABRICA_DIR / "data" / "fabrica_sta
 
 # ── Multi-repo: directorio raíz donde viven todos los proyectos ───────────────
 # En Docker: /workspace = C:\Users\PC\Proyectos
-WORKSPACES_ROOT = Path(os.getenv("WORKSPACES_ROOT", "/workspace"))
+# En Windows nativo: configura WORKSPACES_ROOT en .env (ej: C:\Users\PC\Proyectos)
+_ws_default = "/workspace" if os.name != "nt" else str(Path.home() / "Proyectos")
+WORKSPACES_ROOT = Path(os.getenv("WORKSPACES_ROOT", _ws_default))
 
 
 def list_repos() -> list[dict]:
     """Descubre repos git disponibles bajo WORKSPACES_ROOT."""
     repos = []
     if not WORKSPACES_ROOT.exists():
+        # BUG-020: advertencia explícita en lugar de fallo silencioso
+        import warnings
+        warnings.warn(
+            f"WORKSPACES_ROOT no existe: {WORKSPACES_ROOT}. "
+            f"Configura la variable en .env (ej: WORKSPACES_ROOT=C:\\Users\\PC\\Proyectos)",
+            stacklevel=2,
+        )
         return repos
     for d in sorted(WORKSPACES_ROOT.iterdir()):
         if d.is_dir() and not d.name.startswith(".") and (d / ".git").exists():
@@ -38,14 +47,15 @@ ZHIPU_API_KEY     = os.getenv("ZHIPU_API_KEY",     "")
 KIMI_API_KEY      = os.getenv("KIMI_API_KEY",      "")
 
 # ── Modelo por agente ─────────────────────────────────────────────────────────
-MODEL_A1 = os.getenv("MODEL_A1", "gemini-2.5-pro")
-MODEL_A2 = os.getenv("MODEL_A2", "claude-sonnet-4-6")
-MODEL_A3 = os.getenv("MODEL_A3", "claude-sonnet-4-6")
-MODEL_A4 = os.getenv("MODEL_A4", "claude-sonnet-4-6")
-MODEL_A5 = os.getenv("MODEL_A5", "claude-sonnet-4-6")
-MODEL_A6 = os.getenv("MODEL_A6", "claude-sonnet-4-6")
-MODEL_A7 = os.getenv("MODEL_A7", "claude-sonnet-4-6")
-MODEL_A8 = os.getenv("MODEL_A8", "claude-sonnet-4-6")
+MODEL_A0 = os.getenv("MODEL_A0", "gemini-3.5-flash")   # A0 Arquitecto de Proyecto
+MODEL_A1 = os.getenv("MODEL_A1", "gemini-3.5-flash")   # A1 PM / Planificador
+MODEL_A2 = os.getenv("MODEL_A2", "claude-sonnet-4-6") # A2 DB Architect
+MODEL_A3 = os.getenv("MODEL_A3", "claude-sonnet-4-6") # A3 MCP Toolsmith
+MODEL_A4 = os.getenv("MODEL_A4", "glm-5.1")           # A4 Backend Developer
+MODEL_A5 = os.getenv("MODEL_A5", "kimi-k2.6")         # A5 Frontend Developer
+MODEL_A6 = os.getenv("MODEL_A6", "claude-sonnet-4-6") # A6 Revisor / Refactor
+MODEL_A7 = os.getenv("MODEL_A7", "claude-sonnet-4-6") # A7 QA Test
+MODEL_A8 = os.getenv("MODEL_A8", "claude-sonnet-4-6") # A8 SecOps
 
 MODEL_PM       = MODEL_A1
 MODEL_STANDARD = "claude-sonnet-4-6"
@@ -54,7 +64,14 @@ MODEL_FAST     = os.getenv("MODEL_FAST", "claude-haiku-4-5-20251001")
 # ── Límites del pipeline ──────────────────────────────────────────────────────
 MAX_QA_ITER_COMPLETO       = int(os.getenv("MAX_QA_ITER_COMPLETO",       "3"))
 MAX_QA_ITER_LITE           = int(os.getenv("MAX_QA_ITER_LITE",           "2"))
+MAX_SECOPS_ITER            = int(os.getenv("MAX_SECOPS_ITER",            "2"))
+MAX_SANDBOX_ITER           = int(os.getenv("MAX_SANDBOX_ITER",           "2"))
 CHECKPOINT_TIMEOUT_SECONDS = int(os.getenv("CHECKPOINT_TIMEOUT_SECONDS", "1800"))
+
+# ── Agente de Noticias (independiente de la Fábrica) ─────────────────────────
+NEWS_AGENT_ENABLED = os.getenv("NEWS_AGENT_ENABLED", "true").lower() == "true"
+NEWS_AGENT_HOUR    = int(os.getenv("NEWS_AGENT_HOUR", "8"))
+NEWS_AGENT_MODEL   = os.getenv("NEWS_AGENT_MODEL",   "claude-haiku-4-5-20251001")
 
 # ── URLs OpenAI-compatibles por proveedor ─────────────────────────────────────
 PROVIDER_URLS = {
@@ -63,11 +80,12 @@ PROVIDER_URLS = {
     "kimi":   "https://api.moonshot.ai/v1",
 }
 
-# ── Precios ($/1M tokens) ─────────────────────────────────────────────────────
+# ── Precios ($/1M tokens) — claude-sonnet-4-6 aplica a agentes 2,3,6,7,8 ─────
 PRICES = {
     "claude-opus-4-7":           {"input": 15.00, "output": 75.00, "cache_read": 1.50},
     "claude-sonnet-4-6":         {"input":  3.00, "output": 15.00, "cache_read": 0.30},
     "claude-haiku-4-5-20251001": {"input":  0.80, "output":  4.00, "cache_read": 0.08},
+    "gemini-3.5-flash":          {"input":  0.30, "output":  2.50, "cache_read": 0.00},
     "gemini-3.1-pro-preview":    {"input":  2.50, "output": 15.00, "cache_read": 0.00},
     "gemini-2.5-pro":            {"input":  1.25, "output": 10.00, "cache_read": 0.00},
     "glm-5.1":                   {"input":  0.50, "output":  1.50, "cache_read": 0.00},
@@ -90,11 +108,11 @@ STATIC_DOC_PATHS = {
 
 SYSTEM_PROMPT_PATHS = {
     "a1_pm":       "agents/agent_01_pm/system_prompt.md",
-    "a2_backend":  "agents/agent_02_backend/system_prompt.md",
-    "a3_frontend": "agents/agent_03_frontend/system_prompt.md",
-    "a4_qa":       "agents/agent_04_qa/system_prompt.md",
-    "a5_refactor": "agents/agent_05_refactor/system_prompt.md",
-    "a6_db":       "agents/agent_06_db/system_prompt.md",
-    "a7_secops":   "agents/agent_07_secops/system_prompt.md",
-    "a8_mcp":      "agents/agent_08_mcp_toolsmith/system_prompt.md",
+    "a2_db":       "agents/agent_02_db/system_prompt.md",
+    "a3_mcp":      "agents/agent_03_mcp_toolsmith/system_prompt.md",
+    "a4_backend":  "agents/agent_04_backend/system_prompt.md",
+    "a5_frontend": "agents/agent_05_frontend/system_prompt.md",
+    "a6_refactor": "agents/agent_06_refactor/system_prompt.md",
+    "a7_qa":       "agents/agent_07_qa/system_prompt.md",
+    "a8_secops":   "agents/agent_08_secops/system_prompt.md",
 }
