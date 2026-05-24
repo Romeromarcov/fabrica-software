@@ -42,6 +42,97 @@ _MAX_FILE_PREVIEW = 1000   # chars por archivo en el contexto de revisión
 _MAX_FILES_IN_CTX = 25     # máximo archivos a incluir en el contexto del LLM
 
 
+def _build_extended_postmortem(state: FabricaState, total_cost: float) -> str:
+    """
+    IV-2: post-mortem enriquecido con datos de Bloques I, III y IV.
+    Incluye: QA/SecOps iters, CONFIDENCE_SCORE, RISK_LEVEL, gate failures, timing.
+    """
+    import json as _json
+    from tools.quality_tracker import compute_trend
+
+    project_id  = state.get("project_id", "")
+    feature_id  = state["feature_id"]
+    feature_name = state.get("feature_name", "")
+
+    # Timing
+    timing_str = "—"
+    try:
+        from tools.file_tools import RUNS_DIR
+        meta_path = RUNS_DIR / feature_id / "metadata.json"
+        if meta_path.exists():
+            meta = _json.loads(meta_path.read_text(encoding="utf-8"))
+            started  = meta.get("started_at", "")
+            if started:
+                from datetime import datetime, timezone
+                t0  = datetime.fromisoformat(started.replace("Z", "+00:00"))
+                t1  = datetime.now(timezone.utc)
+                mins = int((t1 - t0).total_seconds() / 60)
+                timing_str = f"{mins} min"
+    except Exception:
+        pass
+
+    # Gate failures del sandbox
+    gate_failures: list[dict] = state.get("sandbox_gate_failures", [])
+    if gate_failures:
+        gate_str = ", ".join(
+            f"`{gf['gate']}`{'⛔' if gf.get('hard') else ''}" for gf in gate_failures
+        )
+    else:
+        gate_str = "ninguno"
+
+    # Confidence / risk (Bloque III)
+    conf  = state.get("confidence_score", "—")
+    risk  = state.get("risk_level", "—")
+    approval_mode_icon = {
+        "confidence_auto": "✅ auto (confianza alta)",
+        "veto_window":     "⏳ veto window",
+    }
+    # Leer approval_mode de metadata si existe
+    approval_mode_label = "manual (stop_protocol)"
+    try:
+        from tools.file_tools import RUNS_DIR
+        meta_path = RUNS_DIR / feature_id / "metadata.json"
+        if meta_path.exists():
+            meta = _json.loads(meta_path.read_text(encoding="utf-8"))
+            approval_mode_label = approval_mode_icon.get(
+                meta.get("approval_mode", ""), approval_mode_label
+            )
+    except Exception:
+        pass
+
+    # Trend del proyecto
+    trend = compute_trend(project_id) if project_id else {}
+    trend_dir = {"mejorando": "📈", "estable": "➡️", "empeorando": "📉"}.get(
+        trend.get("direction", ""), "❓"
+    )
+
+    lines = [
+        "\n## Post-mortem del Feature\n",
+        "| Métrica | Resultado |",
+        "|---------|-----------|",
+        f"| QA iteraciones | {state.get('qa_iterations', 0)} |",
+        f"| SecOps iteraciones | {state.get('secops_iterations', 0)} |",
+        f"| Sandbox pass | {'✅ 1er intento' if state.get('sandbox_passed') else '⚠️ tras correcciones'} |",
+        f"| Gates fallidos inicialmente | {gate_str} |",
+        f"| Rollback | {'Sí' if state.get('files_backup') else 'No'} |",
+        f"| Tiempo total | {timing_str} |",
+        f"| Costo total | ${total_cost:.4f} USD |",
+        f"| CONFIDENCE_SCORE | {conf}/100 |",
+        f"| RISK_LEVEL | {risk} |",
+        f"| Aprobación | {approval_mode_label} |",
+    ]
+
+    if trend:
+        lines.append(
+            f"\n**Tendencia del proyecto** ({trend.get('total_features', 0)} features): "
+            f"{trend_dir} {trend.get('direction', '—')} · "
+            f"Score promedio: {trend.get('avg_score', '—')}/100 · "
+            f"≤1 iter QA: {trend.get('zero_qa_pct', '—')}%"
+        )
+
+    return "\n".join(lines)
+
+
 def _read_written_files(repo_path: str, files_written: list[str]) -> str:
     """
     Lee los archivos reales del disco para que el PM pueda verificar el cumplimiento.
@@ -233,8 +324,11 @@ Al final escribe: `✅ CICLO COMPLETADO`
         else f"{title_line}\n\n🤖 Fábrica de Software — repo: {repo_name}"
     )
 
-    # Anexar post-mortem de calidad al mensaje del PR
-    if quality_postmortem:
+    # IV-2: Generar sección post-mortem con datos del state (Bloque III + IV)
+    extended_postmortem = _build_extended_postmortem(state, final_cost)
+    if extended_postmortem:
+        pr_message = pr_message.rstrip() + "\n" + extended_postmortem
+    elif quality_postmortem:
         pr_message = pr_message.rstrip() + "\n" + quality_postmortem
 
     # ── G7: Crear feature branch antes del commit ─────────────────────────────

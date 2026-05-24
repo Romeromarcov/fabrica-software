@@ -91,6 +91,9 @@ class FabricaState(TypedDict):
     risk_level: str                  # LOW | MEDIUM | HIGH emitido por A1
     veto_deadline: Optional[str]     # ISO datetime hasta el que el Founder puede vetar
 
+    # ── Bloque IV: Calidad Autónoma Reforzada ──────────────────────────────────
+    sandbox_gate_failures: list[dict]  # [{"gate": str, "layer": str, "stderr": str, "hard": bool}]
+
     # ── Control interno ───────────────────────────────────────────────────────
     current_agent: str
     # operator.add permite que múltiples nodos appendeen a esta lista sin conflictos
@@ -152,6 +155,7 @@ def initial_state(
         confidence_score=70,
         risk_level="MEDIUM",
         veto_deadline=None,
+        sandbox_gate_failures=[],
         current_agent="inicio",
         errors=[],
         cost_entries=[],

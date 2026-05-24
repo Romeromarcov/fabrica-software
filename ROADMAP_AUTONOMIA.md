@@ -344,7 +344,7 @@ El Founder sólo revisa PRs que fallaron CI o que el sistema marcó como RISK HI
 
 ---
 
-## BLOQUE IV — Calidad Autónoma Reforzada
+## BLOQUE IV — Calidad Autónoma Reforzada ✅ COMPLETADO 2026-05-24
 
 > Detectar errores antes del PR, no después.
 
@@ -354,72 +354,45 @@ El Founder sólo revisa PRs que fallaron CI o que el sistema marcó como RISK HI
 
 **El problema actual:** A9 corre `pytest` y `npm test`, pero no valida tipos ni linting.
 
-**Nuevos gates (todos obligatorios, bloquean el pipeline si fallan):**
+**Gates implementados (todos obligatorios, bloquean el pipeline si fallan):**
 
-| Gate | Comando | Aplica a |
-|------|---------|----------|
-| Tests backend | `pytest --tb=short` | Django |
-| Cobertura mínima | `pytest --cov-fail-under=X` | Django |
-| Migraciones OK | `python manage.py migrate --check` | Django |
-| Tipos backend | `mypy apps/` (si está configurado) | Django |
-| Linting backend | `ruff check .` | Python |
-| Tests frontend | `npm test -- --run` | React |
-| Cobertura frontend | Vitest `--coverage` | React |
-| Tipos frontend | `npx tsc --noEmit` | TypeScript |
-| Build frontend | `npm run build` | React |
-| Linting frontend | `eslint --max-warnings 0` | TypeScript |
+| Gate | Comando | Aplica a | Hard |
+|------|---------|----------|------|
+| Tests backend | `pytest --tb=short` | Django/Python | — |
+| Cobertura mínima | `pytest --cov-fail-under=70` | Python | — |
+| Migraciones OK | `python manage.py migrate --check` | Django | — |
+| Tipos backend | `mypy . --ignore-missing-imports` | Python | — |
+| Linting backend | `ruff check .` | Python | — |
+| Tipos frontend | `npx tsc --noEmit` | TypeScript | ⛔ |
+| Build frontend | `npm run build` | React | ⛔ |
+| Tests frontend | `npx vitest run` / `npx jest` | React | — |
+| Linting frontend | `eslint . --max-warnings 0` | TypeScript | — |
 
-**Archivos a modificar:**
-- [ ] `nodes/a9_sandbox.py` — implementar gates secuenciales; cada gate que falla retorna
-  su stderr específico para que A6 Refactor haga corrección quirúrgica
-- [ ] `state.py` — `sandbox_gate_failures: list[dict]` con gate name + stderr
-- [ ] `nodes/a6_refactor.py` — recibir `sandbox_gate_failures` en lugar de output genérico de A9
-
-**DoD:**
-- Ningún PR existe si `tsc --noEmit` o `npm run build` fallan
-- El stderr de cada gate fallido llega exactamente al agente correcto para corregir
+**Archivos modificados:**
+- [x] `tools/code_sandbox.py` — gates nuevos: `_check_migrations`, `_check_coverage`, `_check_npm_build`, `_check_eslint`; `run_all_checks()` retorna `gate_failures: list[dict]`; `format_failures_for_agent()` usa formato quirúrgico por gate
+- [x] `state.py` — campo `sandbox_gate_failures: list[dict]` con gate + layer + stderr + hard flag
+- [x] `nodes/a9_sandbox.py` — propaga `sandbox_gate_failures` al state
+- [x] `nodes/a6_refactor.py` — usa `format_failures_for_agent()` para feedback por gate en lugar de output genérico
 
 ---
 
 ### IV-2 — Post-mortem Automático en cada PR
 
 **Qué hace:**
-Cada PR incluye automáticamente una sección de post-mortem generada por A1 PR Final:
+Cada PR incluye sección de post-mortem completa generada por `_build_extended_postmortem()` en A1 PR Final.
 
-```markdown
-## Post-mortem del feature
+**Campos incluidos:** QA iters, SecOps iters, sandbox pass, gates fallidos inicialmente, rollback, tiempo total, costo, CONFIDENCE_SCORE, RISK_LEVEL, modo de aprobación, tendencia del proyecto.
 
-- **Iteraciones QA:** 2 (objetivo: ≤1)
-- **Iteraciones SecOps:** 0
-- **Gates fallidos inicialmente:** `tsc --noEmit` (1 error de tipos)
-- **Archivos con rollback:** ninguno
-- **Tiempo total:** 18 min
-- **Patrones nuevos agregados a LESSONS_LEARNED:** 1 (FK sin id_empresa)
-- **CONFIDENCE_SCORE:** 88 → ejecutado automáticamente
-```
-
-**Archivos a modificar:**
-- [ ] `nodes/a1_pr_final.py` — generar sección post-mortem con datos del state
-- [ ] El post-mortem alimenta el `QualityTracker` (Bloque I-2)
-
-**DoD:**
-- Todo PR incluye la sección de post-mortem
-- El historial de post-mortems es visible en la UI del proyecto
+**Archivos modificados:**
+- [x] `nodes/a1_pr_final.py` — función `_build_extended_postmortem(state, total_cost)` con todos los campos; integra datos de Bloques I, III y IV
 
 ---
 
-### IV-3 — Panel de Métricas de Calidad en la UI
+### IV-3 — Panel de Métricas de Calidad en la UI ✅ Implementado en Bloque I
 
-**Qué muestra:**
-- Curva de iteraciones QA por feature (¿está bajando?)
-- Top 5 categorías de bugs del proyecto
-- Cobertura de tests por módulo (si disponible)
-- Features completados con 0 iteraciones QA (indicador de madurez)
-
-**Archivos a crear/modificar:**
-- [ ] `ui/server.py` — endpoint `GET /api/projects/{id}/quality`
-- [ ] `ui/templates/project_detail.html` — sección de métricas de calidad
-- [ ] Datos tomados de `quality_metrics.jsonl` (Bloque I-2)
+**Archivos:**
+- [x] `ui/server.py` — endpoint `GET /api/projects/{id}/quality`
+- [x] `ui/templates/project_detail.html` — panel colapsable con score, curva QA, top bugs
 
 ---
 

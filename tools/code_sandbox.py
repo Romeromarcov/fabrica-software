@@ -147,26 +147,103 @@ def _check_tsc(repo_path: str, stack: dict) -> dict:
     return {**r, "passed": ok, "output": out[:2000]}
 
 
+def _check_migrations(repo_path: str, stack: dict) -> dict:
+    """IV-1: verifica que no haya migraciones pendientes sin aplicar."""
+    r = {"tool": "migrate-check", "passed": None, "output": "", "skipped": False, "layer": "backend"}
+    if not stack["django"]:
+        return {**r, "skipped": True, "output": "No es proyecto Django."}
+    ok, out = _run(["python", "manage.py", "migrate", "--check"], repo_path, timeout=30)
+    return {**r, "passed": ok, "output": out[:1500]}
+
+
+def _check_coverage(repo_path: str, stack: dict, min_pct: int = 70) -> dict:
+    """IV-1: cobertura mínima de tests backend."""
+    r = {"tool": "coverage", "passed": None, "output": "", "skipped": False, "layer": "backend"}
+    if not stack["python"] or not stack["has_pytest"]:
+        return {**r, "skipped": True, "output": "Sin tests pytest."}
+    if not _has("pytest"):
+        return {**r, "skipped": True, "output": "pytest no instalado."}
+    ok, out = _run(
+        ["pytest", "--cov=.", f"--cov-fail-under={min_pct}", "--cov-report=term-missing",
+         "--tb=no", "-q", "--no-header"],
+        repo_path, timeout=120,
+    )
+    return {**r, "passed": ok, "output": out[:2000]}
+
+
+def _check_npm_build(repo_path: str, stack: dict) -> dict:
+    """IV-1: build de producción del frontend — gate duro."""
+    r = {"tool": "npm-build", "passed": None, "output": "", "skipped": False, "layer": "frontend"}
+    if not stack["node"]:
+        return {**r, "skipped": True, "output": "Sin package.json."}
+    pkg_scripts = {}
+    try:
+        pkg_scripts = json.loads((Path(repo_path) / "package.json").read_text()).get("scripts", {})
+    except Exception:
+        pass
+    if "build" not in pkg_scripts:
+        return {**r, "skipped": True, "output": "Sin script 'build' en package.json."}
+    ok, out = _run(["npm", "run", "build"], repo_path, timeout=180)
+    return {**r, "passed": ok, "output": out[:3000]}
+
+
+def _check_eslint(repo_path: str, stack: dict) -> dict:
+    """IV-1: linting TypeScript/JavaScript sin warnings."""
+    r = {"tool": "eslint", "passed": None, "output": "", "skipped": False, "layer": "frontend"}
+    if not stack["node"]:
+        return {**r, "skipped": True, "output": "Sin package.json."}
+    eslint_cfg = any(
+        (Path(repo_path) / f).exists()
+        for f in [".eslintrc.json", ".eslintrc.js", ".eslintrc.cjs",
+                  ".eslintrc.yaml", ".eslintrc.yml", "eslint.config.js",
+                  "eslint.config.mjs", "eslint.config.cjs"]
+    )
+    if not eslint_cfg:
+        return {**r, "skipped": True, "output": "Sin configuracion ESLint."}
+    ext = ".ts,.tsx,.js,.jsx" if stack["typescript"] else ".js,.jsx"
+    ok, out = _run(
+        ["npx", "eslint", ".", "--max-warnings", "0", "--ext", ext,
+         "--ignore-path", ".gitignore"],
+        repo_path, timeout=60,
+    )
+    return {**r, "passed": ok, "output": out[:2000]}
+
+
 def run_all_checks(repo_path: str, install_deps: bool = True) -> dict:
     """
-    Ejecuta todos los checks disponibles. Retorna dict con resultados y resumen.
-    Si no hay herramientas disponibles, passed=True (no bloquear el pipeline).
+    Ejecuta todos los gates de calidad en orden. Retorna dict con resultados,
+    resumen legible y lista estructurada de fallos para A6 Refactor.
+
+    Gates duros (IV-1): tsc, npm-build bloquean aunque no haya otras herramientas.
+    Si no hay herramientas disponibles en absoluto → passed=True (no bloquear).
     """
     if install_deps:
-        _maybe_install_deps(repo_path)  # best-effort, falla silenciosamente
+        _maybe_install_deps(repo_path)
 
-    stack   = _detect_stack(repo_path)
-    checks  = {
-        "python_tests": _check_pytest(repo_path, stack),
-        "js_tests":     _check_jest(repo_path, stack),
-        "python_lint":  _check_lint_py(repo_path, stack),
-        "python_type":  _check_mypy(repo_path, stack),
-        "js_type":      _check_tsc(repo_path, stack),
+    stack = _detect_stack(repo_path)
+
+    # Orden: backend primero, luego frontend (gate duro)
+    checks = {
+        "python_tests":  _check_pytest(repo_path, stack),
+        "python_cover":  _check_coverage(repo_path, stack),
+        "python_migr":   _check_migrations(repo_path, stack),
+        "python_type":   _check_mypy(repo_path, stack),
+        "python_lint":   _check_lint_py(repo_path, stack),
+        "js_type":       _check_tsc(repo_path, stack),       # gate duro
+        "js_build":      _check_npm_build(repo_path, stack), # gate duro
+        "js_tests":      _check_jest(repo_path, stack),
+        "js_lint":       _check_eslint(repo_path, stack),
     }
 
-    executed    = [r for r in checks.values() if not r["skipped"] and r["passed"] is not None]
-    all_passed  = all(r["passed"] for r in executed)
-    any_exec    = bool(executed)
+    executed   = [r for r in checks.values() if not r["skipped"] and r["passed"] is not None]
+    all_passed = all(r["passed"] for r in executed)
+    any_exec   = bool(executed)
+
+    # Gates duros: tsc y npm-build fallan aunque no haya nada más ejecutado
+    hard_gates = ["tsc", "npm-build"]
+    for r in checks.values():
+        if r["tool"] in hard_gates and not r["skipped"] and r["passed"] is False:
+            all_passed = False
 
     lines = ["## SANDBOX — Resultados de ejecucion real\n"]
     for r in checks.values():
@@ -174,26 +251,55 @@ def run_all_checks(repo_path: str, install_deps: bool = True) -> dict:
             lines.append(f"[SKIP] {r['tool']}: omitido")
         else:
             icon = "[OK]" if r["passed"] else "[FAIL]"
-            lines.append(f"{icon} {r['tool']}: {'PASSED' if r['passed'] else 'FAILED'}")
+            hard = " ⛔ GATE DURO" if r["tool"] in hard_gates and not r["passed"] else ""
+            lines.append(f"{icon} {r['tool']}: {'PASSED' if r['passed'] else 'FAILED'}{hard}")
             if not r["passed"]:
                 lines.append(f"```\n{r['output'][:800]}\n```")
 
     if not any_exec:
         lines += [
-            "\nAVISO: No se ejecuto ningun check (herramientas no instaladas en el entorno de CI).",
-            "   El codigo fue revisado por A6, A7 y A8. Pipeline continua.",
+            "\nAVISO: No se ejecuto ningun check (herramientas no instaladas).",
+            "El codigo fue revisado por A6, A7 y A8. Pipeline continua.",
         ]
-        all_passed = True   # No bloquear si no hay herramientas
+        all_passed = True
 
-    return {"passed": all_passed, "any_executed": any_exec,
-            "results": checks, "summary": "\n".join(lines)}
+    # Fallos estructurados por gate — para A6 Refactor (IV-1)
+    gate_failures = [
+        {
+            "gate":  r["tool"],
+            "layer": r.get("layer", "backend"),
+            "stderr": r["output"][:2000],
+            "hard":  r["tool"] in hard_gates,
+        }
+        for r in checks.values()
+        if not r["skipped"] and r["passed"] is False
+    ]
+
+    return {
+        "passed":       all_passed,
+        "any_executed": any_exec,
+        "results":      checks,
+        "summary":      "\n".join(lines),
+        "gate_failures": gate_failures,
+    }
 
 
 def format_failures_for_agent(result: dict) -> str:
-    """Formatea fallos del sandbox para que A6 pueda corregirlos."""
-    lines = ["## FALLOS DETECTADOS POR SANDBOX (ejecucion real)\n",
-             "Estos errores son REALES — corrigelos con maxima prioridad.\n"]
-    for r in result.get("results", {}).values():
-        if not r["skipped"] and r["passed"] is False:
-            lines.append(f"### {r['tool']}\n```\n{r['output']}\n```")
-    return "\n".join(lines) if len(lines) > 2 else ""
+    """
+    Formatea fallos del sandbox para que A6 Refactor haga corrección quirúrgica.
+    IV-1: cada gate tiene su stderr específico y capa (backend/frontend).
+    """
+    gate_failures = result.get("gate_failures", [])
+    if not gate_failures:
+        return ""
+
+    lines = [
+        "## FALLOS DETECTADOS POR SANDBOX — corrección quirúrgica requerida\n",
+        "Cada gate falló con el error REAL de ejecución. Corrige exactamente lo que indica.\n",
+    ]
+    for gf in gate_failures:
+        hard_tag = " ⛔ GATE DURO (bloquea el PR)" if gf.get("hard") else ""
+        lines.append(f"\n### Gate `{gf['gate']}` · capa: {gf['layer']}{hard_tag}")
+        lines.append(f"```\n{gf['stderr']}\n```")
+
+    return "\n".join(lines)

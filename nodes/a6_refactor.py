@@ -34,9 +34,17 @@ Ten en cuenta estos fallos al revisar el código. Los bugs que reportó QA deben
 estar corregidos en el código que estás revisando ahora.
 """
 
-    # Contexto de sandbox si venimos de un retry post-sandbox
+    # IV-1: Contexto de sandbox con fallos por gate (quirúrgico)
     sandbox_feedback = ""
-    if state.get("sandbox_results") and not state.get("sandbox_passed", True) and state.get("sandbox_iterations", 0) > 0:
+    gate_failures: list[dict] = state.get("sandbox_gate_failures", [])
+    if gate_failures and not state.get("sandbox_passed", True) and state.get("sandbox_iterations", 0) > 0:
+        from tools.code_sandbox import format_failures_for_agent
+        # Reconstruir el dict result mínimo que espera format_failures_for_agent
+        sandbox_feedback = format_failures_for_agent({"gate_failures": gate_failures})
+        # Encabezado adicional para A6
+        sandbox_feedback = f"\n{sandbox_feedback}\n"
+    elif state.get("sandbox_results") and not state.get("sandbox_passed", True) and state.get("sandbox_iterations", 0) > 0:
+        # Fallback si no hay gate_failures estructurados
         sandbox_feedback = f"""
 SANDBOX EXECUTION FAILURES — MAXIMA PRIORIDAD:
 ---
