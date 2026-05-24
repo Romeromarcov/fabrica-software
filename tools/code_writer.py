@@ -242,6 +242,7 @@ def write_files(
     written: list[str] = []
     skipped: list[str] = []
     errors:  list[str] = []
+    backup:  dict[str, str] = {}   # G9: {ruta_relativa: contenido_original}
     actually_write = not dry_run and WRITE_TO_REPO
 
     for raw_path, code in all_files.items():
@@ -259,6 +260,12 @@ def write_files(
 
         try:
             full = repo / rel
+            # G9: Leer contenido anterior antes de sobrescribir (backup para rollback)
+            if full.exists():
+                try:
+                    backup[rel] = full.read_text(encoding="utf-8")
+                except Exception:
+                    backup[rel] = ""  # Archivo existe pero no es texto — igual registrar
             full.parent.mkdir(parents=True, exist_ok=True)
             full.write_text(code, encoding="utf-8")
             written.append(rel)
@@ -267,4 +274,9 @@ def write_files(
             logger.error("code_writer: ❌ %s — %s", rel, exc)
             errors.append(f"{rel}: {exc}")
 
-    return {"files_written": written, "files_skipped": skipped, "errors": errors}
+    return {
+        "files_written": written,
+        "files_skipped": skipped,
+        "errors":        errors,
+        "files_backup":  backup,   # G9: contenido original de archivos sobrescritos
+    }

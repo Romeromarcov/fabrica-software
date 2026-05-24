@@ -307,6 +307,10 @@ Después del JSON, escribe EXACTAMENTE este bloque (entre las marcas ```markdown
         )
         tech_stack = stack_match.group(1).strip() if stack_match else ""
 
+    # ── G3: Generar documentos de contexto para agentes (solo proyecto nuevo) ──
+    if is_new and repo_path:
+        _write_agent_context_docs(repo_path, state["project_name"], tech_stack)
+
     save_run_metadata(state["project_id"], {
         "project_name": state["project_name"],
         "repo_name": repo_name,
@@ -325,3 +329,125 @@ Después del JSON, escribe EXACTAMENTE este bloque (entre las marcas ```markdown
         "project_status": "awaiting_approval",
         "cost_entries": [cost],
     }
+
+
+# ── G3: Helper — genera documentos de contexto iniciales ────────────────────
+
+def _write_agent_context_docs(repo_path: str, project_name: str, tech_stack: str) -> None:
+    """
+    Genera agents/PROJECT_CONTEXT.md, agents/CODING_STANDARDS.md y
+    agents/DECISION_LOG.md con contenido inicial para el proyecto nuevo.
+    Los agentes A4, A5, A7 leen estos archivos en cada ciclo del pipeline.
+    Solo se llama en modo is_new_project=True — no sobreescribe proyectos existentes.
+    """
+    from pathlib import Path as _Path
+    from datetime import datetime as _dt
+    import logging as _log
+
+    _logger = _log.getLogger(__name__)
+    agents_dir = _Path(repo_path) / "agents"
+
+    try:
+        agents_dir.mkdir(parents=True, exist_ok=True)
+    except Exception as exc:
+        _logger.warning("G3: no se pudo crear agents/: %s", exc)
+        return
+
+    stack_summary = (tech_stack[:300] + "…") if len(tech_stack) > 300 else tech_stack
+
+    # ── PROJECT_CONTEXT.md ────────────────────────────────────────────────────
+    project_context_path = agents_dir / "PROJECT_CONTEXT.md"
+    if not project_context_path.exists():
+        project_context_path.write_text(f"""# PROJECT_CONTEXT — {project_name}
+> Generado automáticamente por A0 Arquitecto el {_dt.utcnow().strftime('%Y-%m-%d')}.
+> Actualizar manualmente cuando se completen módulos relevantes.
+
+## Descripción del Proyecto
+{project_name}
+
+## Stack Tecnológico
+{stack_summary or "Ver ARCHITECTURE.md"}
+
+## Estado de Módulos
+| Módulo | Estado | Descripción |
+|--------|--------|-------------|
+| (pendiente) | 🔲 Por implementar | Actualizar a medida que se completen features |
+
+## Arquitectura
+Ver `ARCHITECTURE.md` en la raíz del proyecto.
+
+## Integraciones Externas
+- (pendiente — documentar en cada feature que añada integraciones)
+
+## Notas para los Agentes
+- Respetar la arquitectura definida en ARCHITECTURE.md
+- No romper endpoints o contratos ya documentados en este archivo
+""", encoding="utf-8")
+        _logger.info("G3: creado agents/PROJECT_CONTEXT.md")
+
+    # ── CODING_STANDARDS.md ───────────────────────────────────────────────────
+    standards_path = agents_dir / "CODING_STANDARDS.md"
+    if not standards_path.exists():
+        standards_path.write_text(f"""# CODING_STANDARDS — {project_name}
+> Generado automáticamente por A0 Arquitecto el {_dt.utcnow().strftime('%Y-%m-%d')}.
+> Actualizar cuando el equipo defina convenciones específicas.
+
+## Stack
+{stack_summary or "Ver ARCHITECTURE.md"}
+
+## Convenciones Generales
+- Nombres de variables y funciones: **inglés**, descriptivos
+- Comentarios y documentación: **español**
+- Máximo 80 caracteres por línea (120 en casos excepcionales)
+- Sin código muerto — eliminar antes de hacer PR
+
+## Tests
+- Tests obligatorios para toda lógica de negocio
+- Nomenclatura: `test_<función>_<escenario>_<resultado_esperado>`
+- Cobertura mínima: 70% en módulos de negocio
+
+## Commits (Conventional Commits)
+- `feat(modulo): descripción` — feature nuevo
+- `fix(modulo): descripción` — bugfix
+- `refactor(modulo): descripción` — refactor sin cambio de comportamiento
+- `test(modulo): descripción` — añadir/modificar tests
+
+## API REST
+- Endpoints versionados: `/api/v1/`
+- Respuestas JSON: `{{ "data": ..., "error": null, "meta": {{}} }}`
+- Autenticación: Bearer Token en header `Authorization`
+- Errores: usar códigos HTTP semánticos (400, 401, 403, 404, 422, 500)
+
+## Seguridad
+- Nunca hardcodear credenciales — usar variables de entorno
+- Validar y sanitizar todo input de usuario
+- Aplicar rate limiting en endpoints públicos
+""", encoding="utf-8")
+        _logger.info("G3: creado agents/CODING_STANDARDS.md")
+
+    # ── DECISION_LOG.md ───────────────────────────────────────────────────────
+    decision_log_path = agents_dir / "DECISION_LOG.md"
+    if not decision_log_path.exists():
+        decision_log_path.write_text(f"""# DECISION_LOG — {project_name}
+> Registro de decisiones arquitectónicas y técnicas significativas.
+> Añadir una entrada cada vez que se tome una decisión que afecte la arquitectura.
+
+## Formato de Entrada
+```
+### [YYYY-MM-DD] — [Título de la decisión]
+**Decisión:** Descripción concisa de qué se decidió.
+**Razón:** Por qué se tomó esta decisión (contexto, restricciones, trade-offs).
+**Alternativas consideradas:** Qué otras opciones se evaluaron y por qué se descartaron.
+**Consecuencias:** Impacto de la decisión (positivo y negativo).
+```
+
+---
+
+### {_dt.utcnow().strftime('%Y-%m-%d')} — Stack tecnológico inicial seleccionado
+**Decisión:** {stack_summary[:200] if stack_summary else "Stack definido por A0 Arquitecto — ver ARCHITECTURE.md"}
+**Razón:** Propuesto por el Agente 0 Arquitecto en base al brief del proyecto.
+**Alternativas consideradas:** Documentadas en el roadmap inicial del proyecto.
+**Consecuencias:** Todos los agentes del pipeline respetan este stack. Cambios de stack
+requieren actualización de STACK.md y este log.
+""", encoding="utf-8")
+        _logger.info("G3: creado agents/DECISION_LOG.md")

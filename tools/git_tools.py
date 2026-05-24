@@ -1,5 +1,6 @@
 """Operaciones git para el PR Final. El Agente 1 las usa al cerrar el ciclo."""
 import os
+import re
 import subprocess
 from pathlib import Path
 import logging
@@ -67,6 +68,56 @@ def create_branch(branch_name: str, repo_path: str) -> bool:
     _, err, code = _run(["git", "checkout", "-b", branch_name], repo_path)
     if code != 0:
         logger.error("No se pudo crear la rama: %s", err)
+    return code == 0
+
+
+def create_feature_branch(feature_name: str, repo_path: str) -> str:
+    """
+    G7: Crea una rama 'feature/YYYYMMDD-slug' desde la rama actual.
+    Devuelve el nombre de la rama creada, o cadena vacía si falla.
+    Si la rama ya existe (reanudación), hace checkout sin error.
+    """
+    from datetime import datetime
+    date_str = datetime.utcnow().strftime("%Y%m%d")
+    slug = re.sub(r"[^a-z0-9]+", "-", feature_name.lower()).strip("-")[:40]
+    branch_name = f"feature/{date_str}-{slug}"
+
+    # Intentar crear; si ya existe, hacer checkout
+    _, err, code = _run(["git", "checkout", "-b", branch_name], repo_path)
+    if code != 0:
+        if "already exists" in err:
+            _, _, code2 = _run(["git", "checkout", branch_name], repo_path)
+            if code2 == 0:
+                logger.info("git_tools: checkout de rama existente '%s'", branch_name)
+                return branch_name
+        logger.error("git_tools: no se pudo crear/checkout rama '%s': %s", branch_name, err)
+        return ""
+
+    logger.info("git_tools: rama feature creada '%s'", branch_name)
+    return branch_name
+
+
+def stage_files(files: list[str], repo_path: str) -> bool:
+    """
+    G6: Hace git add de los archivos específicos en files_written.
+    Más seguro que git add . — solo añade archivos generados por el pipeline.
+    Devuelve True si al menos un archivo se añadió con éxito.
+    """
+    if not files:
+        logger.warning("git_tools: stage_files llamado con lista vacía — no hay nada que commitear")
+        return False
+
+    _ensure_gitignore(repo_path)
+
+    # Solo archivos que existen en disco
+    existing = [f for f in files if (Path(repo_path) / f).exists()]
+    if not existing:
+        logger.warning("git_tools: ningún archivo de files_written existe en disco")
+        return False
+
+    _, err, code = _run(["git", "add", "--"] + existing, repo_path)
+    if code != 0:
+        logger.error("git add selectivo falló: %s", err)
     return code == 0
 
 

@@ -57,6 +57,18 @@ Tu tarea:
 4. Al final del MASTER_PLAN, incluye una sección "AWAITING_APPROVAL" con el texto:
    → Escribe exactamente: "Plan aprobado. Pasa a ejecución." para continuar.
 {mode_instruction}
+6. **ROUTING FLAGS** — Justo antes del MASTER_PLAN escribe estas 3 líneas EXACTAMENTE
+   (usa true/false en minúsculas):
+
+   NEEDS_MCP: true|false      → true si el feature requiere herramientas MCP nuevas o modificadas
+   SKIP_BACKEND: true|false   → true si el feature es puramente de frontend/UI sin cambios de API/BD
+   SKIP_FRONTEND: true|false  → true si el feature es puramente de backend/API sin cambios de UI
+
+   Ejemplos:
+   - Nuevo endpoint REST + cambio de modelo → NEEDS_MCP: false, SKIP_BACKEND: false, SKIP_FRONTEND: true
+   - Nuevo componente React sin backend → NEEDS_MCP: false, SKIP_BACKEND: true, SKIP_FRONTEND: false
+   - Feature completo con MCP → NEEDS_MCP: true, SKIP_BACKEND: false, SKIP_FRONTEND: false
+
 IMPORTANTE: NO generes código de implementación. Solo el plan.
 """
 
@@ -78,20 +90,39 @@ IMPORTANTE: NO generes código de implementación. Solo el plan.
         else:
             resolved_mode = "completo"  # default seguro si el agente no lo indicó
 
+    # G4/G5: Leer routing flags del output del planificador
+    _needs_mcp_m     = re.search(r"NEEDS_MCP:\s*(true|false)",     output, re.IGNORECASE)
+    _skip_backend_m  = re.search(r"SKIP_BACKEND:\s*(true|false)",  output, re.IGNORECASE)
+    _skip_frontend_m = re.search(r"SKIP_FRONTEND:\s*(true|false)", output, re.IGNORECASE)
+
+    needs_mcp     = (_needs_mcp_m.group(1).lower()     != "false") if _needs_mcp_m     else True
+    skip_backend  = (_skip_backend_m.group(1).lower()  == "true")  if _skip_backend_m  else False
+    skip_frontend = (_skip_frontend_m.group(1).lower() == "true")  if _skip_frontend_m else False
+
+    # Coherencia: si hay skip en ambos lados → resetear a False (feature completo)
+    if skip_backend and skip_frontend:
+        skip_backend = skip_frontend = False
+
     path = save_master_plan(state["feature_id"], output)
     save_run_metadata(state["feature_id"], {
-        "feature_name": state["feature_name"],
-        "repo_name": repo_name,
-        "mode": resolved_mode,
+        "feature_name":  state["feature_name"],
+        "repo_name":     repo_name,
+        "mode":          resolved_mode,
         "mode_was_auto": is_auto,
-        "started_at": datetime.utcnow().isoformat(),
+        "needs_mcp":     needs_mcp,
+        "skip_backend":  skip_backend,
+        "skip_frontend": skip_frontend,
+        "started_at":    datetime.utcnow().isoformat(),
         "master_plan_path": path,
     })
 
     return {
-        "master_plan": output,
+        "master_plan":      output,
         "master_plan_path": path,
-        "mode": resolved_mode,
-        "current_agent": "a1_planificador",
-        "cost_entries": [cost],
+        "mode":             resolved_mode,
+        "needs_mcp":        needs_mcp,
+        "skip_backend":     skip_backend,
+        "skip_frontend":    skip_frontend,
+        "current_agent":    "a1_planificador",
+        "cost_entries":     [cost],
     }

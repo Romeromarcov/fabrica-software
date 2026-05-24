@@ -65,13 +65,22 @@ class FabricaState(TypedDict):
     # ── PR Final ──────────────────────────────────────────────────────────────
     pr_message: Optional[str]
 
+    # ── Routing flags (detectados por A1 Planificador) ──────────────────────
+    needs_mcp: bool          # False = saltar A3 MCP (no se necesitan herramientas MCP)
+    skip_backend: bool       # True = saltar A4 Backend (feature solo de frontend)
+    skip_frontend: bool      # True = saltar A5 Frontend (feature solo de backend/API)
+
     # ── Code Writer (A10) ────────────────────────────────────────────────────
     files_written: list[str]         # Rutas relativas de archivos escritos al repo
+    files_backup: dict               # {ruta_relativa: contenido_original} antes de sobrescribir
     needs_devops: bool               # True = A11 DevOps debe ejecutarse
 
     # ── DevOps (A11) ─────────────────────────────────────────────────────────
     devops_output: Optional[str]     # Output del agente DevOps
-    migration_note: Optional[str]    # Nota de migraciones detectadas por A11
+    migration_note: Optional[str]    # Nota de migraciones detectadas por A10 (makemigrations)
+
+    # ── PR / Git ──────────────────────────────────────────────────────────────
+    feature_branch: Optional[str]    # "feature/YYYYMMDD-slug" creada en A1 PR Final
 
     # ── Control interno ───────────────────────────────────────────────────────
     current_agent: str
@@ -120,10 +129,15 @@ def initial_state(
         refactor_doc_output=None,
         refactor_doc_approved=False,
         pr_message=None,
+        needs_mcp=True,
+        skip_backend=False,
+        skip_frontend=False,
         files_written=[],
+        files_backup={},
         needs_devops=False,
         devops_output=None,
         migration_note=None,
+        feature_branch=None,
         current_agent="inicio",
         errors=[],
         cost_entries=[],

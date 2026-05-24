@@ -127,3 +127,20 @@ TAREA 1 (Code Writer)
 | T2 — DevOps | ✅ Completado | nodes/a11_devops.py, graph.py, state.py, config.py, .env.example |
 | T3 — Stack-agnostic | ✅ Completado | tools/stack_reader.py, nodes/a4/a5/a7/a0.py |
 | T4 — Repo Scanner | ✅ Completado | tools/repo_scanner.py, nodes/a0_arquitecto.py |
+
+---
+
+## Gaps v2 — Implementados (2026-05-23)
+
+| Gap | Descripción | Estado | Archivos afectados |
+|-----|-------------|--------|--------------------|
+| G1 | A10→A9 orden correcto: escribe archivos ANTES de testear | ✅ | graph.py |
+| G2 | Django makemigrations automático tras escribir models.py | ✅ | nodes/a10_code_writer.py |
+| G3 | Auto-generar agents/PROJECT_CONTEXT+CODING_STANDARDS+DECISION_LOG | ✅ | nodes/a0_arquitecto.py |
+| G4 | A3 MCP condicional según needs_mcp flag del planificador | ✅ | graph.py, nodes/a1_planificador.py, state.py |
+| G5 | Modos backend-only y frontend-only (skip_backend / skip_frontend) | ✅ | graph.py, nodes/a1_planificador.py, state.py |
+| G6 | git add selectivo de files_written (no git add .) | ✅ | tools/git_tools.py, nodes/a1_pr_final.py |
+| G7 | Feature branch feature/YYYYMMDD-slug antes del commit | ✅ | tools/git_tools.py, nodes/a1_pr_final.py, state.py |
+| G8 | graph_project.py confirmado sin referencias obsoletas | ✅ | sin cambios requeridos |
+| G9 | Rollback en pipeline_detenido: restaurar archivos sobreescritos | ✅ | tools/code_writer.py, nodes/a10_code_writer.py, graph.py, state.py |
+| PM Review | A1 PR Final lee archivos reales del disco para verificar cumplimiento | ✅ | nodes/a1_pr_final.py |
