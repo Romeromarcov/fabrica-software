@@ -2,6 +2,7 @@
 from state import FabricaState
 from nodes.base import call_agent
 from tools.file_tools import save_agent_output
+from tools.learning_memory import load_lessons
 from config import MODEL_A5
 
 
@@ -11,6 +12,9 @@ def a5_frontend(state: FabricaState) -> dict:
     from tools.stack_reader import read_stack, get_frontend_instructions
     adr_block    = adr_context_block(state["repo_path"])
     memory_block = get_memory_context(state.get("project_id"))
+
+    # Sistema de aprendizaje: lecciones del proyecto
+    lessons_block = load_lessons(state["repo_path"])
 
     # Instrucciones del stack frontend real del proyecto
     stack = read_stack(state["repo_path"])
@@ -31,7 +35,7 @@ Corrige ÚNICAMENTE los bugs listados en el frontend.
 
     task = f"""
 Eres el Agente 5 — Frontend Developer.
-{adr_block}{memory_block}{stack_block}
+{adr_block}{memory_block}{lessons_block}{stack_block}
 MASTER_PLAN del feature (especialmente secciones 5 y 6 — UI/UX):
 ---
 {state['master_plan']}

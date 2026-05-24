@@ -42,6 +42,9 @@ services:
       WORKSPACES_ROOT: /workspace
       RUNS_DIR: /data/runs
       DB_PATH: /data/fabrica_state.db
+      # Pipeline behaviour — override from .env if needed
+      WRITE_TO_REPO: ${WRITE_TO_REPO:-true}
+      ARCH_REVIEW_INTERVAL: ${ARCH_REVIEW_INTERVAL:-3}
     depends_on:
       openclaw:
         condition: service_healthy

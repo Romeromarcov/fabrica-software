@@ -13,6 +13,7 @@ import logging
 from project_state import ProjectState, FeatureTask
 from nodes.base import call_agent, USE_OPENCLAW
 from tools.file_tools import save_run_metadata, RUNS_DIR
+from tools.quality_tracker import compute_trend, propose_standards_update
 from config import MODEL_A1
 
 logger = logging.getLogger(__name__)
@@ -150,6 +151,30 @@ NOTA: OpenClaw no activo — usando lectura nativa de archivos (ver sección ARC
     completed = sum(1 for f in backlog if f["status"] == "completed")
     total     = len(backlog)
 
+    # ── Métricas de calidad del proyecto (Bloque I-2) ─────────────────────────
+    quality_block = ""
+    project_id = state.get("project_id", "")
+    if project_id:
+        trend = compute_trend(project_id, last_n=10)
+        if trend.get("total_features", 0) > 0:
+            direction_emoji = {"mejorando": "📈", "estable": "➡️", "empeorando": "📉"}.get(
+                trend["direction"], "❓"
+            )
+            quality_block = (
+                f"\n## MÉTRICAS DE CALIDAD DEL PIPELINE\n"
+                f"- Features completados: {trend['total_features']}\n"
+                f"- QA iterations promedio: {trend['avg_qa_iters']}\n"
+                f"- Quality score promedio: {trend['avg_score']}/100\n"
+                f"- Tendencia: {direction_emoji} {trend['direction']}\n"
+                f"- Features con ≤1 iteración QA: {trend['zero_qa_pct']}%\n"
+            )
+            if trend.get("recurring_patterns"):
+                quality_block += f"- Patrones recurrentes: {', '.join(trend['recurring_patterns'])}\n"
+
+        proposal = propose_standards_update(project_id)
+        if proposal:
+            quality_block += f"\n{proposal}\n"
+
     task = f"""
 Eres el PM Evaluador — tu función es verificar si el feature fue completado correctamente
 y mantener el norte del proyecto.
@@ -158,6 +183,7 @@ y mantener el norte del proyecto.
 **Nombre:** {state['project_name']}
 **Repositorio:** {state['repo_path']}
 **Progreso:** {completed}/{total} features completados
+{quality_block}
 
 ## ROADMAP DEL PROYECTO
 {(state.get('roadmap') or '')[:1500]}

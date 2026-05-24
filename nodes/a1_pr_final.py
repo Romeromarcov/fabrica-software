@@ -33,6 +33,7 @@ from tools.git_tools import (
     create_pr,
 )
 from tools.telegram import notify_feature_done
+from tools.quality_tracker import record_feature_metrics, format_quality_summary
 from config import MODEL_PM
 
 logger = logging.getLogger(__name__)
@@ -189,11 +190,31 @@ Al final escribe: `✅ CICLO COMPLETADO`
     )
 
     save_agent_output(state["feature_id"], "a1_pr_final", pr_message)
+    final_cost = total_cost + cost.get("cost_usd", 0)
     save_run_metadata(state["feature_id"], {
         "completed_at":   datetime.utcnow().isoformat(),
-        "total_cost_usd": total_cost + cost.get("cost_usd", 0),
+        "total_cost_usd": final_cost,
         "status":         "completado",
     })
+
+    # ── Sistema de aprendizaje: registrar métricas de calidad ─────────────────
+    project_id = state.get("project_id", "")
+    if project_id:
+        record_feature_metrics(
+            project_id        = project_id,
+            feature_id        = state["feature_id"],
+            feature_name      = state.get("feature_name", ""),
+            qa_iterations     = state.get("qa_iterations", 0),
+            secops_iterations = state.get("secops_iterations", 0),
+            sandbox_passes    = 1 if state.get("sandbox_passed") else 0,
+            bug_categories    = state.get("qa_bug_categories", []),
+            had_rollback      = bool(state.get("files_backup")),
+            total_cost_usd    = final_cost,
+            mode              = state.get("mode", "completo"),
+        )
+        quality_postmortem = format_quality_summary(project_id, state["feature_id"])
+    else:
+        quality_postmortem = ""
 
     # ── Extraer título y mensaje de commit del output del PM ──────────────────
     title_line = next(
@@ -211,6 +232,10 @@ Al final escribe: `✅ CICLO COMPLETADO`
         if commit_block
         else f"{title_line}\n\n🤖 Fábrica de Software — repo: {repo_name}"
     )
+
+    # Anexar post-mortem de calidad al mensaje del PR
+    if quality_postmortem:
+        pr_message = pr_message.rstrip() + "\n" + quality_postmortem
 
     # ── G7: Crear feature branch antes del commit ─────────────────────────────
     pr_url = ""

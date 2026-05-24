@@ -18,6 +18,7 @@ import logging
 from state import FabricaState
 from nodes.base import call_agent
 from tools.file_tools import save_agent_output
+from tools.learning_memory import extract_patterns, append_to_lessons
 from config import MODEL_A8, MAX_SECOPS_ITER
 
 logger = logging.getLogger(__name__)
@@ -168,5 +169,15 @@ La última línea DEBE ser exactamente una de:
 
     if unfixable:
         result["errors"] = ["SecOps: vulnerabilidad no corregible en código — requiere intervención humana"]
+
+    # ── Sistema de aprendizaje: extraer vulnerabilidades críticas/altas ───────
+    if not cleared and state["repo_path"]:
+        sec_patterns = extract_patterns(
+            qa_report="",
+            secops_report=output,
+            feature_name=state.get("feature_name", ""),
+        )
+        if sec_patterns:
+            append_to_lessons(state["repo_path"], sec_patterns)
 
     return result

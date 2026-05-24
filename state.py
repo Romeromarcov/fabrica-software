@@ -83,6 +83,9 @@ class FabricaState(TypedDict):
     # ── PR / Git ──────────────────────────────────────────────────────────────
     feature_branch: Optional[str]    # "feature/YYYYMMDD-slug" creada en A1 PR Final
 
+    # ── Sistema de aprendizaje (Bloque I) ─────────────────────────────────────
+    qa_bug_categories: list[str]     # Categorías de bugs detectados por A7 (para QualityTracker)
+
     # ── Control interno ───────────────────────────────────────────────────────
     current_agent: str
     # operator.add permite que múltiples nodos appendeen a esta lista sin conflictos
@@ -140,6 +143,7 @@ def initial_state(
         devops_output=None,
         migration_note=None,
         feature_branch=None,
+        qa_bug_categories=[],
         current_agent="inicio",
         errors=[],
         cost_entries=[],

@@ -2,6 +2,8 @@
 from state import FabricaState
 from nodes.base import call_agent
 from tools.file_tools import save_agent_output
+from tools.learning_memory import load_lessons
+from tools.fewshot_builder import build_fewshots
 from config import MODEL_A4
 
 
@@ -11,6 +13,10 @@ def a4_backend(state: FabricaState) -> dict:
     from tools.stack_reader import read_stack, get_backend_instructions
     adr_block    = adr_context_block(state["repo_path"])
     memory_block = get_memory_context(state.get("project_id"))
+
+    # Sistema de aprendizaje: lecciones del proyecto + few-shots
+    lessons_block  = load_lessons(state["repo_path"])
+    fewshot_block  = build_fewshots(state.get("project_id", ""), context="backend")
 
     # Inyectar instrucciones del stack real del proyecto
     stack = read_stack(state["repo_path"])
@@ -31,7 +37,7 @@ Corrige ÚNICAMENTE los bugs listados. No cambies lo que ya funciona.
 
     task = f"""
 Eres el Agente 4 — Backend Developer.
-{adr_block}{memory_block}{stack_block}
+{adr_block}{memory_block}{lessons_block}{fewshot_block}{stack_block}
 MASTER_PLAN del feature:
 ---
 {state['master_plan']}

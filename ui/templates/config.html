@@ -61,7 +61,7 @@
         <div class="col-md-6">
           <label class="form-label d-flex align-items-center gap-2" style="font-size:.78rem;color:#888">
             <span class="provider-badge pb-anthropic">Anthropic</span>
-            Agentes 2 · 3 · 6 · 7 · 8
+            Agentes A2 · A3 · A6 · A7 · A8 · A11
           </label>
           <input type="password" name="anthropic_api_key" class="form-control key-input"
                  value="{{ cfg.ANTHROPIC_API_KEY }}" placeholder="sk-ant-api03-…" autocomplete="off">
@@ -178,37 +178,107 @@
     <div class="p-3 border-bottom d-flex align-items-center gap-2" style="border-color:#2a2a3a!important">
       <i class="bi bi-cpu" style="color:var(--brand-light)"></i>
       <span class="fw-semibold" style="font-size:.9rem">Modelos por Agente</span>
+      <span class="ms-auto" style="font-size:.72rem;color:#555">
+        <span class="provider-badge pb-anthropic me-1">A</span>Anthropic &nbsp;
+        <span class="provider-badge pb-google me-1">G</span>Google &nbsp;
+        <span class="provider-badge pb-zhipu me-1">Z</span>Z.ai &nbsp;
+        <span class="provider-badge pb-kimi me-1">K</span>Kimi
+      </span>
     </div>
     <div class="p-1">
       <table class="table table-sm mb-0 agent-row">
         <thead>
           <tr>
-            <th style="width:40px">#</th>
+            <th style="width:48px">#</th>
             <th>Agente</th>
+            <th style="width:80px">Flujo</th>
             <th>Proveedor</th>
             <th>Modelo (editable)</th>
           </tr>
         </thead>
         <tbody>
-          {% set agents = [
-            ("A0", "MODEL_A0", "Arquitecto de Proyecto", "gemini-3.5-flash"),
-            ("A1", "MODEL_A1", "PM / Planificador",      "gemini-3.5-flash"),
-            ("A2", "MODEL_A2", "DB Architect",            "claude-sonnet-4-6"),
-            ("A3", "MODEL_A3", "MCP Toolsmith",           "claude-sonnet-4-6"),
-            ("A4", "MODEL_A4", "Backend Developer",       "glm-5.1"),
-            ("A5", "MODEL_A5", "Frontend Developer",      "kimi-k2.6"),
-            ("A6", "MODEL_A6", "Revisor / Refactor",      "claude-sonnet-4-6"),
-            ("A7", "MODEL_A7", "QA Test",                 "claude-sonnet-4-6"),
-            ("A8", "MODEL_A8", "SecOps",                  "claude-sonnet-4-6"),
+
+          {# ── Grafo de Proyecto (graph_project.py) ───────────────────────── #}
+          <tr>
+            <td colspan="5" style="padding:.4rem .75rem;background:#0f0f18;
+                font-size:.68rem;color:#555;text-transform:uppercase;letter-spacing:.08em;
+                font-weight:600;border-bottom:1px solid #1a1a28">
+              <i class="bi bi-diagram-3 me-1"></i>Grafo de Proyecto — solo en modo proyecto
+            </td>
+          </tr>
+
+          {% set project_agents = [
+            ("A0",  "MODEL_A0",  "Arquitecto de Proyecto",  "gemini-3.5-flash",  "Proyecto"),
+            ("A0r", "MODEL_A0",  "A0 Revisor (usa MODEL_A0)", "gemini-3.5-flash", "Proyecto"),
           ] %}
-          {% for num, field, label, default in agents %}
+          {% for num, field, label, default, flujo in project_agents %}
+          <tr {% if num == "A0r" %}style="opacity:.75"{% endif %}>
+            <td style="color:#555;font-size:.78rem">{{ num }}</td>
+            <td style="font-size:.82rem">
+              {{ label }}
+              {% if num == "A0r" %}
+              <span class="badge ms-1" style="background:#7c3aed18;color:#7c3aed;font-size:.62rem;border:1px solid #7c3aed33">
+                misma variable
+              </span>
+              {% endif %}
+            </td>
+            <td><span class="badge" style="background:#1f1f2e;color:#555;font-size:.65rem">{{ flujo }}</span></td>
+            <td>
+              {% if num == "A0r" %}
+              <span class="provider-badge pb-google">google</span>
+              {% else %}
+              <span class="provider-badge" id="badge-{{ num }}"></span>
+              {% endif %}
+            </td>
+            <td>
+              {% if num == "A0r" %}
+              <input type="text" class="form-control form-control-sm key-input"
+                     value="{{ cfg.get('MODEL_A0', default) }}" style="font-size:.78rem;opacity:.55"
+                     disabled title="Usa MODEL_A0 — configúralo en la fila A0">
+              {% else %}
+              <input type="text" name="{{ field }}" class="form-control form-control-sm key-input agent-model-input"
+                     value="{{ cfg.get(field, default) }}" style="font-size:.78rem"
+                     data-badge="badge-{{ num }}"
+                     oninput="updateProviderBadge(this)">
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+
+          {# ── Grafo de Feature (graph.py) — ambos modos ───────────────────── #}
+          <tr>
+            <td colspan="5" style="padding:.4rem .75rem;background:#0f0f18;
+                font-size:.68rem;color:#555;text-transform:uppercase;letter-spacing:.08em;
+                font-weight:600;border-bottom:1px solid #1a1a28">
+              <i class="bi bi-arrow-right-circle me-1"></i>Grafo de Feature — pipeline principal
+            </td>
+          </tr>
+
+          {% set feature_agents = [
+            ("A1",  "MODEL_A1",  "PM / Planificador",     "gemini-3.5-flash",  "Siempre",    ""),
+            ("A2",  "MODEL_A2",  "DB Architect",           "claude-sonnet-4-6", "Completo",   ""),
+            ("A3",  "MODEL_A3",  "MCP Toolsmith",          "claude-sonnet-4-6", "needs_mcp",  ""),
+            ("A4",  "MODEL_A4",  "Backend Developer",      "glm-5.1",           "skip_back?", ""),
+            ("A5",  "MODEL_A5",  "Frontend Developer",     "kimi-k2.6",         "skip_front?",""),
+            ("A6",  "MODEL_A6",  "Revisor / Refactor",     "claude-sonnet-4-6", "Siempre",    ""),
+            ("A7",  "MODEL_A7",  "QA Test",                "claude-sonnet-4-6", "Siempre",    ""),
+            ("A8",  "MODEL_A8",  "SecOps",                 "claude-sonnet-4-6", "Siempre",    ""),
+            ("A11", "MODEL_A11", "DevOps / Infrastructure","claude-sonnet-4-6", "needs_devops",""),
+          ] %}
+          {% for num, field, label, default, flujo, _ in feature_agents %}
           <tr>
             <td style="color:#555;font-size:.78rem">{{ num }}</td>
             <td style="font-size:.82rem">{{ label }}</td>
             <td>
-              <!-- Badge se actualiza dinámicamente según el modelo ingresado -->
-              <span class="provider-badge" id="badge-{{ num }}"></span>
+              <span class="badge" style="
+                background:{% if 'Siempre' in flujo %}#16a34a18{% elif 'Completo' in flujo %}#0ea5e918{% else %}#7c3aed18{% endif %};
+                color:{% if 'Siempre' in flujo %}#4ade80{% elif 'Completo' in flujo %}#38bdf8{% else %}#a78bfa{% endif %};
+                font-size:.62rem;
+                border:1px solid {% if 'Siempre' in flujo %}#16a34a44{% elif 'Completo' in flujo %}#0ea5e944{% else %}#7c3aed33{% endif %}">
+                {{ flujo }}
+              </span>
             </td>
+            <td><span class="provider-badge" id="badge-{{ num }}"></span></td>
             <td>
               <input type="text" name="{{ field }}" class="form-control form-control-sm key-input agent-model-input"
                      value="{{ cfg.get(field, default) }}" style="font-size:.78rem"
@@ -217,8 +287,127 @@
             </td>
           </tr>
           {% endfor %}
+
+          {# ── Agentes sin LLM ────────────────────────────────────────────── #}
+          <tr>
+            <td colspan="5" style="padding:.4rem .75rem;background:#0f0f18;
+                font-size:.68rem;color:#555;text-transform:uppercase;letter-spacing:.08em;
+                font-weight:600;border-bottom:1px solid #1a1a28">
+              <i class="bi bi-terminal me-1"></i>Ejecución local — sin modelo IA
+            </td>
+          </tr>
+          <tr style="opacity:.6">
+            <td style="color:#555;font-size:.78rem">A10</td>
+            <td style="font-size:.82rem">Code Writer</td>
+            <td><span class="badge" style="background:#16a34a18;color:#4ade80;font-size:.62rem;border:1px solid #16a34a44">Siempre</span></td>
+            <td><span class="badge" style="background:#1f1f2e;color:#555;font-size:.65rem;border:1px solid #2a2a3a">Sin LLM</span></td>
+            <td><input type="text" class="form-control form-control-sm" value="Escribe archivos al disco" disabled style="font-size:.76rem;color:#444;opacity:.7"></td>
+          </tr>
+          <tr style="opacity:.6">
+            <td style="color:#555;font-size:.78rem">A9</td>
+            <td style="font-size:.82rem">Sandbox</td>
+            <td><span class="badge" style="background:#16a34a18;color:#4ade80;font-size:.62rem;border:1px solid #16a34a44">Siempre</span></td>
+            <td><span class="badge" style="background:#1f1f2e;color:#555;font-size:.65rem;border:1px solid #2a2a3a">Sin LLM</span></td>
+            <td><input type="text" class="form-control form-control-sm" value="Ejecuta tests reales (post A10)" disabled style="font-size:.76rem;color:#444;opacity:.7"></td>
+          </tr>
+
+          {# ── PM Final (usa MODEL_A1) ─────────────────────────────────────── #}
+          <tr>
+            <td colspan="5" style="padding:.4rem .75rem;background:#0f0f18;
+                font-size:.68rem;color:#555;text-transform:uppercase;letter-spacing:.08em;
+                font-weight:600;border-bottom:1px solid #1a1a28">
+              <i class="bi bi-check2-circle me-1"></i>Evaluación y Cierre
+            </td>
+          </tr>
+          <tr style="opacity:.75">
+            <td style="color:#555;font-size:.78rem">A1f</td>
+            <td style="font-size:.82rem">
+              PR Final
+              <span class="badge ms-1" style="background:#7c3aed18;color:#7c3aed;font-size:.62rem;border:1px solid #7c3aed33">
+                usa MODEL_A1
+              </span>
+            </td>
+            <td><span class="badge" style="background:#16a34a18;color:#4ade80;font-size:.62rem;border:1px solid #16a34a44">Siempre</span></td>
+            <td><span class="provider-badge pb-google">google</span></td>
+            <td><input type="text" class="form-control form-control-sm key-input"
+                       value="{{ cfg.get('MODEL_A1', 'gemini-3.5-flash') }}" disabled style="font-size:.78rem;opacity:.55"
+                       title="Usa MODEL_A1 — configúralo en la fila A1"></td>
+          </tr>
+          <tr style="opacity:.75">
+            <td style="color:#555;font-size:.78rem">PM</td>
+            <td style="font-size:.82rem">
+              PM Evaluador
+              <span class="badge ms-1" style="background:#7c3aed18;color:#7c3aed;font-size:.62rem;border:1px solid #7c3aed33">
+                usa MODEL_A1
+              </span>
+            </td>
+            <td><span class="badge" style="background:#1f1f2e;color:#555;font-size:.65rem;border:1px solid #2a2a3a">Proyecto</span></td>
+            <td><span class="provider-badge pb-google">google</span></td>
+            <td><input type="text" class="form-control form-control-sm key-input"
+                       value="{{ cfg.get('MODEL_A1', 'gemini-3.5-flash') }}" disabled style="font-size:.78rem;opacity:.55"
+                       title="Usa MODEL_A1 — configúralo en la fila A1"></td>
+          </tr>
+
         </tbody>
       </table>
+    </div>
+    <div class="px-3 pb-3 pt-1" style="font-size:.72rem;color:#444">
+      <i class="bi bi-info-circle me-1"></i>
+      <strong style="color:#555">Flujos:</strong>
+      <span style="color:#4ade80">Siempre</span> = corre en todos los features ·
+      <span style="color:#38bdf8">Completo</span> = solo en modo completo ·
+      <span style="color:#a78bfa">Condicional</span> = depende de flags del planificador ·
+      <span style="color:#555">Proyecto</span> = solo en modo proyecto
+    </div>
+  </div>
+
+  <!-- ── Comportamiento del Pipeline ─────────────────────────────────────── -->
+  <div class="card mb-3">
+    <div class="p-3 border-bottom d-flex align-items-center gap-2" style="border-color:#2a2a3a!important">
+      <i class="bi bi-gear" style="color:var(--brand-light)"></i>
+      <span class="fw-semibold" style="font-size:.9rem">Comportamiento del Pipeline</span>
+    </div>
+    <div class="p-3">
+      <div class="row g-3">
+
+        <!-- WRITE_TO_REPO toggle -->
+        <div class="col-md-6">
+          <label class="form-label" style="font-size:.78rem;color:#888;text-transform:uppercase;letter-spacing:.05em">
+            Escribir archivos al repositorio
+          </label>
+          <div class="d-flex align-items-center gap-3 mt-1">
+            <div class="form-check form-switch mb-0">
+              <input class="form-check-input" type="checkbox" role="switch"
+                     id="writeToRepoSwitch" name="write_to_repo"
+                     {% if cfg.get('WRITE_TO_REPO', 'true') == 'true' %}checked{% endif %}>
+              <label class="form-check-label" for="writeToRepoSwitch"
+                     style="font-size:.82rem;color:#ccc">
+                Modo producción (escribe archivos reales)
+              </label>
+            </div>
+          </div>
+          <div class="form-text" style="font-size:.7rem;color:#555">
+            Desactivar = dry-run: el pipeline planifica y loguea sin tocar el código del repo.
+          </div>
+        </div>
+
+        <!-- ARCH_REVIEW_INTERVAL -->
+        <div class="col-md-6">
+          <label class="form-label" style="font-size:.78rem;color:#888;text-transform:uppercase;letter-spacing:.05em">
+            Intervalo de revisión arquitectónica (A0 Revisor)
+          </label>
+          <div class="d-flex align-items-center gap-2">
+            <input type="number" name="arch_review_interval" class="form-control" style="max-width:100px"
+                   value="{{ cfg.get('ARCH_REVIEW_INTERVAL', '3') }}" min="0" max="20">
+            <span style="font-size:.82rem;color:#666">features entre revisiones</span>
+          </div>
+          <div class="form-text" style="font-size:.7rem;color:#555">
+            <code>0</code> = desactivado. El A0 Revisor valida que el proyecto no se haya desviado del plan original.
+            Una <strong>DERIVACION_CRITICA</strong> pausa el pipeline y notifica al Founder.
+          </div>
+        </div>
+
+      </div>
     </div>
   </div>
 

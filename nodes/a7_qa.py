@@ -2,6 +2,7 @@
 from state import FabricaState
 from nodes.base import call_agent
 from tools.file_tools import save_agent_output
+from tools.learning_memory import extract_patterns, append_to_lessons, load_lessons
 from config import MAX_QA_ITER_COMPLETO, MAX_QA_ITER_LITE, MODEL_A7
 
 
@@ -14,6 +15,9 @@ def a7_qa(state: FabricaState) -> dict:
     stack = read_stack(state["repo_path"])
     qa_instructions = get_qa_instructions(stack)
     stack_block = f"\n## INSTRUCCIONES DE TESTING\n{qa_instructions}\n" if qa_instructions else ""
+
+    # Lecciones aprendidas del proyecto (patrones de error anteriores)
+    lessons_block = load_lessons(state["repo_path"])
 
     iteration    = state["qa_iterations"] + 1
     max_iter     = MAX_QA_ITER_COMPLETO if state["mode"] == "completo" else MAX_QA_ITER_LITE
@@ -31,7 +35,7 @@ def a7_qa(state: FabricaState) -> dict:
 
     task = f"""
 Eres el Agente 7 — QA Test. Esta es la iteración QA {iteration} de máximo {max_iter}.
-{adr_block}{stack_block}{retest_note}
+{adr_block}{stack_block}{lessons_block}{retest_note}
 CRITERIOS DE ACEPTACIÓN (del MASTER_PLAN):
 ---
 {state['master_plan']}
@@ -82,10 +86,24 @@ BUG-001 | CRÍTICO | archivo.py:45 | descripción del bug
 
     passed = "QA_RESULT: PASSED" in output
 
+    # ── Sistema de aprendizaje: extraer y persistir patrones de error ─────────
+    # Solo en el último intento (passed o max alcanzado) para no duplicar patrones
+    is_last_iter = passed or iteration >= max_iter
+    if is_last_iter and not passed and state["repo_path"]:
+        patterns = extract_patterns(
+            qa_report=output,
+            secops_report="",
+            feature_name=state.get("feature_name", ""),
+        )
+        if patterns:
+            append_to_lessons(state["repo_path"], patterns)
+
     return {
-        "qa_report": output,
-        "qa_passed": passed,
+        "qa_report":     output,
+        "qa_passed":     passed,
         "qa_iterations": iteration,
         "current_agent": "a7_qa",
-        "cost_entries": [cost],
+        "cost_entries":  [cost],
+        # Exponer categorías de bugs para QualityTracker en A1 PR Final
+        "qa_bug_categories": [p["category"] for p in extract_patterns(output, "", "")] if not passed else [],
     }
