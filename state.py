@@ -86,6 +86,11 @@ class FabricaState(TypedDict):
     # ── Sistema de aprendizaje (Bloque I) ─────────────────────────────────────
     qa_bug_categories: list[str]     # Categorías de bugs detectados por A7 (para QualityTracker)
 
+    # ── Bloque III: Reducción de Intervención Humana ───────────────────────────
+    confidence_score: int            # 0-100 emitido por A1; guía el routing automático
+    risk_level: str                  # LOW | MEDIUM | HIGH emitido por A1
+    veto_deadline: Optional[str]     # ISO datetime hasta el que el Founder puede vetar
+
     # ── Control interno ───────────────────────────────────────────────────────
     current_agent: str
     # operator.add permite que múltiples nodos appendeen a esta lista sin conflictos
@@ -144,6 +149,9 @@ def initial_state(
         migration_note=None,
         feature_branch=None,
         qa_bug_categories=[],
+        confidence_score=70,
+        risk_level="MEDIUM",
+        veto_deadline=None,
         current_agent="inicio",
         errors=[],
         cost_entries=[],

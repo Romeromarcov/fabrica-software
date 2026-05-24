@@ -208,10 +208,87 @@
 </div>
 {% endif %}
 
+<!-- Panel de calidad (Bloque I) -->
+<div class="card mb-3" id="qualityPanel" style="display:none">
+  <div class="p-3 border-bottom d-flex align-items-center justify-content-between"
+       style="border-color:#2a2a3a!important;cursor:pointer"
+       onclick="document.getElementById('qualityBody').classList.toggle('d-none')">
+    <span class="fw-semibold" style="font-size:.9rem">
+      <i class="bi bi-bar-chart-line me-1" style="color:var(--brand-light)"></i>
+      Métricas de calidad
+      <span id="qualityDir" class="ms-2" style="font-size:.75rem;color:#888"></span>
+    </span>
+    <i class="bi bi-chevron-down" style="font-size:.75rem;color:#888"></i>
+  </div>
+  <div id="qualityBody" class="p-3">
+    <div class="row g-3 mb-3" id="qualityStats"></div>
+    <div id="qualityFeatures" style="font-size:.78rem"></div>
+    <div id="qualityProposal" class="mt-2" style="font-size:.78rem;color:#fb923c"></div>
+  </div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
 <script>
+async function loadQuality() {
+  try {
+    const r = await fetch(`/api/projects/{{ project_id }}/quality`);
+    if (!r.ok) return;
+    const d = await r.json();
+    const t = d.trend || {};
+    if (!t.total_features) return;
+
+    document.getElementById('qualityPanel').style.display = '';
+    const dirIcon = {mejorando:'📈', estable:'➡️', empeorando:'📉'}[t.direction] || '❓';
+    document.getElementById('qualityDir').textContent = `${dirIcon} ${t.direction}`;
+
+    const stats = [
+      ['Score promedio', `${t.avg_score}/100`],
+      ['Iters QA prom.', t.avg_qa_iters],
+      ['≤1 iter QA', `${t.zero_qa_pct}%`],
+      ['Features totales', t.total_features],
+    ];
+    document.getElementById('qualityStats').innerHTML = stats.map(([label, val]) => `
+      <div class="col-md-3">
+        <div class="card stat-card p-3">
+          <div class="stat-value">${val}</div>
+          <div class="stat-label">${label}</div>
+        </div>
+      </div>`).join('');
+
+    if ((d.features || []).length) {
+      const rows = d.features.slice().reverse().map(f => `
+        <tr>
+          <td style="color:#aaa">${(f.feature_name||'').slice(0,30)}</td>
+          <td class="text-center">${f.qa_iterations}</td>
+          <td class="text-center">${f.secops_iterations}</td>
+          <td class="text-center">${f.quality_score}</td>
+          <td class="text-center" style="color:${f.had_rollback?'#f87171':'#22c55e'}">${f.had_rollback?'Sí':'No'}</td>
+        </tr>`).join('');
+      document.getElementById('qualityFeatures').innerHTML = `
+        <table class="table table-sm" style="font-size:.75rem">
+          <thead><tr>
+            <th>Feature</th><th class="text-center">QA iters</th>
+            <th class="text-center">SecOps iters</th><th class="text-center">Score</th>
+            <th class="text-center">Rollback</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>`;
+    }
+
+    if (t.top_bug_categories && t.top_bug_categories.length) {
+      document.getElementById('qualityProposal').innerHTML =
+        '⚠️ Top bugs: ' + t.top_bug_categories.map(c => `<code>${c}</code>`).join(', ');
+    }
+    if (d.proposal) {
+      document.getElementById('qualityProposal').innerHTML +=
+        `<div class="mt-1">${d.proposal.replace(/\n/g,'<br>')}</div>`;
+    }
+  } catch(e) { /* silent */ }
+}
+loadQuality();
+
 async function approveRoadmap() {
   const r = confirm('¿Aprobar el roadmap e iniciar el Project Loop?');
   if (!r) return;

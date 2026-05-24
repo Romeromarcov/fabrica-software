@@ -1102,6 +1102,33 @@ async def api_update_skill(skill_name: str, request: Request):
     return {"ok": True, "name": skill_name}
 
 
+@app.get("/api/projects/{project_id}/quality")
+async def api_project_quality(project_id: str):
+    """Métricas de calidad acumuladas del proyecto (Bloque I)."""
+    from tools.quality_tracker import compute_trend, propose_standards_update
+    import json as _json
+
+    metrics_path = RUNS_DIR / project_id / "quality_metrics.jsonl"
+    features: list[dict] = []
+    if metrics_path.exists():
+        for line in metrics_path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line:
+                try:
+                    features.append(_json.loads(line))
+                except Exception:
+                    pass
+
+    trend    = compute_trend(project_id)
+    proposal = propose_standards_update(project_id)
+
+    return {
+        "trend":    trend,
+        "features": features[-20:],   # últimos 20 features
+        "proposal": proposal,
+    }
+
+
 @app.delete("/api/skills/{skill_name}")
 async def api_delete_skill(skill_name: str, repo: str = ""):
     """Elimina una skill del repo."""

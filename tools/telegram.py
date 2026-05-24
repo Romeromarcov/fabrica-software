@@ -105,6 +105,30 @@ def notify_approval_needed(project_name: str, project_id: str,
     )
 
 
+def notify_veto_window(
+    feature_name: str,
+    feature_id: str,
+    confidence: int,
+    risk: str,
+    plan_summary: str,
+    deadline_minutes: int,
+) -> None:
+    """
+    Notifica al Founder que un plan está en ventana de veto automático.
+    Si no responde en deadline_minutes, el pipeline continúa solo.
+    """
+    short_id = feature_id[:40]
+    risk_icon = {"LOW": "🟢", "MEDIUM": "🟡", "HIGH": "🔴"}.get(risk, "⚪")
+    send_message(
+        f"⏳ *Ventana de veto — {deadline_minutes} min*\n"
+        f"*Feature:* {feature_name}\n"
+        f"*Confianza:* {confidence}/100 · Riesgo: {risk_icon} {risk}\n\n"
+        f"*Resumen del plan:*\n{plan_summary[:400]}\n\n"
+        f"Si no respondes en {deadline_minutes} min el pipeline continúa automáticamente.\n"
+        f"Para vetar: `/vetar {short_id}`"
+    )
+
+
 def notify_suggestions(project_name: str, suggestions: list[str],
                         project_id: str = "") -> None:
     sug_text = "\n".join(f"• {s}" for s in suggestions[:10]) or "Ninguna"

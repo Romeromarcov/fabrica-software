@@ -81,6 +81,14 @@ CHECKPOINT_TIMEOUT_SECONDS = int(os.getenv("CHECKPOINT_TIMEOUT_SECONDS", "1800")
 # Cada cuántos features completados corre el A0 Revisor (0 = desactivado)
 ARCH_REVIEW_INTERVAL = int(os.getenv("ARCH_REVIEW_INTERVAL", "3"))
 
+# ── Bloque III: Reducción de Intervención Humana ──────────────────────────────
+# Ventana de veto: minutos que el Founder tiene para vetar un plan antes de que
+# el pipeline continúe automáticamente (solo aplica en project_mode).
+VETO_WINDOW_MINUTES = int(os.getenv("VETO_WINDOW_MINUTES", "30"))
+
+# Auto-merge: si True y risk_level=LOW, el PR se fusiona automáticamente tras crearse.
+AUTO_MERGE_ENABLED = os.getenv("AUTO_MERGE_ENABLED", "false").lower() == "true"
+
 # ── Agente de Noticias (independiente de la Fábrica) ─────────────────────────
 NEWS_AGENT_ENABLED = os.getenv("NEWS_AGENT_ENABLED", "true").lower() == "true"
 NEWS_AGENT_HOUR    = int(os.getenv("NEWS_AGENT_HOUR", "8"))

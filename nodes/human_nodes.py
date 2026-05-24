@@ -5,12 +5,113 @@ El estado se persiste en SQLite vía SqliteSaver — sobrevive reinicios del pro
 """
 from langgraph.types import interrupt
 from state import FabricaState
-from config import MAX_QA_ITER_COMPLETO, MAX_QA_ITER_LITE
+from config import MAX_QA_ITER_COMPLETO, MAX_QA_ITER_LITE, VETO_WINDOW_MINUTES
 from tools.file_tools import save_run_metadata
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
 
 FRASE_APROBACION = "Plan aprobado. Pasa a ejecución."
+
+
+def confidence_auto_approve(state: FabricaState) -> dict:
+    """
+    Bloque III: plan con CONFIDENCE >= 85 y RISK=LOW en project_mode.
+    Auto-aprueba sin ventana de veto y notifica al Founder por Telegram.
+    """
+    from tools.telegram import send_message
+    conf  = state.get("confidence_score", 70)
+    risk  = state.get("risk_level", "MEDIUM")
+    fname = state["feature_name"]
+
+    send_message(
+        f"✅ *Auto-aprobado* (confianza {conf}/100 · Riesgo 🟢 {risk})\n"
+        f"*Feature:* {fname}\n"
+        f"El pipeline continúa sin intervención humana."
+    )
+    save_run_metadata(state["feature_id"], {
+        "status":         "auto_approved",
+        "confidence":     conf,
+        "risk_level":     risk,
+        "approved_at":    datetime.now(timezone.utc).isoformat(),
+        "approval_mode":  "confidence_auto",
+    })
+    return {
+        "founder_approval": True,
+        "current_agent":    "confidence_auto_approve",
+    }
+
+
+def veto_window(state: FabricaState) -> dict:
+    """
+    Bloque III: plan con confianza media o riesgo MEDIUM en project_mode.
+    Notifica al Founder y suspende VETO_WINDOW_MINUTES minutos.
+    Si el Founder no responde (o responde CONTINUAR), aprueba automáticamente.
+    Si responde VETAR, rechaza el plan.
+    """
+    from tools.telegram import notify_veto_window as tg_veto
+
+    conf    = state.get("confidence_score", 70)
+    risk    = state.get("risk_level", "MEDIUM")
+    fname   = state["feature_name"]
+    fid     = state["feature_id"]
+    minutes = VETO_WINDOW_MINUTES
+
+    deadline = datetime.now(timezone.utc) + timedelta(minutes=minutes)
+    deadline_iso = deadline.isoformat()
+
+    # Resumen corto del plan para el mensaje Telegram
+    plan_text = state.get("master_plan", "") or ""
+    plan_summary = plan_text[:400].strip()
+
+    save_run_metadata(fid, {
+        "status":       "veto_window",
+        "paused_at":    datetime.now(timezone.utc).isoformat(),
+        "veto_expires": deadline_iso,
+        "confidence":   conf,
+        "risk_level":   risk,
+    })
+
+    tg_veto(
+        feature_name=fname,
+        feature_id=fid,
+        confidence=conf,
+        risk=risk,
+        plan_summary=plan_summary,
+        deadline_minutes=minutes,
+    )
+
+    founder_input: str = interrupt({
+        "tipo":            "veto_window",
+        "mensaje":         (
+            f"\n{'─'*50}\n"
+            f"⏳ VENTANA DE VETO — {fname}\n"
+            f"   Confianza: {conf}/100 · Riesgo: {risk}\n"
+            f"{'─'*50}\n\n"
+            f"El pipeline continuará en {minutes} min si no actúas.\n"
+            f"Escribe VETAR para detener, o CONTINUAR (o nada) para aprobar ahora."
+        ),
+        "feature_id":      fid,
+        "veto_expires":    deadline_iso,
+        "timeout_seconds": minutes * 60,
+    })
+
+    vetado = founder_input.strip().upper() == "VETAR"
+
+    save_run_metadata(fid, {
+        "status":   "vetado" if vetado else "approved",
+        "vetado":   vetado,
+        "approved_at": datetime.now(timezone.utc).isoformat() if not vetado else None,
+        "approval_mode": "veto_window",
+    })
+
+    updates: dict = {
+        "founder_approval": not vetado,
+        "veto_deadline":    deadline_iso,
+        "current_agent":    "veto_window",
+    }
+    if vetado:
+        updates["errors"] = [f"Founder vetó el plan de '{fname}'."]
+    return updates
 
 
 def stop_protocol(state: FabricaState) -> dict:

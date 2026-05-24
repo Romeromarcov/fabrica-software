@@ -165,7 +165,7 @@ Feature 4 → A7: 0 iteraciones QA por esos patrones
 
 ---
 
-## BLOQUE II — Inteligencia de Contexto
+## BLOQUE II — Inteligencia de Contexto ✅ COMPLETADO 2026-05-24
 
 > Sin esto, los agentes trabajan a ciegas en proyectos existentes.
 > Es el gap de mayor impacto para proyectos de cualquier envergadura.
@@ -196,12 +196,14 @@ Global:
 ```
 
 **Archivos a crear/modificar:**
-- [ ] `tools/repo_scanner.py` — ya existe parcialmente; extender con:
+- [x] `tools/repo_scanner.py` — extendido con:
   - `build_fingerprint(repo_path: str) -> str` — genera el documento completo
   - `update_fingerprint(repo_path: str, files_changed: list[str])` — actualización incremental
-- [ ] `nodes/a0_arquitecto.py` — llamar `build_fingerprint()` antes de planificar si el proyecto existe
-- [ ] `nodes/a10_code_writer.py` — llamar `update_fingerprint()` después de escribir archivos
-- [ ] Inyección del fingerprint en A1, A2, A4, A5 (los que generan código)
+  - `load_fingerprint(repo_path: str) -> str` — carga o genera si no existe
+  - `fingerprint_context_block(repo_path: str) -> str` — wrapper para prompts
+- [x] `nodes/a0_arquitecto.py` — llama `build_fingerprint()` antes de planificar si el proyecto existe
+- [x] `nodes/a10_code_writer.py` — llama `update_fingerprint()` después de escribir archivos
+- [x] Inyección del fingerprint en A1, A2, A4, A5 (vía `context_retriever`)
 
 **Formato de `agents/CODEBASE_FINGERPRINT.md`:**
 ```markdown
@@ -247,10 +249,11 @@ Para proyectos muy grandes (500+ archivos), el fingerprint completo excede el co
 - "Voy a modificar `ventas/services.py` → dame el patrón de ese módulo específicamente"
 
 **Archivos a crear:**
-- [ ] `tools/context_retriever.py`:
+- [x] `tools/context_retriever.py`:
   - `get_relevant_context(repo_path: str, files_to_touch: list[str]) -> str`
-  - Basado en los paths de archivos previstos en el MASTER_PLAN
-- [ ] Integración en A2, A4, A5 — reciben contexto específico, no el fingerprint completo
+  - Repos pequeños (< 3 000 tokens): devuelve fingerprint completo
+  - Repos grandes: filtra por módulos relevantes, garantiza < 2 000 tokens
+- [x] Integración en A2, A4, A5 — reciben contexto específico, no el fingerprint completo
 
 **DoD:**
 - Sólo activo cuando el fingerprint supera 3000 tokens
@@ -268,12 +271,14 @@ Para proyectos muy grandes (500+ archivos), el fingerprint completo excede el co
 - Al iniciar un nuevo feature, los agentes leen el historial de decisiones
 
 **Archivos a crear:**
-- [ ] `tools/session_memory.py`:
-  - `record_decision(project_id, feature_id, decision_type, description, rationale)`
-  - `record_rollback(project_id, feature_id, reason, files_affected)`
+- [x] `tools/session_memory.py`:
+  - `record_decision(project_id, feature_id, feature_name, decision_type, description, rationale)`
+  - `record_rollback(project_id, feature_id, feature_name, reason, files_affected)`
   - `load_memory(project_id, last_n=10) -> str` — resumen de las últimas N decisiones
-- [ ] Almacenamiento: `data/projects/[project_id]/memory/decisions.jsonl`
-- [ ] Inyección en A0, A1, A2 al inicio de cada feature en modo proyecto
+- [x] Almacenamiento: `data/runs/[project_id]/memory/decisions.jsonl`
+- [x] Inyección en A0, A1, A2 al inicio de cada feature en modo proyecto
+- [x] `record_decision()` llamado en A1 tras generar cada MASTER_PLAN (routing flags)
+- [x] `record_rollback()` llamado en A10 cuando se detectan backups G9
 
 **DoD:**
 - Las decisiones arquitectónicas de features anteriores son visibles en los siguientes
@@ -281,7 +286,7 @@ Para proyectos muy grandes (500+ archivos), el fingerprint completo excede el co
 
 ---
 
-## BLOQUE III — Reducción de Intervención Humana
+## BLOQUE III — Reducción de Intervención Humana ✅ COMPLETADO 2026-05-24
 
 > El Founder sólo debería intervenir cuando el sistema genuinamente no está seguro.
 
@@ -305,16 +310,11 @@ CONFIDENCE 60-84 o RISK MEDIUM   → notifica Telegram, VETO_WINDOW de 30 min
 CONFIDENCE < 60  o RISK HIGH     → interrupt() obligatorio (comportamiento actual)
 ```
 
-**Archivos a modificar:**
-- [ ] `nodes/a1_planificador.py` — agregar al prompt la instrucción de emitir CONFIDENCE_SCORE y RISK_LEVEL; parsear y retornar en state
-- [ ] `state.py` — agregar `confidence_score: int`, `risk_level: str`, `veto_deadline: Optional[str]`
-- [ ] `graph.py` — nuevo router `_route_after_plan()` que implementa la lógica de los 3 casos
-- [ ] `nodes/base.py` — función `notify_veto_window(state, deadline_minutes=30)` vía Telegram
-
-**DoD:**
-- Features pequeños/mecánicos (fix CI, añadir campo, tests) corren solos
-- El Founder recibe en Telegram: "Plan listo: [nombre]. CONFIDENCE 91/HIGH → ejecutando automáticamente"
-  o "Plan listo: [nombre]. CONFIDENCE 72/MEDIUM → tienes 30 min para vetar. Responde VETAR para detener."
+**Archivos modificados:**
+- [x] `nodes/a1_planificador.py` — instrucción en prompt de emitir CONFIDENCE_SCORE/RISK_LEVEL; parsear con regex; retornar en state
+- [x] `state.py` — campos `confidence_score: int`, `risk_level: str`, `veto_deadline: Optional[str]`
+- [x] `graph.py` — router `_route_after_plan()` con 3 ramas: confidence_auto_approve / veto_window / stop_protocol
+- [x] `tools/telegram.py` — función `notify_veto_window(...)` para notificar con resumen y comando `/vetar`
 
 ---
 
@@ -324,15 +324,11 @@ CONFIDENCE < 60  o RISK HIGH     → interrupt() obligatorio (comportamiento act
 En lugar de esperar aprobación activa, el pipeline ejecuta y el Founder puede vetar.
 Invierte la carga: sólo actúas cuando algo está mal, no en cada feature.
 
-**Archivos a modificar:**
-- [ ] `tools/telegram_bot.py` — manejar comando `/vetar [feature_id]` que envía señal de parada
-- [ ] `graph.py` — `pipeline_detenido()` se puede triggear remotamente via Telegram antes de que A2 empiece
-- [ ] Timeout: si no hay respuesta en `VETO_WINDOW_MINUTES` (configurable, default 30), el pipeline continúa
-
-**DoD:**
-- Mensaje Telegram claro con el plan resumido + botón/comando para vetar
-- El veto funciona antes de que empiece A2 (DB Architect)
-- Configurable: `VETO_WINDOW_MINUTES=0` desactiva la ventana (aprobación instantánea)
+**Archivos modificados:**
+- [x] `tools/telegram_bot.py` — comando `/vetar [id]`; auto-aprobación de ventanas expiradas en polling loop
+- [x] `nodes/human_nodes.py` — nodos `confidence_auto_approve` y `veto_window` con interrupt()
+- [x] `graph.py` — `interrupt_before=["veto_window", "qa_escalation"]` en project_mode
+- [x] `config.py` — `VETO_WINDOW_MINUTES = int(os.getenv("VETO_WINDOW_MINUTES", "30"))`
 
 ---
 
@@ -342,14 +338,9 @@ Invierte la carga: sólo actúas cuando algo está mal, no en cada feature.
 Si el PR pasa todos los checks de CI, se hace merge automáticamente sin esperar al Founder.
 El Founder sólo revisa PRs que fallaron CI o que el sistema marcó como RISK HIGH.
 
-**Archivos a modificar:**
-- [ ] `nodes/a1_pr_final.py` — después de crear el PR, si `risk_level == "LOW"` y CI habilitado:
-  `gh pr merge --auto --squash [pr_url]`
-- [ ] `config.py` / `.env` — nueva variable `AUTO_MERGE_ENABLED=false` (opt-in)
-
-**DoD:**
-- Auto-merge sólo activo con `AUTO_MERGE_ENABLED=true` + `risk_level == LOW`
-- El Founder recibe notificación Telegram: "PR mergeado automáticamente: [url]"
+**Archivos modificados:**
+- [x] `nodes/a1_pr_final.py` — `gh pr merge --auto --squash [pr_url]` si `risk_level == "LOW"` y `AUTO_MERGE_ENABLED`
+- [x] `config.py` — `AUTO_MERGE_ENABLED = os.getenv("AUTO_MERGE_ENABLED", "false").lower() == "true"`
 
 ---
 
@@ -532,8 +523,8 @@ Múltiples instancias del `graph.py` corriendo en ramas separadas simultáneamen
 | `tools/learning_memory.py` | I-1 | Extractor de patrones de error + LESSONS_LEARNED |
 | `tools/quality_tracker.py` | I-2 | Métricas de calidad por feature |
 | `tools/fewshot_builder.py` | I-3 | Generación de few-shots desde historial |
-| `tools/context_retriever.py` | II-2 | RAG ligero para contexto dinámico |
-| `tools/session_memory.py` | II-3 | Memoria persistente de decisiones entre sesiones |
+| `tools/context_retriever.py` | II-2 | RAG ligero para contexto dinámico ✅ |
+| `tools/session_memory.py` | II-3 | Memoria persistente de decisiones entre sesiones ✅ |
 | `tools/session_importer.py` | V-2 | Importador de planes de sesiones manuales |
 | `tools/branch_manager.py` | VI-2 | Gestión de branches paralelas |
 | `nodes/merge_coordinator.py` | VI-2 | Resolución de conflictos en paralelismo |

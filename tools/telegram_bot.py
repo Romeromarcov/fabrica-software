@@ -36,6 +36,7 @@ INTERRUPT_LABELS = {
     "checkpoint":               "🔔 Checkpoint",
     "qa_escalation":            "⚠️ Escalación QA",
     "stop_protocol":            "⛔ Stop Protocol",
+    "veto_window":              "⏳ Ventana de Veto",
 }
 
 # Respuestas según tipo e intención (approve / cancel)
@@ -59,6 +60,10 @@ _RESP_MAP: dict[str, dict[str, str]] = {
     "stop_protocol": {
         "approve": "Plan aprobado. Pasa a ejecución.",  # A-02: debe coincidir con FRASE_APROBACION
         "cancel":  "CANCELAR",
+    },
+    "veto_window": {
+        "approve": "CONTINUAR",
+        "cancel":  "VETAR",
     },
 }
 
@@ -159,6 +164,7 @@ _HELP_TEXT = (
     "`/status` — Ver aprobaciones pendientes\n"
     "`/aprobar [id]` — Aprobar el plan/roadmap\n"
     "`/rechazar [id]` — Cancelar el plan\n"
+    "`/vetar [id]` — Vetar un plan en ventana de veto automático\n"
     "`/cambios [id] <feedback>` — Solicitar cambios con texto libre\n"
     "`/feature <repo>: <nombre>` — Crear nuevo feature\n"
     "`/repos` — Ver repositorios disponibles\n"
@@ -273,6 +279,33 @@ def _handle_command(token: str, chat_id: str, text: str) -> None:
                 f"Feedback: _{feedback[:300]}_")
         else:
             _tg_send(token, chat_id, f"❌ Error al escribir respuesta para `{item['id']}`.")
+        return
+
+    # ── /vetar [id] ───────────────────────────────────────────────────────────
+    if cmd == "/vetar":
+        run_id_hint = parts[1] if len(parts) > 1 else None
+        pending = _find_pending()
+        # Filtrar solo los que son veto_window
+        veto_pending = [p for p in pending if p["type"] == "veto_window"]
+        if not veto_pending:
+            # Intentar con todos los pendientes si no hay específicos de veto_window
+            veto_pending = pending
+        item = _resolve_pending_item(run_id_hint, veto_pending)
+        if item is None:
+            if not veto_pending:
+                _tg_send(token, chat_id, "✅ No hay planes en ventana de veto en este momento.")
+            else:
+                lines = ["⚠️ Especifica el ID del plan a vetar:\n"]
+                for p in veto_pending:
+                    lines.append(f"• `{p['id'][:40]}` — {p['name']}")
+                _tg_send(token, chat_id, "\n".join(lines))
+            return
+        if _write_approval(item["id"], "VETAR"):
+            _tg_send(token, chat_id,
+                f"🛑 *Plan vetado*: *{item['name']}*\n"
+                f"El pipeline fue detenido.")
+        else:
+            _tg_send(token, chat_id, f"❌ Error al vetar `{item['id']}`.")
         return
 
     # ── /feature <repo>: <nombre> ─────────────────────────────────────────────
@@ -407,26 +440,71 @@ class TelegramBotWorker:
         self.chat_id    = str(chat_id)
         self.stop_event = stop_event
 
+    def _check_expired_veto_windows(self) -> None:
+        """Auto-aprueba planes cuya ventana de veto ya expiró."""
+        from datetime import datetime, timezone
+        rd = _runs_dir()
+        if not rd.exists():
+            return
+        now = datetime.now(timezone.utc)
+        for run_dir in rd.iterdir():
+            interrupt_file = run_dir / "pending_interrupt_type.txt"
+            if not interrupt_file.exists():
+                continue
+            if interrupt_file.read_text().strip() != "veto_window":
+                continue
+            # Leer veto_expires de metadata
+            meta_path = run_dir / "metadata.json"
+            if not meta_path.exists():
+                continue
+            try:
+                meta = json.loads(meta_path.read_text())
+                expires_str = meta.get("veto_expires", "")
+                if not expires_str:
+                    continue
+                expires = datetime.fromisoformat(expires_str)
+                if expires.tzinfo is None:
+                    expires = expires.replace(tzinfo=timezone.utc)
+                if now >= expires:
+                    # Ventana expirada → auto-aprobar
+                    approval_file = run_dir / "pending_approval.txt"
+                    if not approval_file.exists():
+                        approval_file.write_text("CONTINUAR")
+                        name = meta.get("feature_name", run_dir.name)
+                        _tg_send(self.token, self.chat_id,
+                            f"⏰ *Ventana de veto expirada* — aprobado automáticamente\n"
+                            f"*Feature:* {name}")
+                        logger.info("Bot: veto expirado auto-aprobado → %s", run_dir.name)
+            except Exception as exc:
+                logger.warning("Bot: error revisando veto expirado %s: %s", run_dir.name, exc)
+
     def run(self) -> None:
         logger.info("Telegram bot: iniciando polling (chat_id=%s)", self.chat_id)
-        # Enviar mensaje de arranque
         _tg_send(self.token, self.chat_id,
             "🏭 *Fábrica de Software online*\n"
             "Bot activo. Usa `/ayuda` para ver los comandos disponibles.")
         offset = 0
+        tick = 0
         while not self.stop_event.is_set():
             updates, offset = _tg_get_updates(self.token, offset)
             for update in updates:
                 msg       = update.get("message", {})
                 from_chat = str(msg.get("chat", {}).get("id", ""))
                 if from_chat != self.chat_id:
-                    continue   # Solo acepta mensajes del chat configurado
+                    continue
                 text = msg.get("text", "").strip()
                 if not text.startswith("/"):
-                    continue   # Ignora mensajes que no son comandos
+                    continue
                 try:
                     _handle_command(self.token, self.chat_id, text)
                 except Exception as exc:
                     logger.exception("Bot Telegram: error procesando '%s': %s", text, exc)
                     _tg_send(self.token, self.chat_id, f"❌ Error interno: {exc}")
+            # Revisar veto expirados cada ~2 ciclos de polling (≈60 s)
+            tick += 1
+            if tick % 2 == 0:
+                try:
+                    self._check_expired_veto_windows()
+                except Exception as exc:
+                    logger.warning("Bot: error en check_expired_veto_windows: %s", exc)
         logger.info("Telegram bot: polling detenido")

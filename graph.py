@@ -35,7 +35,7 @@ from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.sqlite import SqliteSaver
 
 from state import FabricaState
-from config import DB_PATH, MAX_QA_ITER_COMPLETO, MAX_QA_ITER_LITE, MAX_SECOPS_ITER, MAX_SANDBOX_ITER
+from config import DB_PATH, MAX_QA_ITER_COMPLETO, MAX_QA_ITER_LITE, MAX_SECOPS_ITER, MAX_SANDBOX_ITER, VETO_WINDOW_MINUTES
 
 # ── Nodos de agentes ──────────────────────────────────────────────────────────
 from nodes.a1_planificador import a1_planificador
@@ -52,10 +52,33 @@ from nodes.a10_code_writer import a10_code_writer
 from nodes.a11_devops      import a11_devops
 
 # ── Nodos humanos ─────────────────────────────────────────────────────────────
-from nodes.human_nodes import stop_protocol, qa_escalation
+from nodes.human_nodes import (
+    stop_protocol, qa_escalation,
+    confidence_auto_approve, veto_window,
+)
 
 
 # ── Routers ───────────────────────────────────────────────────────────────────
+
+def _route_after_plan(state: FabricaState) -> str:
+    """
+    Bloque III: decide el camino de aprobación del MASTER_PLAN.
+    Solo aplica en project_mode; en modo standalone siempre va a stop_protocol.
+
+    confidence >= 85 + risk=LOW   → confidence_auto_approve (sin intervención)
+    confidence >= 60 + risk≠HIGH  → veto_window (aprobación automática tras N min)
+    demás casos                   → stop_protocol (aprobación manual)
+    """
+    if not state.get("project_mode"):
+        return "stop_protocol"
+    conf = state.get("confidence_score", 70)
+    risk = state.get("risk_level", "MEDIUM")
+    if conf >= 85 and risk == "LOW":
+        return "confidence_auto_approve"
+    if conf >= 60 and risk != "HIGH":
+        return "veto_window"
+    return "stop_protocol"
+
 
 def _route_after_approval(state: FabricaState) -> str:
     """
@@ -204,8 +227,10 @@ def build_graph() -> StateGraph:
     g = StateGraph(FabricaState)
 
     # ── Nodos ─────────────────────────────────────────────────────────────────
-    g.add_node("a1_planificador",   a1_planificador)
-    g.add_node("stop_protocol",     stop_protocol)       # ⛔ aprobación del MASTER_PLAN
+    g.add_node("a1_planificador",        a1_planificador)
+    g.add_node("confidence_auto_approve", confidence_auto_approve)  # Bloque III: auto
+    g.add_node("veto_window",             veto_window)              # Bloque III: veto N min
+    g.add_node("stop_protocol",           stop_protocol)            # ⛔ aprobación manual
     g.add_node("a2_db",             a2_db)               # solo modo completo
     g.add_node("a3_mcp",            a3_mcp)              # condicional: needs_mcp=True
     g.add_node("a4_backend",        a4_backend)          # condicional: skip_backend=False
@@ -222,9 +247,39 @@ def build_graph() -> StateGraph:
 
     # ── Flujo ─────────────────────────────────────────────────────────────────
 
-    # 1. PM genera MASTER_PLAN → Stop Protocol (aprobación)
+    # 1. PM genera MASTER_PLAN → router de aprobación (Bloque III)
     g.set_entry_point("a1_planificador")
-    g.add_edge("a1_planificador", "stop_protocol")
+    g.add_conditional_edges(
+        "a1_planificador",
+        _route_after_plan,
+        {
+            "confidence_auto_approve": "confidence_auto_approve",
+            "veto_window":             "veto_window",
+            "stop_protocol":           "stop_protocol",
+        },
+    )
+
+    # 1b. Los tres caminos convergen en _route_after_approval
+    g.add_conditional_edges(
+        "confidence_auto_approve",
+        _route_after_approval,
+        {
+            "completo":      "a2_db",
+            "lite":          "a4_backend",
+            "frontend_only": "a5_frontend",
+            "rechazado":     "pipeline_detenido",
+        },
+    )
+    g.add_conditional_edges(
+        "veto_window",
+        _route_after_approval,
+        {
+            "completo":      "a2_db",
+            "lite":          "a4_backend",
+            "frontend_only": "a5_frontend",
+            "rechazado":     "pipeline_detenido",
+        },
+    )
 
     # 2. Aprobado → infraestructura (completo) | código directo (lite) | frontend-only | fin
     g.add_conditional_edges(
@@ -350,12 +405,13 @@ def compile_graph():
 
 def compile_graph_project_mode():
     """
-    Modo project loop: el PM no espera aprobación humana (A0 ya dio la instrucción).
-    Solo interrumpe ante escalaciones que requieren intervención humana.
+    Modo project loop: el PM no espera aprobación manual (A0 ya dio la instrucción).
+    Interrumpe ante: veto_window (Founder puede vetar) y escalaciones QA.
+    confidence_auto_approve no necesita interrupt_before — aprueba sin suspender.
     """
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     checkpointer = SqliteSaver.from_conn_string(str(DB_PATH))
     return build_graph().compile(
         checkpointer=checkpointer,
-        interrupt_before=["qa_escalation"],
+        interrupt_before=["veto_window", "qa_escalation"],
     )

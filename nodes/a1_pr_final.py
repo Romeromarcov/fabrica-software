@@ -32,9 +32,9 @@ from tools.git_tools import (
     push_branch,
     create_pr,
 )
-from tools.telegram import notify_feature_done
+from tools.telegram import notify_feature_done, send_message
 from tools.quality_tracker import record_feature_metrics, format_quality_summary
-from config import MODEL_PM
+from config import MODEL_PM, AUTO_MERGE_ENABLED
 
 logger = logging.getLogger(__name__)
 
@@ -273,6 +273,27 @@ Al final escribe: `✅ CICLO COMPLETADO`
 
     except Exception as exc:
         logger.exception("Error al crear commit/PR: %s", exc)
+
+    # ── Bloque III: auto-merge si risk=LOW y AUTO_MERGE_ENABLED ──────────────
+    if pr_url and AUTO_MERGE_ENABLED and state.get("risk_level") == "LOW":
+        try:
+            import subprocess as _sp
+            result = _sp.run(
+                ["gh", "pr", "merge", "--auto", "--squash", pr_url],
+                capture_output=True, text=True, timeout=30,
+            )
+            if result.returncode == 0:
+                logger.info("Auto-merge habilitado para PR: %s", pr_url)
+                send_message(
+                    f"🔀 *Auto-merge habilitado*\n"
+                    f"*Feature:* {state['feature_name']}\n"
+                    f"*PR:* {pr_url}\n"
+                    f"Se fusionará automáticamente cuando pasen los checks de CI."
+                )
+            else:
+                logger.warning("Auto-merge falló: %s", result.stderr[:200])
+        except Exception as _am_exc:
+            logger.warning("Auto-merge error: %s", _am_exc)
 
     # ── Notificación Telegram ─────────────────────────────────────────────────
     notify_feature_done(

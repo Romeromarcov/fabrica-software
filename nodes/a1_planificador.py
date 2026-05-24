@@ -12,6 +12,26 @@ def a1_planificador(state: FabricaState) -> dict:
     repo_path = state["repo_path"]
     is_auto   = state["mode"] == "auto"
 
+    # II-1/II-2: Fingerprint del codebase (contexto real del repo)
+    fingerprint_block = ""
+    if repo_path:
+        try:
+            from tools.context_retriever import get_relevant_context
+            fingerprint_block = get_relevant_context(repo_path)
+        except Exception as _fp_exc:
+            import logging as _log
+            _log.getLogger(__name__).warning("context_retriever en A1: %s", _fp_exc)
+
+    # II-3: Memoria de sesiones anteriores
+    session_memory_block = ""
+    if state.get("project_id"):
+        try:
+            from tools.session_memory import load_memory
+            session_memory_block = load_memory(state["project_id"])
+        except Exception as _mem_exc:
+            import logging as _log
+            _log.getLogger(__name__).warning("session_memory en A1: %s", _mem_exc)
+
     # En modo proyecto, inyectar spec exacta de A0 + instrucciones correctivas
     project_context = ""
     if state.get("project_mode") and state.get("project_id"):
@@ -85,7 +105,7 @@ El Founder ha solicitado el siguiente feature para el proyecto **{repo_name}**:
 **Nombre:** {state['feature_name']}
 **Modo configurado:** {state['mode'].upper()}
 **Repositorio:** {repo_path}
-{project_context}
+{fingerprint_block}{session_memory_block}{project_context}
 
 Tu tarea:
 1. Analiza la naturaleza del feature y los módulos afectados.
@@ -105,6 +125,14 @@ Tu tarea:
    - Nuevo endpoint REST + cambio de modelo → NEEDS_MCP: false, SKIP_BACKEND: false, SKIP_FRONTEND: true
    - Nuevo componente React sin backend → NEEDS_MCP: false, SKIP_BACKEND: true, SKIP_FRONTEND: false
    - Feature completo con MCP → NEEDS_MCP: true, SKIP_BACKEND: false, SKIP_FRONTEND: false
+
+7. **CONFIANZA Y RIESGO** — Justo después de los ROUTING FLAGS escribe estas 2 líneas EXACTAMENTE:
+
+   CONFIDENCE_SCORE: [0-100]  → tu nivel de confianza en que el plan es correcto y completo
+   RISK_LEVEL: LOW|MEDIUM|HIGH → riesgo de regresiones o efectos secundarios
+     LOW: cambio aislado, sin migraciones, sin cambios de API pública
+     MEDIUM: toca módulos compartidos o requiere coordinación entre agentes
+     HIGH: migraciones de BD, cambios de API pública, refactors amplios, operaciones irreversibles
 
 IMPORTANTE: NO generes código de implementación. Solo el plan.
 """
@@ -140,18 +168,47 @@ IMPORTANTE: NO generes código de implementación. Solo el plan.
     if skip_backend and skip_frontend:
         skip_backend = skip_frontend = False
 
+    # III-1: Parsear CONFIDENCE_SCORE y RISK_LEVEL
+    _conf_m = re.search(r"CONFIDENCE_SCORE:\s*(\d+)", output, re.IGNORECASE)
+    _risk_m = re.search(r"RISK_LEVEL:\s*(LOW|MEDIUM|HIGH)", output, re.IGNORECASE)
+    confidence_score = int(_conf_m.group(1)) if _conf_m else 70
+    confidence_score = max(0, min(100, confidence_score))  # clamp 0-100
+    risk_level = _risk_m.group(1).upper() if _risk_m else "MEDIUM"
+
     path = save_master_plan(state["feature_id"], output)
     save_run_metadata(state["feature_id"], {
-        "feature_name":  state["feature_name"],
-        "repo_name":     repo_name,
-        "mode":          resolved_mode,
-        "mode_was_auto": is_auto,
-        "needs_mcp":     needs_mcp,
-        "skip_backend":  skip_backend,
-        "skip_frontend": skip_frontend,
-        "started_at":    datetime.utcnow().isoformat(),
+        "feature_name":    state["feature_name"],
+        "repo_name":       repo_name,
+        "mode":            resolved_mode,
+        "mode_was_auto":   is_auto,
+        "needs_mcp":       needs_mcp,
+        "skip_backend":    skip_backend,
+        "skip_frontend":   skip_frontend,
+        "confidence_score": confidence_score,
+        "risk_level":      risk_level,
+        "started_at":      datetime.utcnow().isoformat(),
         "master_plan_path": path,
     })
+
+    # II-3: Registrar decisión de routing/modo para la memoria de sesión
+    if state.get("project_id"):
+        try:
+            from tools.session_memory import record_decision
+            routing_summary = (
+                f"modo={resolved_mode}, needs_mcp={needs_mcp}, "
+                f"skip_backend={skip_backend}, skip_frontend={skip_frontend}"
+            )
+            record_decision(
+                project_id=state["project_id"],
+                feature_id=state["feature_id"],
+                feature_name=state["feature_name"],
+                decision_type="routing",
+                description=f"Feature '{state['feature_name']}' planificado: {routing_summary}",
+                rationale=f"Decidido por A1 en modo {'auto' if is_auto else 'manual'}",
+            )
+        except Exception as _rec_exc:
+            import logging as _log
+            _log.getLogger(__name__).warning("session_memory record en A1: %s", _rec_exc)
 
     return {
         "master_plan":      output,
@@ -160,6 +217,8 @@ IMPORTANTE: NO generes código de implementación. Solo el plan.
         "needs_mcp":        needs_mcp,
         "skip_backend":     skip_backend,
         "skip_frontend":    skip_frontend,
+        "confidence_score": confidence_score,
+        "risk_level":       risk_level,
         "current_agent":    "a1_planificador",
         "cost_entries":     [cost],
     }
