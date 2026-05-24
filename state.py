@@ -26,6 +26,7 @@ class FabricaState(TypedDict):
     # ── Modo proyecto (loop autónomo) ─────────────────────────────────────────
     project_mode: bool          # True = corriendo dentro del Project Loop
     project_id: Optional[str]   # ID del proyecto padre
+    a0_feature_spec: Optional[str]  # Spec exacta del A0 para este feature (name+desc+phase+criteria)
 
     # ── Fase A: planificación ─────────────────────────────────────────────────
     master_plan: Optional[str]        # Contenido completo del MASTER_PLAN
@@ -107,6 +108,7 @@ def initial_state(
         repo_path=repo_path,
         project_mode=project_mode,
         project_id=project_id,
+        a0_feature_spec=None,
         master_plan=None,
         master_plan_path=None,
         founder_approval=False,

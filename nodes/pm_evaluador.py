@@ -48,7 +48,69 @@ def _read_run_outputs(feature_id: str) -> str:
     if a6_path.exists():
         parts.append(f"\n### REPORTE REFACTOR (A6)\n{a6_path.read_text(encoding='utf-8')[:1000]}")
 
+    # Code Writer output (qué archivos se escribieron)
+    a10_path = run_dir / "output_a10_code_writer.md"
+    if a10_path.exists():
+        parts.append(f"\n### ARCHIVOS ESCRITOS (A10)\n{a10_path.read_text(encoding='utf-8')[:500]}")
+
     return "\n\n".join(parts) if parts else "Sin outputs disponibles."
+
+
+def _read_written_files_from_disk(feature_id: str, repo_path: str) -> str:
+    """
+    Lee el contenido real de los archivos escritos al disco por A10.
+    Primario para verificar cumplimiento — no depende de OpenClaw.
+    """
+    from pathlib import Path as _Path
+
+    run_dir = RUNS_DIR / feature_id
+    meta_path = run_dir / "metadata.json"
+
+    # Obtener lista de archivos escritos desde metadata (guardados por A1 PR Final)
+    files_written: list[str] = []
+    if meta_path.exists():
+        try:
+            meta = json.loads(meta_path.read_text())
+            # files_written puede estar en metadata si A1 lo guardó
+            files_written = meta.get("files_written", [])
+        except Exception:
+            pass
+
+    # Si no hay lista en metadata, intentar leerla del output de A10
+    if not files_written:
+        a10_path = run_dir / "output_a10_code_writer.md"
+        if a10_path.exists():
+            content = a10_path.read_text(encoding="utf-8")
+            # Parsear las líneas "- `ruta/archivo.ext`"
+            for line in content.splitlines():
+                m = re.search(r"`([^`]+\.[a-zA-Z0-9]+)`", line)
+                if m and "/" in m.group(1):
+                    files_written.append(m.group(1))
+
+    if not files_written or not repo_path:
+        return ""
+
+    _MAX_PER_FILE = 800
+    _MAX_FILES    = 20
+    lines = [f"## ARCHIVOS ESCRITOS AL DISCO ({len(files_written)} total)\n"]
+
+    for rel_path in files_written[:_MAX_FILES]:
+        full = _Path(repo_path) / rel_path
+        if full.exists():
+            try:
+                content = full.read_text(encoding="utf-8", errors="replace")
+                preview = content[:_MAX_PER_FILE]
+                extra   = f"\n…[+{len(content)-_MAX_PER_FILE} chars]" if len(content) > _MAX_PER_FILE else ""
+                lines.append(f"### `{rel_path}`\n```\n{preview}{extra}\n```\n")
+            except Exception as e:
+                lines.append(f"### `{rel_path}` — error al leer: {e}\n")
+        else:
+            lines.append(f"### `{rel_path}` — ⚠️ no encontrado en disco\n")
+
+    if len(files_written) > _MAX_FILES:
+        lines.append(f"_…y {len(files_written)-_MAX_FILES} archivo(s) más._\n")
+
+    return "\n".join(lines)
 
 
 def pm_evaluador(state: ProjectState) -> dict:
@@ -63,21 +125,25 @@ def pm_evaluador(state: ProjectState) -> dict:
     feature_id = feature.get("feature_id", "")
     run_summary = _read_run_outputs(feature_id) if feature_id else "Sin feature_id"
 
-    # ── Construir tarea del evaluador ─────────────────────────────────────────
+    # ── Leer archivos reales del disco (nativo, siempre disponible) ──────────
+    real_files_context = ""
+    if feature_id:
+        real_files_context = _read_written_files_from_disk(feature_id, state.get("repo_path", ""))
+
+    # ── Instrucción de verificación: OpenClaw refuerza la lectura nativa ──────
     verification_instruction = ""
     if USE_OPENCLAW:
         verification_instruction = f"""
-VERIFICACIÓN EN EL REPOSITORIO REAL:
-Usa tus herramientas de filesystem para verificar en {state['repo_path']} que:
-1. Los archivos mencionados en el PR realmente existen y tienen contenido
-2. Los tests pasan (si puedes ejecutar `python manage.py test` o `pytest`)
-3. No hay imports rotos ni errores de sintaxis evidentes
-
-Reporta exactamente qué encontraste (rutas reales, nombres de funciones clave).
+VERIFICACIÓN ADICIONAL CON OPENCLAW:
+Los archivos ya están listados abajo (lectura nativa), pero también puedes usar
+tus herramientas de filesystem en {state['repo_path']} para verificar:
+- Que los tests pasan: `python manage.py test` o `pytest`
+- Imports correctos y sin errores de sintaxis
+- Integración entre archivos (que los imports entre módulos funcionen)
 """
     else:
         verification_instruction = """
-NOTA: OpenClaw no está activo. Basa tu evaluación en los outputs del pipeline.
+NOTA: OpenClaw no activo — usando lectura nativa de archivos (ver sección ARCHIVOS EN DISCO).
 """
 
     # Calcular progreso
@@ -104,8 +170,10 @@ y mantener el norte del proyecto.
 **Criterios de aceptación:**
 {feature['acceptance_criteria']}
 
-## OUTPUTS DEL PIPELINE
+## OUTPUTS DEL PIPELINE (logs del proceso)
 {run_summary}
+
+{real_files_context}
 
 {verification_instruction}
 

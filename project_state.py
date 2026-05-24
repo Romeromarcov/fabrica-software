@@ -53,8 +53,12 @@ class ProjectState(TypedDict):
     suggestions: list[str]                               # Sugerencias pendientes de aprobación
     evaluation_history: Annotated[list[dict], operator.add]
 
+    # ── A0 Revisor (auditoría arquitectónica periódica) ───────────────────────
+    arch_review_last_at_count: int        # Nº de features completados en la última revisión A0
+    arch_review_history: Annotated[list[dict], operator.add]  # Historial de revisiones A0
+
     # ── Estado global ─────────────────────────────────────────────────────────
-    project_status: Literal["planning", "awaiting_approval", "running", "paused", "completed", "failed"]
+    project_status: Literal["planning", "awaiting_approval", "running", "paused", "completed", "failed", "arch_review_paused"]
     progress_pct: float
 
     # ── Control ───────────────────────────────────────────────────────────────
@@ -89,6 +93,8 @@ def initial_project_state(
         failed_runs=[],
         suggestions=[],
         evaluation_history=[],
+        arch_review_last_at_count=0,
+        arch_review_history=[],
         project_status="planning",
         progress_pct=0.0,
         errors=[],

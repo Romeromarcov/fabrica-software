@@ -3,8 +3,15 @@ Grafo del Project Loop — orquesta múltiples runs del pipeline de features.
 
 Flujo:
   A0 (Arquitecto) → Human aprueba roadmap → LOOP {
-    pick_next_feature → run_feature_pipeline → pm_evaluador → check_backlog
+    pick_next_feature → run_feature_pipeline → pm_evaluador → advance_index
+    → [arch_review? cada ARCH_REVIEW_INTERVAL features] → a0_revisor
+    → check_backlog
   } → present_suggestions → project_complete (o loop de nuevo si hay más)
+
+Dos niveles de control de calidad:
+  • pm_evaluador: "¿cumplió este feature lo que A1 planificó?" (cada feature)
+  • a0_revisor:   "¿sigue el proyecto alineado con la visión arquitectónica de A0?"
+                  (cada N features configurable, default 3)
 """
 from __future__ import annotations
 import json
@@ -25,6 +32,7 @@ logger = logging.getLogger(__name__)
 # ── Nodos de agente ───────────────────────────────────────────────────────────
 
 from nodes.a0_arquitecto import a0_arquitecto
+from nodes.a0_revisor    import a0_revisor
 from nodes.pm_evaluador  import pm_evaluador
 
 
@@ -134,10 +142,19 @@ def run_feature_pipeline(state: ProjectState) -> dict:
         project_id=state["project_id"],
     )
 
-    # Añadir criterios de aceptación como contexto en el feature_name
+    # Construir spec completa del A0 para este feature (G4/G5 anti-alucinaciones)
+    a0_spec = (
+        f"Nombre: {feature['name']}\n"
+        f"Descripción: {feature.get('description', '')}\n"
+        f"Fase: {feature.get('phase', '')}\n"
+        f"Criterios de aceptación: {feature.get('acceptance_criteria', '')}\n"
+        f"Modo sugerido: {feature.get('suggested_mode', 'auto')}"
+    )
+
     feat_state = {
         **feat_state,
-        "feature_name": f"{feature['name']} — {feature.get('acceptance_criteria', '')[:100]}",
+        "feature_name":    feature["name"],  # nombre limpio, sin truncar
+        "a0_feature_spec": a0_spec,          # spec completa de A0, inyectada en A1
     }
 
     # Compilar y ejecutar
@@ -345,21 +362,62 @@ def _route_after_approval(state: ProjectState) -> str:
     return "iniciar_loop"
 
 
-def _route_check_backlog(state: ProjectState) -> str:
-    """¿Hay más features pendientes en el backlog?"""
+def _route_after_advance(state: ProjectState) -> str:
+    """
+    Después de advance_index: decide si hacer auditoría A0, seguir al siguiente feature,
+    o ir a la pantalla de sugerencias finales.
+
+    Prioridad:
+      1. Sin features pendientes → fin_backlog (independiente de arch review)
+      2. Proyecto pausado por arch review → fin_backlog (espera resolución)
+      3. Arch review due → arch_review
+      4. Continuar normalmente → continuar
+    """
+    from config import ARCH_REVIEW_INTERVAL
+
     backlog = state.get("backlog", [])
-    # BUG-005: buscar en TODO el backlog, no solo desde current_feature_index
     has_pending = any(f["status"] == "pending" for f in backlog)
 
-    if has_pending:
-        return "continuar"
+    # Sin pendientes o proyecto pausado → fin
+    if not has_pending:
+        return "fin_backlog"
+    if state.get("project_status") == "arch_review_paused":
+        return "fin_backlog"
 
-    # ¿Hubo algún bloqueante duro (feature fallido sin qa_escalation resuelta)?
-    failed = [f for f in backlog if f["status"] == "failed"]
-    if failed:
-        logger.warning("%d features fallidos en el proyecto", len(failed))
+    # Verificar si corresponde auditoría arquitectónica
+    if ARCH_REVIEW_INTERVAL > 0:
+        completed_count = sum(1 for f in backlog if f["status"] in ("completed", "failed"))
+        last_review_at  = state.get("arch_review_last_at_count", 0)
+        since_review    = completed_count - last_review_at
 
-    return "fin_backlog"
+        # También triggear al final de cada fase
+        current_idx = state.get("current_feature_index", 1) - 1
+        phase_done  = False
+        if 0 <= current_idx < len(backlog):
+            phase = backlog[current_idx].get("phase", "")
+            if phase:
+                phase_features = [f for f in backlog if f.get("phase") == phase]
+                phase_done = all(f["status"] in ("completed", "failed") for f in phase_features)
+
+        if since_review >= ARCH_REVIEW_INTERVAL or phase_done:
+            return "arch_review"
+
+    return "continuar"
+
+
+def _route_after_arch_review(state: ProjectState) -> str:
+    """Después de a0_revisor: continuar el loop o pausar si hay derivación crítica."""
+    if state.get("project_status") == "arch_review_paused":
+        return "fin_backlog"  # Pausa solicitada por Founder
+    has_pending = any(f["status"] == "pending" for f in state.get("backlog", []))
+    return "continuar" if has_pending else "fin_backlog"
+
+
+def _route_check_backlog(state: ProjectState) -> str:
+    """Mantener por compatibilidad — ahora usamos _route_after_advance."""
+    backlog = state.get("backlog", [])
+    has_pending = any(f["status"] == "pending" for f in backlog)
+    return "continuar" if has_pending else "fin_backlog"
 
 
 def _route_after_suggestions(state: ProjectState) -> str:
@@ -380,6 +438,7 @@ def build_project_graph() -> StateGraph:
     g.add_node("run_feature_pipeline", run_feature_pipeline)
     g.add_node("pm_evaluador",         pm_evaluador)
     g.add_node("advance_index",        advance_index)
+    g.add_node("a0_revisor",           a0_revisor)       # Auditoría arquitectónica periódica
     g.add_node("present_suggestions",  present_suggestions)
     g.add_node("project_complete",     project_complete)
 
@@ -402,9 +461,21 @@ def build_project_graph() -> StateGraph:
     g.add_edge("run_feature_pipeline", "pm_evaluador")
     g.add_edge("pm_evaluador",         "advance_index")
 
+    # Después de advance_index: revisar arquitectura o continuar
     g.add_conditional_edges(
         "advance_index",
-        _route_check_backlog,
+        _route_after_advance,
+        {
+            "continuar":    "pick_next_feature",   # Loop normal
+            "arch_review":  "a0_revisor",          # Auditoría A0 cada N features
+            "fin_backlog":  "present_suggestions",
+        },
+    )
+
+    # Después de a0_revisor: continuar o pausar (derivación crítica)
+    g.add_conditional_edges(
+        "a0_revisor",
+        _route_after_arch_review,
         {
             "continuar":   "pick_next_feature",
             "fin_backlog": "present_suggestions",
@@ -416,7 +487,7 @@ def build_project_graph() -> StateGraph:
         "present_suggestions",
         _route_after_suggestions,
         {
-            "continuar_loop": "pick_next_feature",   # Loop con nuevos features
+            "continuar_loop": "pick_next_feature",   # Founder añadió más features
             "cerrar":         "project_complete",
         },
     )
@@ -431,5 +502,9 @@ def compile_project_graph():
     checkpointer = SqliteSaver.from_conn_string(str(DB_PATH))
     return build_project_graph().compile(
         checkpointer=checkpointer,
-        interrupt_before=["human_approve_roadmap", "present_suggestions"],
+        interrupt_before=[
+            "human_approve_roadmap",  # ⛔ Founder aprueba roadmap inicial
+            "present_suggestions",    # ⛔ Founder decide continuar/cerrar al vaciar backlog
+            # Nota: a0_revisor usa interrupt() interno solo en DERIVACION_CRITICA
+        ],
     )

@@ -12,24 +12,61 @@ def a1_planificador(state: FabricaState) -> dict:
     repo_path = state["repo_path"]
     is_auto   = state["mode"] == "auto"
 
-    # En modo proyecto, el roadmap ya fue aprobado — añadirlo como contexto
+    # En modo proyecto, inyectar spec exacta de A0 + instrucciones correctivas
     project_context = ""
     if state.get("project_mode") and state.get("project_id"):
         from tools.file_tools import RUNS_DIR
         import json
+
+        # 1. Spec exacta del A0 para este feature (completa, sin truncar)
+        a0_spec = state.get("a0_feature_spec", "")
+        if a0_spec:
+            project_context += f"""
+⚠️ ESPECIFICACIÓN ORIGINAL DEL AGENTE 0 PARA ESTE FEATURE:
+---
+{a0_spec}
+---
+Tu MASTER_PLAN DEBE implementar EXACTAMENTE estos criterios de aceptación.
+No amplíes ni reduzcas el scope sin justificación explícita.
+"""
+
+        # 2. Roadmap del proyecto (contexto macro, primeros 2000 chars)
         proj_meta_path = RUNS_DIR / state["project_id"] / "metadata.json"
         if proj_meta_path.exists():
-            meta = json.loads(proj_meta_path.read_text())
-            roadmap = meta.get("roadmap", "")
-            if roadmap:
-                project_context = f"""
-CONTEXTO DEL PROYECTO (ROADMAP aprobado por el Founder):
+            try:
+                meta = json.loads(proj_meta_path.read_text())
+                roadmap = meta.get("roadmap", "")
+                if roadmap:
+                    project_context += f"""
+ROADMAP DEL PROYECTO (contexto macro):
 ---
-{roadmap[:3000]}
+{roadmap[:2000]}
 ---
-Este feature forma parte del roadmap anterior. Tu MASTER_PLAN debe ser coherente
-con la arquitectura y decisiones ya tomadas en el roadmap.
 """
+            except Exception:
+                pass
+
+        # 3. Instrucciones correctivas del A0 Revisor (si las hay)
+        # Las instrucciones se guardan en suggestions con prefijo [A0_INST]
+        # No las tenemos en FabricaState, pero las podemos leer de metadata del proyecto
+        if proj_meta_path.exists():
+            try:
+                meta = json.loads(proj_meta_path.read_text())
+                # Buscar la revisión arquitectónica más reciente con instrucciones para A1
+                for key, val in meta.items():
+                    if key.startswith("arch_review_") and isinstance(val, dict):
+                        a1_inst = val.get("a1_instructions", "")
+                        if a1_inst:
+                            project_context += f"""
+⚠️ INSTRUCCIONES DEL ARQUITECTO (A0 Revisor — correcciones detectadas):
+---
+{a1_inst}
+---
+Estas instrucciones son OBLIGATORIAS para este y los siguientes features.
+"""
+                            break  # solo las más recientes
+            except Exception:
+                pass
 
     mode_instruction = ""
     if is_auto:

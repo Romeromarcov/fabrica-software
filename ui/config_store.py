@@ -45,6 +45,8 @@ DEFAULTS = {
     "MAX_SECOPS_ITER":            "2",
     "MAX_SANDBOX_ITER":           "2",
     "CHECKPOINT_TIMEOUT_SECONDS": "1800",
+    # Auditoría Arquitectónica (A0 Revisor)
+    "ARCH_REVIEW_INTERVAL":       "3",    # 0 = desactivado; default: cada 3 features
     # Agente de Noticias — configuración completa
     "NEWS_AGENT_ENABLED":  "true",
     "NEWS_AGENT_HOUR":     "8",

@@ -60,6 +60,7 @@ MODEL_A8 = os.getenv("MODEL_A8", "claude-sonnet-4-6") # A8 SecOps
 MODEL_A9  = "no-llm"                                         # A9 Sandbox — sin LLM
 MODEL_A10 = "no-llm"                                         # A10 Code Writer — sin LLM
 MODEL_A11 = os.getenv("MODEL_A11", "claude-sonnet-4-6")     # A11 DevOps — Anthropic
+MODEL_A0_REVISOR = MODEL_A0                                  # A0 Revisor usa el mismo modelo que A0
 
 MODEL_PM       = MODEL_A1
 MODEL_STANDARD = "claude-sonnet-4-6"
@@ -75,6 +76,10 @@ MAX_QA_ITER_LITE           = int(os.getenv("MAX_QA_ITER_LITE",           "2"))
 MAX_SECOPS_ITER            = int(os.getenv("MAX_SECOPS_ITER",            "2"))
 MAX_SANDBOX_ITER           = int(os.getenv("MAX_SANDBOX_ITER",           "2"))
 CHECKPOINT_TIMEOUT_SECONDS = int(os.getenv("CHECKPOINT_TIMEOUT_SECONDS", "1800"))
+
+# ── Auditoría arquitectónica (A0 Revisor) ─────────────────────────────────────
+# Cada cuántos features completados corre el A0 Revisor (0 = desactivado)
+ARCH_REVIEW_INTERVAL = int(os.getenv("ARCH_REVIEW_INTERVAL", "3"))
 
 # ── Agente de Noticias (independiente de la Fábrica) ─────────────────────────
 NEWS_AGENT_ENABLED = os.getenv("NEWS_AGENT_ENABLED", "true").lower() == "true"
