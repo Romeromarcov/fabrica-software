@@ -487,14 +487,16 @@ _MAX_UPLOAD_SIZE_MB = 10
 @app.post("/project/new")
 async def start_project(
     project_name: str = Form(...),
-    project_brief: str = Form(...),
+    project_brief: str = Form(""),
     repo_name: str = Form(...),
     is_new_project: str = Form("false"),
+    audit_mode: str = Form("false"),
     files: List[UploadFile] = File(default=[]),
 ):
     if not project_name.strip():
         raise HTTPException(400, "El nombre del proyecto no puede estar vacío")
-    if not project_brief.strip():
+    _is_audit = audit_mode.lower() in ("true", "1", "on")
+    if not _is_audit and not project_brief.strip():
         raise HTTPException(400, "El brief del proyecto no puede estar vacío")
 
     project_id = (
@@ -528,13 +530,16 @@ async def start_project(
     (RUNS_DIR / project_id).mkdir(parents=True, exist_ok=True)
     (RUNS_DIR / project_id / "process.pid").write_text("starting")
 
-    is_new = is_new_project.lower() in ("true", "1", "on")
+    is_new   = is_new_project.lower() in ("true", "1", "on")
+    is_audit = audit_mode.lower() in ("true", "1", "on")
+    # brief vacío → placeholder para el audit (A0 lo ignora y usa el código)
+    brief_arg = project_brief.strip() or f"Onboarding de {repo_name.strip()}"
     cmd = [
         sys.executable, "cli.py", "new-project",
         project_name.strip(),
-        project_brief.strip(),
+        brief_arg,
         "--repo", repo_name.strip(),
-    ] + (["--new"] if is_new else [])
+    ] + (["--new"] if is_new else []) + (["--audit"] if is_audit else [])
 
     subprocess.Popen(
         cmd,
@@ -546,6 +551,59 @@ async def start_project(
     )
 
     return RedirectResponse(f"/project/{project_id}", status_code=303)
+
+
+@app.post("/api/projects/{project_id}/import_sessions")
+async def import_sessions(project_id: str, file: UploadFile = File(...)):
+    """
+    V-2: Importa un archivo .md de sesiones manuales y añade los features
+    detectados al backlog del proyecto.
+    """
+    import re as _re
+    if not file.filename or not file.filename.endswith(".md"):
+        raise HTTPException(400, "Solo se aceptan archivos .md")
+
+    content_bytes = await file.read()
+    if len(content_bytes) > 2 * 1024 * 1024:
+        raise HTTPException(400, "Archivo demasiado grande (máx. 2 MB)")
+
+    md_content = content_bytes.decode("utf-8", errors="replace")
+
+    try:
+        from tools.session_importer import parse_session_plan
+        features = parse_session_plan(md_content)
+    except Exception as exc:
+        raise HTTPException(500, f"Error al parsear el plan de sesiones: {exc}")
+
+    if not features:
+        return {"ok": False, "message": "No se detectaron features en el archivo", "count": 0}
+
+    # Leer metadata actual del proyecto y añadir los features al backlog
+    meta_path = RUNS_DIR / project_id / "metadata.json"
+    if not meta_path.exists():
+        raise HTTPException(404, f"Proyecto {project_id!r} no encontrado")
+
+    try:
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        current_backlog = meta.get("backlog", [])
+        # Añadir solo los que no estén duplicados por nombre
+        existing_names = {f.get("name", "").lower() for f in current_backlog}
+        added = []
+        for f in features:
+            if f["name"].lower() not in existing_names:
+                current_backlog.append(f)
+                added.append(f["name"])
+        meta["backlog"] = current_backlog
+        meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception as exc:
+        raise HTTPException(500, f"Error al actualizar el backlog: {exc}")
+
+    return {
+        "ok": True,
+        "count": len(added),
+        "added": added,
+        "message": f"{len(added)} features importados al backlog",
+    }
 
 
 @app.get("/project/{project_id}", response_class=HTMLResponse)

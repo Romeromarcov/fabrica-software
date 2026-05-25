@@ -402,53 +402,36 @@ Cada PR incluye sección de post-mortem completa generada por `_build_extended_p
 
 ---
 
-### V-1 — A0 en Modo AUDIT
+### V-1 — A0 en Modo AUDIT ✅
 
-**Qué hace:**
-Nueva modalidad de A0 que, en lugar de diseñar desde cero, audita el estado actual del proyecto
-y genera el backlog desde la realidad del código, no desde un brief.
-
-**Flujo:**
+**Flujo implementado:**
 ```
-Usuario: "incorpora el proyecto Omni ERP"
+Usuario selecciona "Onboarding Auditado" en la UI
   → A0 modo AUDIT:
-     1. Corre el Agente Indexador (II-1) para leer todo el repo
-     2. Lee documentación existente (ADRs, CTFs, README, PLAN.md)
-     3. Identifica: qué existe y funciona / qué está incompleto / qué no existe
-     4. Genera backlog ordenado por dependencias y urgencia
-     5. Propone PROJECT_CONTEXT.md + DECISION_LOG.md basado en lo que encontró
-  → Founder valida/ajusta el backlog (única intervención)
-  → Pipeline continúa feature por feature desde ahí
+     1. Lee fingerprint completo del repo (II-1)
+     2. Lee docs existentes: README.md, docs/, agents/*.md, CHANGELOG.md
+     3. Audita: módulos implementados / deuda técnica / gaps de funcionalidad
+     4. Genera agents/PROJECT_CONTEXT.md desde código real (no template)
+     5. Genera agents/DECISION_LOG.md reconstruido desde el código
+     6. Genera backlog JSON priorizado: deuda técnica → gaps → mejoras
+  → Founder valida el backlog (única intervención)
+  → Pipeline continúa feature por feature
 ```
 
-**Archivos a crear/modificar:**
-- [ ] `nodes/a0_arquitecto.py` — agregar rama `if mode == "audit":`
-- [ ] `graph_project.py` — nuevo nodo `a0_audit` al inicio del grafo si `is_new == False`
-- [ ] `ui/server.py` — endpoint para lanzar proyecto en modo audit con repo existente
-- [ ] `ui/templates/new_project.html` — opción "Continuar proyecto existente"
-
-**DoD:**
-- El Founder puede apuntar a un repo existente y obtener un backlog listo en < 5 min
-- El backlog generado refleja el estado real del código (no el del README desactualizado)
-- La primera intervención humana es validar ese backlog, no crear documentación
+**Archivos modificados:**
+- [x] `nodes/a0_arquitecto.py` — función `_read_existing_docs()` + rama `if audit_mode:` con prompt profundo; extrae PROJECT_CONTEXT y DECISION_LOG de la respuesta del LLM con delimitadores ```project_context y ```decision_log
+- [x] `project_state.py` — campo `audit_mode: bool`
+- [x] `cli.py` — flag `--audit` en `new-project`
+- [x] `ui/server.py` — acepta `audit_mode` en `POST /project/new`; brief es opcional en audit
+- [x] `ui/templates/new_project.html` — tercer radio "Onboarding Auditado" con nota contextual y lógica JS
 
 ---
 
-### V-2 — Migración de Sesiones Manuales a Features de Fábrica
+### V-2 — Migración de Sesiones Manuales a Features de Fábrica ✅
 
-**Qué hace:**
-Parsea documentos de sesiones previas (como `SESION_12_RESUMEN.md`) y los convierte
-en features del backlog con sus criterios de aceptación ya definidos.
-
-**Archivos a crear:**
-- [ ] `tools/session_importer.py`:
-  - `parse_session_plan(md_content: str) -> list[FeatureTask]`
-  - Detecta tablas de sesiones, objetivos, DoDs y los mapea al formato `FeatureTask`
-- [ ] `ui/server.py` — endpoint `POST /projects/{id}/import_sessions` que acepta un .md
-
-**DoD:**
-- El usuario puede subir su `SESION_12_RESUMEN.md` y obtener el backlog de las 13 sesiones
-  ya convertido a features de Fábrica, listo para ejecutar
+**Archivos creados/modificados:**
+- [x] `tools/session_importer.py` — `parse_session_plan(md: str) -> list[ImportedFeature]`; 3 estrategias: tablas Markdown → secciones `## Sesión N` → listas numeradas; limpieza de Markdown; normalización de modo (completo/lite/auto)
+- [x] `ui/server.py` — endpoint `POST /api/projects/{id}/import_sessions` que acepta .md, llama `parse_session_plan()`, añade al backlog sin duplicados
 
 ---
 

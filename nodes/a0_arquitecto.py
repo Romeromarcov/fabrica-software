@@ -17,27 +17,206 @@ from tools.file_parser import uploads_as_context
 from config import MODEL_A0
 
 
+def _read_existing_docs(repo_path: str) -> str:
+    """
+    V-1: Lee documentación existente del repo para alimentar el modo AUDIT.
+    Busca: README.md, docs/, PLAN.md, ARCHITECTURE.md, agents/*.md, CHANGELOG.md.
+    """
+    from pathlib import Path as _P
+    import logging as _log
+    _logger = _log.getLogger(__name__)
+
+    lines = ["## DOCUMENTACIÓN ENCONTRADA EN EL REPO\n"]
+    base  = _P(repo_path)
+    candidates = [
+        "README.md", "README.rst",
+        "PLAN.md", "PLANNING.md",
+        "ARCHITECTURE.md", "ARCHITECTURE.rst",
+        "CHANGELOG.md",
+        "agents/PROJECT_CONTEXT.md",
+        "agents/DECISION_LOG.md",
+        "agents/CODING_STANDARDS.md",
+    ]
+    # Incluir hasta 5 archivos de docs/
+    doc_files = list((base / "docs").glob("*.md"))[:5] if (base / "docs").is_dir() else []
+
+    found = 0
+    for rel in candidates:
+        p = base / rel
+        if p.exists():
+            try:
+                content = p.read_text(encoding="utf-8", errors="replace")[:2000]
+                lines.append(f"### `{rel}`\n```\n{content}\n```\n")
+                found += 1
+            except Exception as exc:
+                _logger.debug("audit: no se pudo leer %s: %s", rel, exc)
+
+    for p in doc_files:
+        rel = p.relative_to(base)
+        try:
+            content = p.read_text(encoding="utf-8", errors="replace")[:1500]
+            lines.append(f"### `{rel}`\n```\n{content}\n```\n")
+            found += 1
+        except Exception:
+            pass
+
+    if not found:
+        lines.append("_No se encontró documentación existente — repo sin docs previos._\n")
+    return "\n".join(lines)
+
+
 def a0_arquitecto(state: ProjectState) -> dict:
-    repo_name = state["repo_name"]
-    repo_path = state["repo_path"]
-    is_new    = state["is_new_project"]
+    repo_name  = state["repo_name"]
+    repo_path  = state["repo_path"]
+    is_new     = state["is_new_project"]
+    audit_mode = state.get("audit_mode", False)
 
     # ── Leer archivos subidos por el Founder ──────────────────────────────────
     uploads_block = uploads_as_context(state["project_id"])
 
-    # ── Snapshot del repo real (solo en modo continuar proyecto) ──────────────
+    # ── Snapshot del repo real + fingerprint (solo en modo continuar proyecto) ──
     repo_snapshot_block = ""
     if not is_new and repo_path:
         try:
             from tools.stack_reader import read_stack
-            from tools.repo_scanner import get_repo_context_for_a0
+            from tools.repo_scanner import get_repo_context_for_a0, build_fingerprint
             stack = read_stack(repo_path)
             repo_snapshot_block = "\n" + get_repo_context_for_a0(repo_path, stack=stack) + "\n"
+            # II-1: Generar / actualizar fingerprint antes de planificar
+            build_fingerprint(repo_path)
         except Exception as _scan_exc:
             import logging as _log
             _log.getLogger(__name__).warning("repo_scanner: %s", _scan_exc)
 
-    if is_new:
+    # ── II-3: Memoria de sesiones anteriores ──────────────────────────────────
+    session_memory_block = ""
+    if state.get("project_id"):
+        try:
+            from tools.session_memory import load_memory
+            session_memory_block = load_memory(state["project_id"])
+        except Exception as _mem_exc:
+            import logging as _log
+            _log.getLogger(__name__).warning("session_memory: %s", _mem_exc)
+
+    if audit_mode:
+        # V-1: MODO AUDIT — onboarding de repo existente sin documentación previa
+        existing_docs_block = _read_existing_docs(repo_path) if repo_path else ""
+        # Fingerprint ya fue generado arriba en repo_snapshot_block
+        task = f"""
+Eres el Agente 0 — Arquitecto de Proyecto en MODO AUDITORÍA.
+
+El Founder quiere **incorporar un repositorio existente** a la Fábrica de Software.
+Tu misión es auditar el estado real del código, generar la documentación de contexto
+y producir un backlog estructurado desde lo que existe hoy.
+
+**Nombre del proyecto:** {state['project_name']}
+**Objetivo declarado:** {state['project_brief'] or '(no especificado — derivar del código)'}
+**Repositorio:** {repo_path}
+{session_memory_block}
+{uploads_block}
+{repo_snapshot_block}
+{existing_docs_block}
+
+---
+
+## PARTE 1 — AUDITORÍA DEL ESTADO ACTUAL
+
+Analiza TODO lo que encontraste (código, docs, fingerprint) y clasifica:
+
+### 1.1 Módulos implementados y funcionales
+Lista los módulos/features que existen y aparentemente funcionan.
+Para cada uno: nombre, estado (✅ completo / ⚠️ parcial), descripción breve.
+
+### 1.2 Deuda técnica identificada
+- Código comentado / funciones sin implementar / TODO/FIXME detectados
+- Patrones problemáticos (bare except, hardcoded secrets, falta de tests)
+- Módulos mencionados en docs pero no encontrados en el código
+
+### 1.3 Gaps de funcionalidad evidente
+Features que "deberían existir" según el tipo de sistema pero no están.
+
+---
+
+## PARTE 2 — GENERAR DOCUMENTOS DE CONTEXTO PARA AGENTES
+
+A partir de tu análisis, genera los siguientes documentos:
+
+### PROJECT_CONTEXT.md (para los agentes A4, A5, A7)
+Entre marcas ```project_context y ```:
+
+```project_context
+# PROJECT_CONTEXT — {state['project_name']}
+> Generado por A0 Audit el {{fecha}}. Basado en código real.
+
+## Descripción
+[qué hace este sistema, en lenguaje de negocio]
+
+## Stack Tecnológico Detectado
+[stack real del repo]
+
+## Estado de Módulos
+| Módulo | Estado | Descripción |
+|--------|--------|-------------|
+[tabla con módulos detectados]
+
+## Convenciones Detectadas
+[patrones de naming, estructura, etc.]
+
+## Integraciones Externas
+[APIs, servicios externos detectados]
+```
+
+### DECISION_LOG.md (decisiones arquitectónicas detectadas)
+Entre marcas ```decision_log y ```:
+
+```decision_log
+# DECISION_LOG — {state['project_name']}
+> Reconstruido por A0 Audit el {{fecha}} desde el código existente.
+
+### [fecha] — Stack tecnológico existente
+**Decisión:** [stack detectado]
+**Razón:** (inferida del código existente)
+**Consecuencias:** Todos los agentes respetan este stack.
+
+[otras decisiones relevantes detectadas]
+```
+
+---
+
+## PARTE 3 — BACKLOG DE FEATURES
+
+Genera el backlog priorizado. Incluye:
+- Deuda técnica crítica (alta prioridad)
+- Features faltantes evidentes
+- Mejoras de estabilidad y cobertura de tests
+
+Usa EXACTAMENTE este formato JSON al final del output (entre ```json y ```):
+
+```json
+{{
+  "phases": [
+    {{
+      "name": "Fase 1 — Estabilización",
+      "description": "Cerrar deuda técnica crítica y completar módulos parciales",
+      "goal": "0 TODOs críticos, cobertura de tests > 70% en módulos core"
+    }}
+  ],
+  "backlog": [
+    {{
+      "name": "Nombre del feature o mejora",
+      "description": "Descripción detallada de qué implementar",
+      "phase": "Fase 1 — Estabilización",
+      "priority": 1,
+      "suggested_mode": "lite",
+      "acceptance_criteria": "Criterio concreto y verificable"
+    }}
+  ]
+}}
+```
+
+Ordena el backlog por: (1) desbloqueo de otros features, (2) impacto de negocio, (3) reducción de riesgo.
+"""
+    elif is_new:
         task = f"""
 Eres el Agente 0 — Arquitecto de Proyecto.
 
@@ -46,7 +225,7 @@ El Founder quiere CREAR UN PROYECTO NUEVO desde cero.
 **Nombre del proyecto:** {state['project_name']}
 **Brief / descripción:** {state['project_brief']}
 **Repositorio destino:** {repo_path}
-
+{session_memory_block}
 {uploads_block}
 
 Tu tarea es generar el plan maestro completo del proyecto. Debes entregar:
@@ -137,7 +316,7 @@ El Founder quiere generar un PLAN DE DESARROLLO para un proyecto existente.
 **Nombre del proyecto:** {state['project_name']}
 **Objetivo:** {state['project_brief']}
 **Repositorio:** {repo_path}
-
+{session_memory_block}
 {uploads_block}
 {repo_snapshot_block}
 Tu tarea es analizar el estado actual del proyecto y generar el roadmap de features a implementar.
@@ -222,8 +401,33 @@ Después del JSON, escribe EXACTAMENTE este bloque (entre las marcas ```markdown
         repo_path=repo_path,
     )
 
-    # ── Extraer y guardar Architecture Decision Record ────────────────────────
+    # ── V-1: Extraer PROJECT_CONTEXT y DECISION_LOG del modo AUDIT ──────────────
     import re as _re
+    if audit_mode and repo_path:
+        from pathlib import Path as _P
+        from datetime import datetime as _dt
+        agents_dir = _P(repo_path) / "agents"
+        agents_dir.mkdir(parents=True, exist_ok=True)
+
+        pc_match = _re.search(r"```project_context\n(.*?)\n```", output, _re.DOTALL)
+        if pc_match:
+            pc_content = pc_match.group(1).strip().replace(
+                "{fecha}", _dt.utcnow().strftime("%Y-%m-%d")
+            )
+            (agents_dir / "PROJECT_CONTEXT.md").write_text(pc_content, encoding="utf-8")
+            import logging as _log
+            _log.getLogger(__name__).info("V-1 AUDIT: PROJECT_CONTEXT.md generado desde código real")
+
+        dl_match = _re.search(r"```decision_log\n(.*?)\n```", output, _re.DOTALL)
+        if dl_match:
+            dl_content = dl_match.group(1).strip().replace(
+                "{fecha}", _dt.utcnow().strftime("%Y-%m-%d")
+            )
+            (agents_dir / "DECISION_LOG.md").write_text(dl_content, encoding="utf-8")
+            import logging as _log
+            _log.getLogger(__name__).info("V-1 AUDIT: DECISION_LOG.md generado desde código real")
+
+    # ── Extraer y guardar Architecture Decision Record ────────────────────────
     adr_match = _re.search(r'```markdown\n(# Architecture.*?)\n```', output, _re.DOTALL)
     if adr_match:
         from tools.architecture_record import write_adr
@@ -312,11 +516,12 @@ Después del JSON, escribe EXACTAMENTE este bloque (entre las marcas ```markdown
         _write_agent_context_docs(repo_path, state["project_name"], tech_stack)
 
     save_run_metadata(state["project_id"], {
-        "project_name": state["project_name"],
-        "repo_name": repo_name,
+        "project_name":   state["project_name"],
+        "repo_name":      repo_name,
         "is_new_project": is_new,
-        "phases_count": len(phases),
-        "backlog_count": len(backlog),
+        "audit_mode":     audit_mode,
+        "phases_count":   len(phases),
+        "backlog_count":  len(backlog),
         "uploaded_files": state.get("uploaded_files", []),
         "project_status": "awaiting_approval",
     })

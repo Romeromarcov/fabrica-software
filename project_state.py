@@ -27,10 +27,11 @@ class ProjectState(TypedDict):
     # ── Identidad ─────────────────────────────────────────────────────────────
     project_id: str
     project_name: str
-    project_brief: str          # Brief inicial del Founder
+    project_brief: str          # Brief inicial del Founder (vacío en modo audit)
     repo_name: str
     repo_path: str
     is_new_project: bool        # True = desde cero; False = plan para repo existente
+    audit_mode: bool            # V-1: True = onboarding profundo de repo existente sin docs
 
     # ── Archivos subidos por el Founder ───────────────────────────────────────
     uploaded_files: list[str]   # Nombres de archivos en uploads/ (leídos por A0)
@@ -73,6 +74,7 @@ def initial_project_state(
     repo_name: str,
     repo_path: str,
     is_new_project: bool = False,
+    audit_mode: bool = False,
     uploaded_files: list[str] | None = None,
 ) -> ProjectState:
     return ProjectState(
@@ -82,6 +84,7 @@ def initial_project_state(
         repo_name=repo_name,
         repo_path=repo_path,
         is_new_project=is_new_project,
+        audit_mode=audit_mode,
         uploaded_files=uploaded_files or [],
         tech_stack=None,
         roadmap=None,

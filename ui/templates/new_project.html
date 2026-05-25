@@ -121,36 +121,62 @@
           <label class="form-label fw-semibold" style="font-size:.85rem">Tipo de Proyecto</label>
           <div class="row g-3 mt-0">
 
-            <div class="col-6">
-              <input type="radio" class="btn-check" name="is_new_project" id="typePlan"
-                     value="false" checked {% if not api_key_ok %}disabled{% endif %}>
+            <div class="col-4">
+              <input type="radio" class="btn-check" name="project_type" id="typePlan"
+                     value="plan" checked {% if not api_key_ok %}disabled{% endif %}>
               <label class="btn btn-outline-secondary w-100 text-start p-3" for="typePlan"
                      style="border-color:#2a2a3a;height:auto">
-                <div class="fw-semibold mb-1" style="font-size:.85rem">
-                  <i class="bi bi-map me-1" style="color:var(--brand-light)"></i> Plan para repo existente
+                <div class="fw-semibold mb-1" style="font-size:.82rem">
+                  <i class="bi bi-map me-1" style="color:var(--brand-light)"></i> Plan existente
                 </div>
-                <div style="font-size:.72rem;color:#888;line-height:1.4">
-                  El Arquitecto lee el código existente y genera un roadmap de lo que falta.
-                  Ideal para proyectos en curso que necesitan estructura.
+                <div style="font-size:.7rem;color:#888;line-height:1.4">
+                  A0 lee el código + docs existentes y genera el roadmap de lo que falta.
                 </div>
               </label>
             </div>
 
-            <div class="col-6">
-              <input type="radio" class="btn-check" name="is_new_project" id="typeNew"
-                     value="true" {% if not api_key_ok %}disabled{% endif %}>
+            <div class="col-4">
+              <input type="radio" class="btn-check" name="project_type" id="typeAudit"
+                     value="audit" {% if not api_key_ok %}disabled{% endif %}>
+              <label class="btn btn-outline-secondary w-100 text-start p-3" for="typeAudit"
+                     style="border-color:#2a2a3a;height:auto">
+                <div class="fw-semibold mb-1" style="font-size:.82rem">
+                  <i class="bi bi-search me-1" style="color:#22c55e"></i> Onboarding Auditado
+                </div>
+                <div style="font-size:.7rem;color:#888;line-height:1.4">
+                  Sin docs previos. A0 audita el código real y genera PROJECT_CONTEXT + backlog.
+                </div>
+              </label>
+            </div>
+
+            <div class="col-4">
+              <input type="radio" class="btn-check" name="project_type" id="typeNew"
+                     value="new" {% if not api_key_ok %}disabled{% endif %}>
               <label class="btn btn-outline-secondary w-100 text-start p-3" for="typeNew"
                      style="border-color:#2a2a3a;height:auto">
-                <div class="fw-semibold mb-1" style="font-size:.85rem">
-                  <i class="bi bi-rocket me-1" style="color:#fb923c"></i> Proyecto desde cero
+                <div class="fw-semibold mb-1" style="font-size:.82rem">
+                  <i class="bi bi-rocket me-1" style="color:#fb923c"></i> Desde cero
                 </div>
-                <div style="font-size:.72rem;color:#888;line-height:1.4">
-                  A0 propone stack tecnológico + arquitectura + roadmap completo.
-                  El repo puede estar vacío.
+                <div style="font-size:.7rem;color:#888;line-height:1.4">
+                  A0 propone stack + arquitectura + roadmap. Repo puede estar vacío.
                 </div>
               </label>
             </div>
 
+          </div>
+          <!-- Campos ocultos que el JS sincroniza con los radios -->
+          <input type="hidden" name="is_new_project" id="isNewHidden" value="false">
+          <input type="hidden" name="audit_mode"     id="auditModeHidden" value="false">
+        </div>
+
+        <!-- Nota contextual del modo auditoría -->
+        <div id="auditNote" class="p-3 mb-4 rounded d-none"
+             style="background:#0a2a10;border:1px solid #22c55e33">
+          <div style="font-size:.78rem;color:#22c55e">
+            <i class="bi bi-info-circle me-1"></i>
+            <strong>Modo Auditoría:</strong> el brief es opcional — A0 deriva el objetivo del código.
+            Al finalizar, encontrarás <code>agents/PROJECT_CONTEXT.md</code> y
+            <code>agents/DECISION_LOG.md</code> generados desde el código real.
           </div>
         </div>
 
@@ -308,23 +334,39 @@ function handleDrop(e) {
   addFiles(e.dataTransfer.files);
 }
 
+// ── Sincronizar radios de tipo de proyecto con hidden inputs ──────────────────
+function syncProjectType() {
+  const checked = document.querySelector("[name=project_type]:checked")?.value || "plan";
+  document.getElementById("isNewHidden").value    = checked === "new"   ? "true" : "false";
+  document.getElementById("auditModeHidden").value = checked === "audit" ? "true" : "false";
+  // Mostrar nota del modo auditoría
+  document.getElementById("auditNote").classList.toggle("d-none", checked !== "audit");
+  // El brief es opcional en modo audit
+  const briefField = document.querySelector("[name=project_brief]");
+  if (briefField) briefField.required = (checked !== "audit");
+}
+document.querySelectorAll("[name=project_type]").forEach(r => r.addEventListener("change", syncProjectType));
+syncProjectType();  // inicializar al cargar
+
 // ── Submit (BUG-016: usa fetch+FormData para compatibilidad con Firefox) ───────
 document.getElementById("newProjectForm")?.addEventListener("submit", async function(e) {
   e.preventDefault();
   const form = e.target;
   const btn  = document.getElementById("submitBtn");
   const count = selectedFiles.files.length;
+  const projectType = document.querySelector("[name=project_type]:checked")?.value || "plan";
+  const label = projectType === "audit" ? "Auditando repo" : "Generando roadmap";
 
   btn.disabled = true;
-  btn.innerHTML = `<span class="spinner-border spinner-border-sm me-2" role="status"></span>Generando roadmap${count ? ` (con ${count} archivo${count>1?'s':''})` : ''}…`;
+  btn.innerHTML = `<span class="spinner-border spinner-border-sm me-2" role="status"></span>${label}${count ? ` (con ${count} archivo${count>1?'s':''})` : ''}…`;
 
   // Construir FormData manualmente para incluir los archivos del DataTransfer
   const fd = new FormData();
   fd.append("project_name",  form.querySelector("[name=project_name]").value);
   fd.append("project_brief", form.querySelector("[name=project_brief]").value);
   fd.append("repo_name",     form.querySelector("[name=repo_name]").value);
-  const isNewRadio = form.querySelector("[name=is_new_project]:checked");
-  fd.append("is_new_project", isNewRadio ? isNewRadio.value : "false");
+  fd.append("is_new_project", document.getElementById("isNewHidden").value);
+  fd.append("audit_mode",     document.getElementById("auditModeHidden").value);
   Array.from(selectedFiles.files).forEach(f => fd.append("files", f, f.name));
 
   try {

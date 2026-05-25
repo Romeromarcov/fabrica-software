@@ -257,7 +257,7 @@ def cmd_status(feature_id: str) -> None:
 
 # ── Comando: new-project ─────────────────────────────────────────────────────
 
-def cmd_new_project(name: str, brief: str, repo_name: str, new: bool) -> None:
+def cmd_new_project(name: str, brief: str, repo_name: str, new: bool, audit: bool = False) -> None:
     from project_state import initial_project_state
     from tools.file_tools import save_run_metadata
     from config import resolve_repo_path, list_repos
@@ -284,15 +284,19 @@ def cmd_new_project(name: str, brief: str, repo_name: str, new: bool) -> None:
     ))
 
     from graph_project import compile_project_graph
-    state  = initial_project_state(project_id, name, brief, repo_name, repo_path, is_new_project=new)
+    state  = initial_project_state(
+        project_id, name, brief, repo_name, repo_path,
+        is_new_project=new, audit_mode=audit,
+    )
     app    = compile_project_graph()
     config = _thread_config(project_id)
 
     save_run_metadata(project_id, {
-        "project_id": project_id,
-        "project_name": name,
-        "repo_name": repo_name,
+        "project_id":     project_id,
+        "project_name":   name,
+        "repo_name":      repo_name,
         "is_new_project": new,
+        "audit_mode":     audit,
         "project_status": "planning",
         "started_at": datetime.utcnow().isoformat(),
     })
@@ -556,6 +560,8 @@ def main() -> None:
     p_proj.add_argument("--repo", required=True, help="Repositorio destino")
     p_proj.add_argument("--new",  action="store_true",
                         help="Proyecto desde cero (A0 propone stack + arquitectura)")
+    p_proj.add_argument("--audit", action="store_true",
+                        help="V-1: Modo auditoría — onboarding profundo de repo existente sin docs")
 
     p_rp = sub.add_parser("resume-project", help="Reanuda un Project Loop pausado")
     p_rp.add_argument("project_id")
@@ -573,7 +579,7 @@ def main() -> None:
     elif args.cmd == "repos":
         cmd_repos()
     elif args.cmd == "new-project":
-        cmd_new_project(args.name, args.brief, args.repo, args.new)
+        cmd_new_project(args.name, args.brief, args.repo, args.new, audit=getattr(args, "audit", False))
     elif args.cmd == "resume-project":
         cmd_resume_project(args.project_id)
 
