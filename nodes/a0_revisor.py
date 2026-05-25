@@ -256,6 +256,7 @@ que se inyectarán en el contexto de A1 para los features restantes:
                 priority=prio,
                 suggested_mode="lite",
                 acceptance_criteria=f"El código debe cumplir con la arquitectura original: {desc[:200]}",
+                depends_on=[],       # VI-1: tareas correctivas no bloquean a otras
                 feature_id=None,
                 status="pending",
                 evaluation_notes=None,

@@ -22,6 +22,16 @@ def a1_planificador(state: FabricaState) -> dict:
             import logging as _log
             _log.getLogger(__name__).warning("context_retriever en A1: %s", _fp_exc)
 
+    # I-3: Few-shots de los mejores MASTER_PLANs previos (activo tras ≥20 features)
+    fewshot_block = ""
+    if state.get("project_id"):
+        try:
+            from tools.fewshot_builder import build_fewshots
+            fewshot_block = build_fewshots(state["project_id"], context="planning")
+        except Exception as _fs_exc:
+            import logging as _log
+            _log.getLogger(__name__).warning("fewshot_builder en A1: %s", _fs_exc)
+
     # II-3: Memoria de sesiones anteriores
     session_memory_block = ""
     if state.get("project_id"):
@@ -105,7 +115,7 @@ El Founder ha solicitado el siguiente feature para el proyecto **{repo_name}**:
 **Nombre:** {state['feature_name']}
 **Modo configurado:** {state['mode'].upper()}
 **Repositorio:** {repo_path}
-{fingerprint_block}{session_memory_block}{project_context}
+{fingerprint_block}{session_memory_block}{fewshot_block}{project_context}
 
 Tu tarea:
 1. Analiza la naturaleza del feature y los módulos afectados.
