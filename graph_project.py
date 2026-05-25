@@ -31,9 +31,10 @@ logger = logging.getLogger(__name__)
 
 # ── Nodos de agente ───────────────────────────────────────────────────────────
 
-from nodes.a0_arquitecto import a0_arquitecto
-from nodes.a0_revisor    import a0_revisor
-from nodes.pm_evaluador  import pm_evaluador
+from nodes.a0_arquitecto    import a0_arquitecto
+from nodes.a0_revisor       import a0_revisor
+from nodes.pm_evaluador     import pm_evaluador
+from nodes.merge_coordinator import merge_coordinator
 
 
 # ── Human checkpoint: aprobación del roadmap ─────────────────────────────────
@@ -296,6 +297,7 @@ def present_suggestions(state: ProjectState) -> dict:
                 priority=prio,
                 suggested_mode="auto",
                 acceptance_criteria="",
+                depends_on=[],        # VI-1: sugerencias no tienen dependencias explícitas
                 feature_id=None,
                 status="pending",
                 evaluation_notes=None,
@@ -354,12 +356,224 @@ def project_complete(state: ProjectState) -> dict:
     return {}
 
 
+# ── VI-2: Nodos del path paralelo ────────────────────────────────────────────
+
+def pick_ready_features(state: ProjectState) -> dict:
+    """
+    VI-2: Selecciona hasta MAX_PARALLEL_FEATURES features listos
+    (status=pending + dependencias cumplidas) y los marca como 'running'.
+    Devuelve parallel_batch con los índices seleccionados.
+    """
+    from config import MAX_PARALLEL_FEATURES
+    from tools.branch_manager import get_ready_indices
+
+    backlog    = state.get("backlog", [])
+    dep_graph  = state.get("dependency_graph", {})
+    indices    = get_ready_indices(backlog, dep_graph, max_parallel=MAX_PARALLEL_FEATURES)
+
+    if not indices:
+        logger.info("pick_ready_features: sin features listos (dependencias pendientes)")
+        return {"parallel_batch": [], "current_feature_index": len(backlog)}
+
+    updated = list(backlog)
+    for i in indices:
+        updated[i] = FeatureTask(**{**backlog[i], "status": "running"})
+
+    names = [backlog[i]["name"] for i in indices]
+    logger.info("Parallel batch (%d): %s", len(indices), names)
+    save_run_metadata(state["project_id"], {
+        "parallel_batch":  names,
+        "project_status":  "running",
+    })
+    return {
+        "backlog":                updated,
+        "parallel_batch":         indices,
+        "current_feature_index":  indices[0],
+    }
+
+
+def run_parallel_batch(state: ProjectState) -> dict:
+    """
+    VI-2: Ejecuta el batch de features en paralelo usando ThreadPoolExecutor.
+    Cada feature corre su propio pipeline (graph.py) en un hilo independiente.
+    """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    from state import initial_state
+    from graph import compile_graph_project_mode
+    from datetime import datetime as _dt
+
+    indices = state.get("parallel_batch", [])
+    if not indices:
+        return {}
+
+    backlog = list(state["backlog"])
+
+    def _run_one(idx: int):
+        feature    = backlog[idx]
+        slug       = feature["name"][:20].replace(" ", "_").lower()
+        feature_id = f"{_dt.now().strftime('%Y%m%d_%H%M%S')}_{slug}"
+
+        a0_spec = (
+            f"Nombre: {feature['name']}\n"
+            f"Descripción: {feature.get('description', '')}\n"
+            f"Fase: {feature.get('phase', '')}\n"
+            f"Criterios de aceptación: {feature.get('acceptance_criteria', '')}\n"
+            f"Modo sugerido: {feature.get('suggested_mode', 'auto')}"
+        )
+        feat_state = initial_state(
+            feature_id=feature_id,
+            feature_name=feature["name"],
+            mode=feature.get("suggested_mode", "auto"),
+            repo_name=state["repo_name"],
+            repo_path=state["repo_path"],
+            project_mode=True,
+            project_id=state["project_id"],
+        )
+        feat_state = {
+            **feat_state,
+            "feature_name":    feature["name"],
+            "a0_feature_spec": a0_spec,
+        }
+
+        # Cada hilo compila su propia instancia del grafo
+        # (evita compartir conexión SQLite entre hilos)
+        feat_app = compile_graph_project_mode()
+        config   = {"configurable": {"thread_id": feature_id}}
+
+        final_status = "completed"
+        try:
+            for chunk in feat_app.stream(feat_state, config=config, stream_mode="updates"):
+                node_name = list(chunk.keys())[0]
+                if node_name == "__interrupt__":
+                    final_status = "failed"
+                    break
+
+            import time as _t
+            _t.sleep(1)  # Margen para que a1_pr_final termine de escribir metadata
+
+            meta_path = RUNS_DIR / feature_id / "metadata.json"
+            if meta_path.exists():
+                meta = json.loads(meta_path.read_text())
+                if meta.get("status") == "detenido":
+                    final_status = "failed"
+
+        except Exception as e:
+            logger.exception("run_parallel_batch: error en %s: %s", feature["name"], e)
+            final_status = "failed"
+
+        return idx, feature_id, final_status
+
+    # ── Lanzar en paralelo ────────────────────────────────────────────────────
+    results: dict[int, tuple[str, str]] = {}
+    with ThreadPoolExecutor(max_workers=max(1, len(indices))) as executor:
+        future_map = {executor.submit(_run_one, idx): idx for idx in indices}
+        for future in as_completed(future_map):
+            try:
+                idx, feature_id, status = future.result()
+                results[idx] = (feature_id, status)
+            except Exception as exc:
+                idx = future_map[future]
+                logger.exception("run_parallel_batch: futuro falló para idx=%d: %s", idx, exc)
+                results[idx] = ("error", "failed")
+
+    # ── Actualizar backlog ────────────────────────────────────────────────────
+    cost_entries = []
+    for idx, (feature_id, final_status) in results.items():
+        backlog[idx] = FeatureTask(**{
+            **backlog[idx],
+            "feature_id": feature_id,
+            # "running" si completado (pm_evaluador decidirá), "failed" si explotó
+            "status": final_status if final_status == "failed" else "running",
+        })
+        try:
+            meta = json.loads((RUNS_DIR / feature_id / "metadata.json").read_text())
+            cost_entries.append({
+                "agent":    backlog[idx]["name"],
+                "cost_usd": meta.get("total_cost_usd", 0),
+            })
+        except Exception:
+            pass
+
+    return {"backlog": backlog, "cost_entries": cost_entries}
+
+
+def advance_parallel_batch(state: ProjectState) -> dict:
+    """
+    VI-2: Cierra el batch paralelo.
+    - Marca los features 'running' como 'completed'.
+    - Limpia parallel_batch.
+    - Recalcula progreso.
+    """
+    batch_indices = state.get("parallel_batch", [])
+    backlog       = list(state["backlog"])
+    total         = len(backlog)
+
+    for idx in batch_indices:
+        f = backlog[idx]
+        if f.get("status") == "running":
+            backlog[idx] = FeatureTask(**{**f, "status": "completed"})
+
+    completed_now = sum(1 for f in backlog if f["status"] in ("completed", "failed"))
+    progress      = round(completed_now / total * 100, 1) if total else 0.0
+
+    names = [backlog[i]["name"] for i in batch_indices]
+    logger.info(
+        "advance_parallel_batch: batch cerrado %s | progreso %.1f%%", names, progress,
+    )
+    save_run_metadata(state["project_id"], {
+        "batch_completed": names,
+        "progress_pct":    progress,
+    })
+
+    return {
+        "backlog":               backlog,
+        "parallel_batch":        [],
+        "progress_pct":          progress,
+        "current_feature_index": (max(batch_indices) + 1) if batch_indices else 0,
+    }
+
+
 # ── Routers ───────────────────────────────────────────────────────────────────
 
 def _route_after_approval(state: ProjectState) -> str:
     if not state.get("founder_approved_roadmap"):
         return "cancelado"
-    return "iniciar_loop"
+    from config import PARALLEL_FEATURES_ENABLED
+    return "iniciar_loop_paralelo" if PARALLEL_FEATURES_ENABLED else "iniciar_loop"
+
+
+def _route_after_parallel_batch(state: ProjectState) -> str:
+    """
+    Después de advance_parallel_batch: decide siguiente acción.
+    Misma lógica que _route_after_advance pero para el path paralelo.
+    """
+    from config import ARCH_REVIEW_INTERVAL
+
+    backlog     = state.get("backlog", [])
+    has_pending = any(f["status"] == "pending" for f in backlog)
+
+    if not has_pending:
+        return "fin_backlog"
+    if state.get("project_status") == "arch_review_paused":
+        return "fin_backlog"
+
+    if ARCH_REVIEW_INTERVAL > 0:
+        completed_count = sum(1 for f in backlog if f["status"] in ("completed", "failed"))
+        last_review_at  = state.get("arch_review_last_at_count", 0)
+        since_review    = completed_count - last_review_at
+
+        current_idx = state.get("current_feature_index", 1) - 1
+        phase_done  = False
+        if 0 <= current_idx < len(backlog):
+            phase = backlog[current_idx].get("phase", "")
+            if phase:
+                phase_features = [f for f in backlog if f.get("phase") == phase]
+                phase_done = all(f["status"] in ("completed", "failed") for f in phase_features)
+
+        if since_review >= ARCH_REVIEW_INTERVAL or phase_done:
+            return "arch_review"
+
+    return "continuar"
 
 
 def _route_after_advance(state: ProjectState) -> str:
@@ -408,9 +622,12 @@ def _route_after_advance(state: ProjectState) -> str:
 def _route_after_arch_review(state: ProjectState) -> str:
     """Después de a0_revisor: continuar el loop o pausar si hay derivación crítica."""
     if state.get("project_status") == "arch_review_paused":
-        return "fin_backlog"  # Pausa solicitada por Founder
+        return "fin_backlog"
     has_pending = any(f["status"] == "pending" for f in state.get("backlog", []))
-    return "continuar" if has_pending else "fin_backlog"
+    if not has_pending:
+        return "fin_backlog"
+    from config import PARALLEL_FEATURES_ENABLED
+    return "continuar_paralelo" if PARALLEL_FEATURES_ENABLED else "continuar"
 
 
 def _route_check_backlog(state: ProjectState) -> str:
@@ -422,9 +639,11 @@ def _route_check_backlog(state: ProjectState) -> str:
 
 def _route_after_suggestions(state: ProjectState) -> str:
     status = state.get("project_status", "")
-    if status == "running":
-        return "continuar_loop"   # El Founder añadió más features
-    return "cerrar"
+    if status != "running":
+        return "cerrar"
+    # Volver al path correcto según el modo activo
+    from config import PARALLEL_FEATURES_ENABLED
+    return "continuar_loop_paralelo" if PARALLEL_FEATURES_ENABLED else "continuar_loop"
 
 
 # ── Construcción del grafo ────────────────────────────────────────────────────
@@ -432,53 +651,82 @@ def _route_after_suggestions(state: ProjectState) -> str:
 def build_project_graph() -> StateGraph:
     g = StateGraph(ProjectState)
 
-    g.add_node("a0_arquitecto",        a0_arquitecto)
-    g.add_node("human_approve_roadmap",human_approve_roadmap)
-    g.add_node("pick_next_feature",    pick_next_feature)
-    g.add_node("run_feature_pipeline", run_feature_pipeline)
-    g.add_node("pm_evaluador",         pm_evaluador)
-    g.add_node("advance_index",        advance_index)
-    g.add_node("a0_revisor",           a0_revisor)       # Auditoría arquitectónica periódica
-    g.add_node("present_suggestions",  present_suggestions)
-    g.add_node("project_complete",     project_complete)
+    # ── Nodos compartidos ─────────────────────────────────────────────────────
+    g.add_node("a0_arquitecto",         a0_arquitecto)
+    g.add_node("human_approve_roadmap", human_approve_roadmap)
+    g.add_node("a0_revisor",            a0_revisor)
+    g.add_node("present_suggestions",   present_suggestions)
+    g.add_node("project_complete",      project_complete)
+
+    # ── Path SECUENCIAL (PARALLEL_FEATURES_ENABLED=False) ────────────────────
+    g.add_node("pick_next_feature",     pick_next_feature)
+    g.add_node("run_feature_pipeline",  run_feature_pipeline)
+    g.add_node("pm_evaluador",          pm_evaluador)
+    g.add_node("advance_index",         advance_index)
+
+    # ── Path PARALELO (PARALLEL_FEATURES_ENABLED=True) — VI-2 ────────────────
+    g.add_node("pick_ready_features",   pick_ready_features)
+    g.add_node("run_parallel_batch",    run_parallel_batch)
+    g.add_node("merge_coordinator",     merge_coordinator)
+    g.add_node("advance_parallel_batch",advance_parallel_batch)
 
     # ── Entrada ───────────────────────────────────────────────────────────────
     g.set_entry_point("a0_arquitecto")
     g.add_edge("a0_arquitecto", "human_approve_roadmap")
 
-    # ── Post-aprobación ───────────────────────────────────────────────────────
+    # ── Post-aprobación: bifurca en secuencial vs paralelo ────────────────────
     g.add_conditional_edges(
         "human_approve_roadmap",
         _route_after_approval,
         {
-            "iniciar_loop": "pick_next_feature",
-            "cancelado":    "project_complete",
+            "iniciar_loop":         "pick_next_feature",
+            "iniciar_loop_paralelo":"pick_ready_features",
+            "cancelado":            "project_complete",
         },
     )
 
-    # ── Feature loop ──────────────────────────────────────────────────────────
+    # ══════════════════════════════════════════════════════════════════════════
+    # PATH SECUENCIAL
+    # ══════════════════════════════════════════════════════════════════════════
     g.add_edge("pick_next_feature",    "run_feature_pipeline")
     g.add_edge("run_feature_pipeline", "pm_evaluador")
     g.add_edge("pm_evaluador",         "advance_index")
 
-    # Después de advance_index: revisar arquitectura o continuar
     g.add_conditional_edges(
         "advance_index",
         _route_after_advance,
         {
-            "continuar":    "pick_next_feature",   # Loop normal
-            "arch_review":  "a0_revisor",          # Auditoría A0 cada N features
-            "fin_backlog":  "present_suggestions",
+            "continuar":   "pick_next_feature",
+            "arch_review": "a0_revisor",
+            "fin_backlog": "present_suggestions",
         },
     )
 
-    # Después de a0_revisor: continuar o pausar (derivación crítica)
+    # ══════════════════════════════════════════════════════════════════════════
+    # PATH PARALELO — VI-2
+    # ══════════════════════════════════════════════════════════════════════════
+    g.add_edge("pick_ready_features",    "run_parallel_batch")
+    g.add_edge("run_parallel_batch",     "merge_coordinator")
+    g.add_edge("merge_coordinator",      "advance_parallel_batch")
+
+    g.add_conditional_edges(
+        "advance_parallel_batch",
+        _route_after_parallel_batch,
+        {
+            "continuar":   "pick_ready_features",
+            "arch_review": "a0_revisor",
+            "fin_backlog": "present_suggestions",
+        },
+    )
+
+    # ── a0_revisor: vuelve al path correcto según el modo ────────────────────
     g.add_conditional_edges(
         "a0_revisor",
         _route_after_arch_review,
         {
-            "continuar":   "pick_next_feature",
-            "fin_backlog": "present_suggestions",
+            "continuar":          "pick_next_feature",    # Path secuencial
+            "continuar_paralelo": "pick_ready_features",  # Path paralelo
+            "fin_backlog":        "present_suggestions",
         },
     )
 
@@ -487,8 +735,9 @@ def build_project_graph() -> StateGraph:
         "present_suggestions",
         _route_after_suggestions,
         {
-            "continuar_loop": "pick_next_feature",   # Founder añadió más features
-            "cerrar":         "project_complete",
+            "continuar_loop":         "pick_next_feature",    # Secuencial
+            "continuar_loop_paralelo":"pick_ready_features",  # Paralelo
+            "cerrar":                 "project_complete",
         },
     )
 
@@ -505,6 +754,7 @@ def compile_project_graph():
         interrupt_before=[
             "human_approve_roadmap",  # ⛔ Founder aprueba roadmap inicial
             "present_suggestions",    # ⛔ Founder decide continuar/cerrar al vaciar backlog
-            # Nota: a0_revisor usa interrupt() interno solo en DERIVACION_CRITICA
+            # Nota: a0_revisor y merge_coordinator usan interrupt() interno
+            # solo cuando hay DERIVACION_CRITICA o conflicto HIGH de merge
         ],
     )

@@ -435,7 +435,7 @@ Usuario selecciona "Onboarding Auditado" en la UI
 
 ---
 
-## BLOQUE VI — Paralelismo de Features
+## BLOQUE VI — Paralelismo de Features ✅ COMPLETADO 2026-05-24
 
 > Multiplicar la velocidad en proyectos con módulos independientes.
 
@@ -443,31 +443,40 @@ Usuario selecciona "Onboarding Auditado" en la UI
 
 ---
 
-### VI-1 — Detección de Dependencias entre Features
+### VI-1 — Detección de Dependencias entre Features ✅
 
 **Qué hace:**
-A0 ya produce el roadmap con dependencias. Extender para que el sistema identifique
-automáticamente qué features pueden correr en paralelo.
+A0 emite `dependency_graph` en el estado con las dependencias declaradas en el JSON
+de roadmap. El scheduler usa este grafo para determinar qué features pueden correr
+en paralelo (ninguna dependencia pendiente).
 
-**Archivos a modificar:**
-- [ ] `nodes/a0_arquitecto.py` — emitir `dependency_graph: dict[str, list[str]]` en el estado
-- [ ] `project_state.py` — agregar `dependency_graph` al estado del proyecto
+**Archivos modificados:**
+- [x] `nodes/a0_arquitecto.py` — campo `depends_on: []` en todos los prompts JSON; parseo de dependencias; construcción y return de `dependency_graph`
+- [x] `project_state.py` — `depends_on: list[str]` en `FeatureTask`; `dependency_graph: dict` y `parallel_batch: list[int]` en `ProjectState`
 
 ---
 
-### VI-2 — Workers Paralelos del Pipeline
+### VI-2 — Workers Paralelos del Pipeline ✅
 
 **Qué hace:**
-Múltiples instancias del `graph.py` corriendo en ramas separadas simultáneamente.
+Cuando `PARALLEL_FEATURES_ENABLED=true`, el Project Loop usa un path alternativo:
+- `pick_ready_features` selecciona hasta `MAX_PARALLEL_FEATURES` features sin dependencias pendientes
+- `run_parallel_batch` los ejecuta concurrentemente con `ThreadPoolExecutor`
+- `merge_coordinator` detecta conflictos de archivos entre las ramas; auto-merge si no hay conflictos, LLM si son LOW/MEDIUM, interrupt() al Founder si son HIGH
+- `advance_parallel_batch` cierra el batch y recalcula progreso
 
-**Archivos a crear/modificar:**
-- [ ] `graph_project.py` — scheduler que lanza features en paralelo cuando no tienen dependencias pendientes
-- [ ] `tools/branch_manager.py` — gestión de ramas paralelas y detección de conflictos
-- [ ] `nodes/merge_coordinator.py` — agente que resuelve conflictos antes del PR final
+El path secuencial original permanece intacto cuando el flag está desactivado.
+
+**Archivos creados/modificados:**
+- [x] `tools/branch_manager.py` — `get_ready_indices()`, `detect_file_conflicts()`, `classify_conflict_severity()`, `merge_branch()`, `format_conflict_report()`
+- [x] `nodes/merge_coordinator.py` — agente LLM con 3 rutas: auto-merge / LLM-resolve / interrupt() Founder
+- [x] `graph_project.py` — nodos `pick_ready_features`, `run_parallel_batch`, `merge_coordinator`, `advance_parallel_batch`; routing bifurcado; `_route_after_parallel_batch`; `a0_revisor` retorna al path correcto según flag
+- [x] `config.py` — `PARALLEL_FEATURES_ENABLED` y `MAX_PARALLEL_FEATURES`
 
 **DoD:**
-- 2 features independientes corren en paralelo sin conflictos
-- El merge coordinator detecta y resuelve conflictos simples; escala al Founder los complejos
+- [x] 2 features independientes corren en paralelo sin conflictos (auto-merge)
+- [x] El merge coordinator detecta y resuelve conflictos simples; escala al Founder los complejos
+- [x] Path secuencial preservado — retrocompatible con `PARALLEL_FEATURES_ENABLED=false` (default)
 
 ---
 

@@ -208,13 +208,18 @@ Usa EXACTAMENTE este formato JSON al final del output (entre ```json y ```):
       "phase": "Fase 1 — Estabilización",
       "priority": 1,
       "suggested_mode": "lite",
-      "acceptance_criteria": "Criterio concreto y verificable"
+      "acceptance_criteria": "Criterio concreto y verificable",
+      "depends_on": []
     }}
   ]
 }}
 ```
 
 Ordena el backlog por: (1) desbloqueo de otros features, (2) impacto de negocio, (3) reducción de riesgo.
+
+Para cada feature, indica en `depends_on` los nombres EXACTOS de los features que deben completarse
+antes de que éste pueda ejecutarse. Usa `"depends_on": []` si no tiene dependencias previas.
+Esto permite al scheduler ejecutar en paralelo los features sin dependencias pendientes.
 """
     elif is_new:
         task = f"""
@@ -272,7 +277,8 @@ del output (entre las marcas ```json y ```):
       "phase": "Fase 1 — Fundamentos",
       "priority": 1,
       "suggested_mode": "completo",
-      "acceptance_criteria": "El usuario puede registrarse, iniciar sesión y recuperar contraseña"
+      "acceptance_criteria": "El usuario puede registrarse, iniciar sesión y recuperar contraseña",
+      "depends_on": []
     }}
   ]
 }}
@@ -354,7 +360,8 @@ al final del output (entre las marcas ```json y ```):
       "phase": "Fase 1 — Nombre",
       "priority": 1,
       "suggested_mode": "completo",
-      "acceptance_criteria": "Criterio concreto y verificable"
+      "acceptance_criteria": "Criterio concreto y verificable",
+      "depends_on": []
     }}
   ]
 }}
@@ -478,6 +485,8 @@ Después del JSON, escribe EXACTAMENTE este bloque (entre las marcas ```markdown
     backlog: list[FeatureTask] = []
     tech_stack = ""
 
+    dependency_graph: dict = {}
+
     json_match = re.search(r"```json\s*(\{.*?\})\s*```", output, re.DOTALL)
     if json_match:
         try:
@@ -489,13 +498,18 @@ Después del JSON, escribe EXACTAMENTE este bloque (entre las marcas ```markdown
                     goal=p.get("goal", ""),
                 ))
             for i, f in enumerate(data.get("backlog", []), 1):
+                feat_name = f.get("name", f"Feature {i}")
+                feat_deps = f.get("depends_on", [])
+                # VI-1: registrar dependencias en el grafo
+                dependency_graph[feat_name] = feat_deps if isinstance(feat_deps, list) else []
                 backlog.append(FeatureTask(
-                    name=f.get("name", f"Feature {i}"),
+                    name=feat_name,
                     description=f.get("description", ""),
                     phase=f.get("phase", ""),
                     priority=f.get("priority", i),
                     suggested_mode=f.get("suggested_mode", "completo"),
                     acceptance_criteria=f.get("acceptance_criteria", ""),
+                    depends_on=dependency_graph[feat_name],
                     feature_id=None,
                     status="pending",
                     evaluation_notes=None,
@@ -515,24 +529,34 @@ Después del JSON, escribe EXACTAMENTE este bloque (entre las marcas ```markdown
     if is_new and repo_path:
         _write_agent_context_docs(repo_path, state["project_name"], tech_stack)
 
+    # VI-1: log del grafo de dependencias detectado
+    dep_edges = sum(len(v) for v in dependency_graph.values())
+    import logging as _log
+    _log.getLogger(__name__).info(
+        "VI-1 dependency_graph: %d features, %d aristas de dependencia",
+        len(dependency_graph), dep_edges,
+    )
+
     save_run_metadata(state["project_id"], {
-        "project_name":   state["project_name"],
-        "repo_name":      repo_name,
-        "is_new_project": is_new,
-        "audit_mode":     audit_mode,
-        "phases_count":   len(phases),
-        "backlog_count":  len(backlog),
-        "uploaded_files": state.get("uploaded_files", []),
-        "project_status": "awaiting_approval",
+        "project_name":      state["project_name"],
+        "repo_name":         repo_name,
+        "is_new_project":    is_new,
+        "audit_mode":        audit_mode,
+        "phases_count":      len(phases),
+        "backlog_count":     len(backlog),
+        "dependency_edges":  dep_edges,
+        "uploaded_files":    state.get("uploaded_files", []),
+        "project_status":    "awaiting_approval",
     })
 
     return {
-        "roadmap": output,
-        "phases": phases,
-        "backlog": backlog,
-        "tech_stack": tech_stack,
-        "project_status": "awaiting_approval",
-        "cost_entries": [cost],
+        "roadmap":          output,
+        "phases":           phases,
+        "backlog":          backlog,
+        "tech_stack":       tech_stack,
+        "dependency_graph": dependency_graph,
+        "project_status":   "awaiting_approval",
+        "cost_entries":     [cost],
     }
 
 

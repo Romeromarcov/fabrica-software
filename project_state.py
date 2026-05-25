@@ -11,6 +11,7 @@ class FeatureTask(TypedDict):
     priority: int                               # 1 = más alto
     suggested_mode: Literal["completo", "lite"] # Sugerencia del PM; A1 puede ajustar
     acceptance_criteria: str
+    depends_on: list[str]                       # VI-1: nombres de features que deben completarse antes
     # Rellenado en runtime:
     feature_id: Optional[str]
     status: Literal["pending", "running", "completed", "failed", "skipped"]
@@ -58,6 +59,12 @@ class ProjectState(TypedDict):
     arch_review_last_at_count: int        # Nº de features completados en la última revisión A0
     arch_review_history: Annotated[list[dict], operator.add]  # Historial de revisiones A0
 
+    # ── VI-1: Grafo de dependencias entre features ────────────────────────────
+    dependency_graph: dict                     # {feature_name: [depends_on_names]}
+
+    # ── VI-2: Batch paralelo en curso ────────────────────────────────────────
+    parallel_batch: list[int]                  # índices del backlog en ejecución paralela
+
     # ── Estado global ─────────────────────────────────────────────────────────
     project_status: Literal["planning", "awaiting_approval", "running", "paused", "completed", "failed", "arch_review_paused"]
     progress_pct: float
@@ -98,6 +105,8 @@ def initial_project_state(
         evaluation_history=[],
         arch_review_last_at_count=0,
         arch_review_history=[],
+        dependency_graph={},
+        parallel_batch=[],
         project_status="planning",
         progress_pct=0.0,
         errors=[],

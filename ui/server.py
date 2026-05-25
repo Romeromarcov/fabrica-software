@@ -591,6 +591,9 @@ async def import_sessions(project_id: str, file: UploadFile = File(...)):
         added = []
         for f in features:
             if f["name"].lower() not in existing_names:
+                # VI-1: asegurar campo depends_on en features importados
+                if "depends_on" not in f:
+                    f["depends_on"] = []
                 current_backlog.append(f)
                 added.append(f["name"])
         meta["backlog"] = current_backlog

@@ -81,6 +81,12 @@ CHECKPOINT_TIMEOUT_SECONDS = int(os.getenv("CHECKPOINT_TIMEOUT_SECONDS", "1800")
 # Cada cuántos features completados corre el A0 Revisor (0 = desactivado)
 ARCH_REVIEW_INTERVAL = int(os.getenv("ARCH_REVIEW_INTERVAL", "3"))
 
+# ── Bloque VI: Paralelismo de Features ───────────────────────────────────────
+# PARALLEL_FEATURES_ENABLED: si True, el Project Loop ejecuta features
+# independientes en paralelo (requiere pipeline estable, error rate < 10%).
+PARALLEL_FEATURES_ENABLED = os.getenv("PARALLEL_FEATURES_ENABLED", "false").lower() == "true"
+MAX_PARALLEL_FEATURES     = int(os.getenv("MAX_PARALLEL_FEATURES", "2"))
+
 # ── Bloque III: Reducción de Intervención Humana ──────────────────────────────
 # Ventana de veto: minutos que el Founder tiene para vetar un plan antes de que
 # el pipeline continúe automáticamente (solo aplica en project_mode).
