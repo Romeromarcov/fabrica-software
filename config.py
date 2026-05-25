@@ -81,6 +81,18 @@ CHECKPOINT_TIMEOUT_SECONDS = int(os.getenv("CHECKPOINT_TIMEOUT_SECONDS", "1800")
 # Cada cuántos features completados corre el A0 Revisor (0 = desactivado)
 ARCH_REVIEW_INTERVAL = int(os.getenv("ARCH_REVIEW_INTERVAL", "3"))
 
+# ── P0-B: GitHub OAuth 2.0 ───────────────────────────────────────────────────
+# Si están configurados, el flujo OAuth reemplaza el PAT manual.
+# Crear OAuth App en github.com → Settings → Developer Settings → OAuth Apps
+GITHUB_CLIENT_ID     = os.getenv("GITHUB_CLIENT_ID",     "")
+GITHUB_CLIENT_SECRET = os.getenv("GITHUB_CLIENT_SECRET", "")
+GITHUB_OAUTH_SECRET  = os.getenv("GITHUB_OAUTH_SECRET",  "fabrica-dev-secret-change-me")
+GITHUB_OAUTH_CALLBACK = os.getenv(
+    "GITHUB_OAUTH_CALLBACK_URL",
+    "http://localhost:7860/auth/callback",
+)
+GITHUB_OAUTH_ENABLED = bool(GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET)
+
 # ── Bloque VI: Paralelismo de Features ───────────────────────────────────────
 # PARALLEL_FEATURES_ENABLED: si True, el Project Loop ejecuta features
 # independientes en paralelo (requiere pipeline estable, error rate < 10%).

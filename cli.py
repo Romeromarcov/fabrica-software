@@ -175,18 +175,21 @@ def _handle_interrupt(app, config: dict, interrupt_data: dict, feature_id: str) 
 def _print_node_progress(node_name: str, output: dict) -> None:
     agent = output.get("current_agent", node_name)
     labels = {
-        "a1_planificador":  "📋 A1 — Planificador",
-        "stop_protocol":    "⛔ Stop Protocol",
-        "a2_db":            "🗄️  A2 — DB Architect",
-        "a3_mcp":           "🔧 A3 — MCP Toolsmith",
-        "a4_backend":       "⚙️  A4 — Backend",
-        "a5_frontend":      "🖥️  A5 — Frontend",
-        "a6_refactor":      "✨ A6 — Revisor/Unificador",
-        "a7_qa":            "🧪 A7 — QA",
-        "qa_escalation":    "⚠️  QA Escalation",
-        "a8_secops":        "🔒 A8 — SecOps",
-        "a1_pr_final":      "📦 A1 — PR Final",
-        "pipeline_detenido":"🚫 Pipeline Detenido",
+        "a1_planificador":         "📋 A1 — Planificador",
+        "confidence_auto_approve": "✅ Auto-aprobado",
+        "stop_protocol":           "⛔ Stop Protocol",
+        "a2_db":                   "🗄️  A2 — DB Architect",
+        "a3_mcp":                  "🔧 A3 — MCP Toolsmith",
+        "a4_backend":              "⚙️  A4 — Backend",
+        "a5_frontend":             "🖥️  A5 — Frontend",
+        "a6_refactor":             "✨ A6 — Revisor/Unificador",
+        "a7_qa":                   "🧪 A7 — QA",
+        "qa_escalation":           "⚠️  QA Escalation",
+        "a8_secops":               "🔒 A8 — SecOps",
+        "a10_code_writer":         "💾 A10 — Code Writer",
+        "a1_pr_final":             "📦 A1 — PR Final",
+        "lightning_complete":      "⚡ Lightning completado",
+        "pipeline_detenido":       "🚫 Pipeline Detenido",
     }
     label = labels.get(agent, f"⚡ {agent}")
 
@@ -542,8 +545,9 @@ def main() -> None:
     p_new.add_argument("name", help="Nombre descriptivo del feature")
     p_new.add_argument("--repo", required=True,
                        help="Nombre del repositorio destino (ej: omni-erp)")
-    p_new.add_argument("--mode", choices=["auto", "completo", "lite"], default="auto",
-                       help="Modo de ejecución (default: auto — el PM decide)")
+    p_new.add_argument("--mode", choices=["auto", "completo", "lite", "lightning"], default="auto",
+                       help="Modo de ejecución (default: auto — el PM decide). "
+                            "lightning: ultra-rápido para hotfixes/prototipos (sin QA/SecOps).")
 
     p_resume = sub.add_parser("resume", help="Reanuda un pipeline pausado")
     p_resume.add_argument("feature_id", help="ID del feature a reanudar")

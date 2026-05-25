@@ -74,7 +74,7 @@
                   <i class="bi bi-diagram-3 me-1" style="color:var(--brand-light)"></i> Completo
                 </div>
                 <div style="font-size:.72rem;color:#888;line-height:1.4">
-                  A1 → A6/A8 → A2/A3 → A7 → A4 → A5 → PR<br>
+                  A1 → A2 DB → A3 MCP → A4 → A5 → A6 → A7 QA → A8 SecOps → A10 → PR<br>
                   Incluye DB, MCP y SecOps. Recomendado para features nuevos.
                 </div>
               </label>
@@ -89,8 +89,25 @@
                   <i class="bi bi-lightning me-1" style="color:#fb923c"></i> Lite
                 </div>
                 <div style="font-size:.72rem;color:#888;line-height:1.4">
-                  A1 → A2/A3 → A4 → A5 → PR<br>
+                  A1 → A4 Backend → A5 Frontend → A6 → A7 QA → A8 SecOps → A10 → PR<br>
                   Sin DB ni MCP. Ideal para bugfixes y pequeños ajustes.
+                </div>
+              </label>
+            </div>
+
+            <div class="col-12">
+              <input type="radio" class="btn-check" name="mode" id="modeLightning"
+                     value="lightning" {% if not api_key_ok %}disabled{% endif %}>
+              <label class="btn btn-outline-secondary w-100 text-start p-3" for="modeLightning"
+                     style="border-color:#2a2a3a;height:auto;border-color:#eab30855!important">
+                <div class="fw-semibold mb-1" style="font-size:.85rem">
+                  <i class="bi bi-lightning-charge-fill me-1" style="color:#eab308"></i> Lightning
+                  <span class="badge ms-1" style="background:#eab30822;color:#eab308;border:1px solid #eab30855;font-size:.65rem;font-weight:500">ULTRA-RÁPIDO</span>
+                </div>
+                <div style="font-size:.72rem;color:#888;line-height:1.4">
+                  ⚡ A1 (plan) → A4 Backend → A5 Frontend → A10 Code Writer → Listo<br>
+                  Sin QA, sin SecOps, sin PR formal. Para hotfixes urgentes y prototipos desechables.<br>
+                  <span style="color:#eab308">⚠ Los cambios van al repo sin revisión — úsalo con cuidado.</span>
                 </div>
               </label>
             </div>
@@ -140,15 +157,26 @@
 {% block scripts %}
 <script>
 const diagrams = {
-  completo: "A1 (PM/Plan) → STOP (aprobación) → A6 (DB) + A8 (MCP) → A2 (Backend) + A3 (Frontend) → A7 (SecOps Rev.1) → CHECKPOINT A → A4 (QA) → A7 (SecOps Rev.2) → CHECKPOINT B → A5 (Refactor+Doc) → PR",
-  lite:     "A1 (PM/Plan) → STOP (aprobación) → A2 (Backend) + A3 (Frontend) → A4 (QA) → A5 (Refactor+Doc) → PR",
+  completo:  "A1 (Plan) → Auto-aprobado / STOP ⛔ → A2 DB → A3 MCP → A4 Backend → A5 Frontend → A6 Refactor → A7 QA ↺ → A8 SecOps ↺ → A10 Code Writer → A9 Sandbox → A1 PR Final",
+  lite:      "A1 (Plan) → Auto-aprobado / STOP ⛔ → A4 Backend → A5 Frontend → A6 Refactor → A7 QA ↺ → A8 SecOps ↺ → A10 Code Writer → A9 Sandbox → A1 PR Final",
+  lightning: "⚡ A1 (Plan) → ✅ Auto-aprobado → A4 Backend → A5 Frontend → A10 Code Writer → Listo",
+};
+
+const costs = {
+  completo:  "Completo ~$0.08–0.25 USD",
+  lite:      "Lite ~$0.02–0.08 USD",
+  lightning: "⚡ Lightning ~$0.005–0.02 USD",
 };
 
 function updateUI() {
   const mode = document.querySelector("input[name=mode]:checked")?.value || "completo";
-  document.getElementById("pipelineDiagram").textContent = diagrams[mode];
-  document.getElementById("costBadge").textContent =
-    mode === "completo" ? "Completo ~$0.08–0.25 USD" : "Lite ~$0.02–0.08 USD";
+  document.getElementById("pipelineDiagram").textContent = diagrams[mode] || diagrams.completo;
+  document.getElementById("costBadge").textContent = costs[mode] || costs.completo;
+  // Highlight lightning border
+  document.querySelectorAll("label[for^='mode']").forEach(l => l.style.borderColor = "#2a2a3a");
+  if (mode === "lightning") {
+    document.querySelector("label[for='modeLightning']").style.borderColor = "#eab308";
+  }
 }
 
 document.querySelectorAll("input[name=mode]").forEach(r => r.addEventListener("change", updateUI));

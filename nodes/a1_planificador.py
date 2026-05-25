@@ -8,9 +8,10 @@ from datetime import datetime
 
 
 def a1_planificador(state: FabricaState) -> dict:
-    repo_name = state["repo_name"]
-    repo_path = state["repo_path"]
-    is_auto   = state["mode"] == "auto"
+    repo_name   = state["repo_name"]
+    repo_path   = state["repo_path"]
+    is_auto     = state["mode"] == "auto"
+    is_lightning = state["mode"] == "lightning"
 
     # II-1/II-2: Fingerprint del codebase (contexto real del repo)
     fingerprint_block = ""
@@ -99,7 +100,19 @@ Estas instrucciones son OBLIGATORIAS para este y los siguientes features.
                 pass
 
     mode_instruction = ""
-    if is_auto:
+    is_lightning = state["mode"] == "lightning"
+    if is_lightning:
+        mode_instruction = """
+⚡ **MODO LIGHTNING** — Pipeline ultra-rápido (hotfix / prototipo desechable).
+El plan SOLO debe cubrir lo estrictamente necesario para implementar el cambio:
+- NO planifiques tests, no planifiques SecOps, no planifiques migraciones.
+- NO planifiques cambios de schema de DB (lightning no corre A2 DB).
+- El plan debe poder implementarse modificando ≤ 5 archivos.
+- Usa SKIP_BACKEND o SKIP_FRONTEND si aplica.
+- Escribe CONFIDENCE_SCORE y RISK_LEVEL como siempre.
+- En RISK_LEVEL: usa LOW si es posible (sin migraciones, sin API pública).
+"""
+    elif is_auto:
         mode_instruction = """
 5. **MODO DE EJECUCIÓN**: Decide qué modo es más apropiado para este feature:
    - COMPLETO: features nuevos que requieren nuevo esquema DB, herramientas MCP o revisión SecOps profunda
@@ -157,6 +170,7 @@ IMPORTANTE: NO generes código de implementación. Solo el plan.
     )
 
     # Resolver modo "auto" leyendo la decisión del agente
+    # lightning y los modos explícitos se mantienen sin cambio
     resolved_mode = state["mode"]
     if is_auto:
         m = re.search(r"MODO_SELECCIONADO:\s*(COMPLETO|LITE)", output, re.IGNORECASE)

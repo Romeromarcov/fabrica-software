@@ -23,6 +23,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse, Red
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.sessions import SessionMiddleware
 
 # Asegurar imports del orquestador
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -249,6 +250,10 @@ async def lifespan(app: FastAPI):
 # ── App ───────────────────────────────────────────────────────────────────────
 app = FastAPI(title="Fábrica de Software", docs_url=None, redoc_url=None, lifespan=lifespan)
 
+# P0-B: SessionMiddleware (obligatorio antes de BasicAuth y rutas OAuth)
+from config import GITHUB_OAUTH_SECRET
+app.add_middleware(SessionMiddleware, secret_key=GITHUB_OAUTH_SECRET, session_cookie="fabrica_session")
+
 _ui_user = os.getenv("UI_USERNAME", "")
 _ui_pass = os.getenv("UI_PASSWORD", "")
 if _ui_user and _ui_pass:
@@ -261,6 +266,116 @@ _STATIC_DIR.mkdir(exist_ok=True)   # BUG-019: crea el dir si no existe
 app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
 templates = Jinja2Templates(directory=_UI_DIR / "templates")
 store = ConfigStore()
+
+# ── P0-B: GitHub OAuth 2.0 ───────────────────────────────────────────────────
+
+def _get_oauth_client():
+    """Construye el cliente OAuth de GitHub (lazy, para no fallar si authlib no está instalado)."""
+    from config import GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, GITHUB_OAUTH_CALLBACK
+    try:
+        from authlib.integrations.starlette_client import OAuth as _OAuth
+        _oauth = _OAuth()
+        _oauth.register(
+            name="github",
+            client_id=GITHUB_CLIENT_ID,
+            client_secret=GITHUB_CLIENT_SECRET,
+            access_token_url="https://github.com/login/oauth/access_token",
+            access_token_params=None,
+            authorize_url="https://github.com/login/oauth/authorize",
+            authorize_params=None,
+            api_base_url="https://api.github.com/",
+            client_kwargs={"scope": "repo read:user"},
+        )
+        return _oauth.github, GITHUB_OAUTH_CALLBACK
+    except ImportError:
+        return None, None
+
+
+@app.get("/auth/github")
+async def auth_github(request: Request):
+    """Inicia el flujo OAuth con GitHub."""
+    from config import GITHUB_OAUTH_ENABLED
+    if not GITHUB_OAUTH_ENABLED:
+        return JSONResponse(
+            {"error": "GitHub OAuth no configurado. Agrega GITHUB_CLIENT_ID y GITHUB_CLIENT_SECRET al .env."},
+            status_code=400,
+        )
+    client, callback_url = _get_oauth_client()
+    if client is None:
+        return JSONResponse({"error": "authlib no instalado. Ejecuta: pip install authlib"}, status_code=500)
+    return await client.authorize_redirect(request, callback_url)
+
+
+@app.get("/auth/callback")
+async def auth_callback(request: Request):
+    """Callback de GitHub OAuth — guarda el token en sesión y en ConfigStore."""
+    from config import GITHUB_OAUTH_ENABLED
+    if not GITHUB_OAUTH_ENABLED:
+        return RedirectResponse("/")
+
+    client, _ = _get_oauth_client()
+    if client is None:
+        return RedirectResponse("/?github_error=authlib_missing")
+
+    try:
+        token = await client.authorize_access_token(request)
+    except Exception as exc:
+        logger.warning("GitHub OAuth callback error: %s", exc)
+        return RedirectResponse(f"/?github_error=auth_failed")
+
+    # Obtener perfil del usuario
+    github_token = token.get("access_token", "")
+    github_login = ""
+    github_name  = ""
+    try:
+        resp = await client.get("user", token=token)
+        user_data  = resp.json()
+        github_login = user_data.get("login", "")
+        github_name  = user_data.get("name") or github_login
+    except Exception as exc:
+        logger.warning("GitHub OAuth: no se pudo obtener perfil: %s", exc)
+
+    # Guardar en sesión (server-side, firmada con itsdangerous)
+    request.session["github_token"]  = github_token
+    request.session["github_login"]  = github_login
+    request.session["github_name"]   = github_name
+
+    # Guardar en ConfigStore (→ .env) Y en os.environ para la sesión actual
+    # git_tools.py llama os.getenv("GITHUB_TOKEN") en runtime, así lo ve inmediatamente
+    if github_token:
+        store.save({"GITHUB_TOKEN": github_token, "GITHUB_ACTOR": github_login})
+        os.environ["GITHUB_TOKEN"] = github_token
+        if github_login:
+            os.environ["GITHUB_ACTOR"] = github_login
+        logger.info("GitHub OAuth: token guardado para @%s", github_login)
+
+    return RedirectResponse("/?github_connected=1")
+
+
+@app.get("/auth/logout")
+async def auth_logout(request: Request):
+    """Limpia la sesión de GitHub."""
+    request.session.pop("github_token", None)
+    request.session.pop("github_login", None)
+    request.session.pop("github_name",  None)
+    return RedirectResponse("/?github_disconnected=1")
+
+
+@app.get("/api/github/status")
+async def github_status(request: Request):
+    """Estado de la conexión GitHub: login, scopes, repos disponibles."""
+    from config import GITHUB_OAUTH_ENABLED, GITHUB_TOKEN
+    token  = request.session.get("github_token") or GITHUB_TOKEN or ""
+    login  = request.session.get("github_login", "")
+    name   = request.session.get("github_name",  "")
+    return JSONResponse({
+        "oauth_enabled":  GITHUB_OAUTH_ENABLED,
+        "connected":      bool(token),
+        "login":          login,
+        "name":           name,
+        "source":         "oauth" if request.session.get("github_token") else ("env" if GITHUB_TOKEN else "none"),
+    })
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 

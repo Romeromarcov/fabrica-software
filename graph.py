@@ -3,13 +3,19 @@ Grafo LangGraph de la Fábrica de Software.
 
 Pipeline:
 
-  COMPLETO: A1 PM → Stop ⛔ → A2 DB → [A3 MCP]* → [A4 Backend]* → [A5 Frontend]*
-              → A6 Refactor ↺(QA falla) → A7 QA → A8 SecOps ↺(vulnerabilidades)
-              → A10 CodeWriter → A9 Sandbox → [A11 DevOps]* → A1 PM Final
+  COMPLETO:  A1 PM → Stop ⛔ → A2 DB → [A3 MCP]* → [A4 Backend]* → [A5 Frontend]*
+               → A6 Refactor ↺(QA falla) → A7 QA → A8 SecOps ↺(vulnerabilidades)
+               → A10 CodeWriter → A9 Sandbox → [A11 DevOps]* → A1 PM Final
 
-  LITE:     A1 PM → Stop ⛔ → [A4 Backend]* → [A5 Frontend]*
-              → A6 Refactor ↺(QA falla) → A7 QA → A8 SecOps ↺(vulnerabilidades)
-              → A10 CodeWriter → A9 Sandbox → [A11 DevOps]* → A1 PM Final
+  LITE:      A1 PM → Stop ⛔ → [A4 Backend]* → [A5 Frontend]*
+               → A6 Refactor ↺(QA falla) → A7 QA → A8 SecOps ↺(vulnerabilidades)
+               → A10 CodeWriter → A9 Sandbox → [A11 DevOps]* → A1 PM Final
+
+  LIGHTNING: ⚡ A1 PM → auto-aprobado → [A4 Backend]* → [A5 Frontend]*
+               → A10 CodeWriter → lightning_complete → END
+               (omite: A2 DB, A3 MCP, A6 Refactor, A7 QA, A8 SecOps,
+                        A9 Sandbox, A11 DevOps, A1 PR Final)
+               Para hotfixes y prototipos desechables. Target: < 90 seg.
 
   * = condicional según flags detectados por A1 Planificador:
       [A3 MCP]      → salta si needs_mcp=False
@@ -65,10 +71,13 @@ def _route_after_plan(state: FabricaState) -> str:
     Bloque III: decide el camino de aprobación del MASTER_PLAN.
     Solo aplica en project_mode; en modo standalone siempre va a stop_protocol.
 
+    lightning                      → confidence_auto_approve (siempre — modo ultra-rápido)
     confidence >= 85 + risk=LOW   → confidence_auto_approve (sin intervención)
     confidence >= 60 + risk≠HIGH  → veto_window (aprobación automática tras N min)
     demás casos                   → stop_protocol (aprobación manual)
     """
+    if state.get("mode") == "lightning":
+        return "confidence_auto_approve"  # ⚡ lightning: nunca espera aprobación manual
     if not state.get("project_mode"):
         return "stop_protocol"
     conf = state.get("confidence_score", 70)
@@ -82,12 +91,17 @@ def _route_after_plan(state: FabricaState) -> str:
 
 def _route_after_approval(state: FabricaState) -> str:
     """
-    Stop Protocol: plan aprobado → infraestructura (completo) | código (lite) | fin.
-    G5: lite + skip_backend → salta directamente al frontend.
+    Stop Protocol / Auto-approve: plan aprobado → infraestructura | código | fin.
+    G5:        lite      + skip_backend → salta directamente al frontend.
+    Lightning: lightning + skip_backend → salta directamente al frontend.
+    Lightning: lightning               → A4 Backend (omite A2 DB, A3 MCP).
     """
     if not state["founder_approval"]:
         return "rechazado"
     mode = state["mode"]
+    if mode == "lightning":
+        # ⚡ lightning salta A2/A3 siempre; el resto del shortcut se resuelve downstream
+        return "frontend_only" if state.get("skip_backend") else "lightning"
     # G5: si solo hay cambios de frontend y el modo es lite, saltar A4
     if mode == "lite" and state.get("skip_backend"):
         return "frontend_only"
@@ -114,9 +128,30 @@ def _route_after_mcp(state: FabricaState) -> str:
 
 def _route_after_backend(state: FabricaState) -> str:
     """
-    G5: A4 Backend → A5 Frontend | A6 Refactor (si skip_frontend=True).
+    G5:        A4 Backend → A5 Frontend | A6 Refactor (si skip_frontend=True).
+    Lightning: A4 Backend → A10 Code Writer directamente (sin A5, A6, A7, A8, A9).
     """
+    if state.get("mode") == "lightning":
+        return "a10_code_writer"  # ⚡ lightning: skip todo post-backend
     return "a6_refactor" if state.get("skip_frontend") else "a5_frontend"
+
+
+def _route_after_frontend(state: FabricaState) -> str:
+    """
+    A5 Frontend → A6 Refactor (normal) | A10 Code Writer (lightning).
+    """
+    if state.get("mode") == "lightning":
+        return "a10_code_writer"  # ⚡ lightning: skip A6/A7/A8/A9
+    return "a6_refactor"
+
+
+def _route_after_code_writer(state: FabricaState) -> str:
+    """
+    A10 Code Writer → A9 Sandbox (normal) | lightning_complete (lightning).
+    """
+    if state.get("mode") == "lightning":
+        return "lightning_complete"  # ⚡ lightning: skip sandbox
+    return "a9_sandbox"
 
 
 def _route_after_refactor(state: FabricaState) -> str:
@@ -170,6 +205,37 @@ def _route_after_sandbox(state: FabricaState) -> str:
     if state.get("sandbox_iterations", 0) >= MAX_SANDBOX_ITER:
         return "escalar"
     return "reintentar"
+
+
+# ── Nodo Lightning Complete ───────────────────────────────────────────────────
+
+def lightning_complete(state: FabricaState) -> dict:
+    """
+    ⚡ Terminal del pipeline Lightning: omite QA, SecOps, Sandbox, DevOps y PR.
+    Guarda metadata, notifica por Telegram y termina.
+    """
+    from tools.file_tools import save_run_metadata
+    from datetime import datetime
+
+    n_files = len(state.get("files_written", []))
+    save_run_metadata(state["feature_id"], {
+        "status":       "completado_lightning",
+        "completed_at": datetime.utcnow().isoformat(),
+        "files_written": state.get("files_written", []),
+        "mode":         "lightning",
+    })
+
+    try:
+        from tools.telegram import send_message
+        send_message(
+            f"⚡ *Lightning completado*: {state['feature_name']}\n"
+            f"📁 {n_files} archivo(s) escritos al repo `{state['repo_name']}`.\n"
+            f"⚠️ Sin QA ni SecOps — solo para hotfixes/prototipos."
+        )
+    except Exception:
+        pass  # best-effort
+
+    return {"current_agent": "lightning_complete"}
 
 
 # ── Nodo terminal ─────────────────────────────────────────────────────────────
@@ -241,9 +307,10 @@ def build_graph() -> StateGraph:
     g.add_node("a8_secops",         a8_secops)           # post-QA: auditoría + corrección
     g.add_node("a10_code_writer",   a10_code_writer)     # escribe archivos al repo real (ANTES de A9)
     g.add_node("a9_sandbox",        a9_sandbox)          # post-A10: tests sobre archivos reales
-    g.add_node("a11_devops",        a11_devops)          # actualiza deps/infra [condicional]
-    g.add_node("a1_pr_final",       a1_pr_final)         # PM cierre: cumplimiento+docs+PR
-    g.add_node("pipeline_detenido", pipeline_detenido)
+    g.add_node("a11_devops",          a11_devops)          # actualiza deps/infra [condicional]
+    g.add_node("a1_pr_final",         a1_pr_final)         # PM cierre: cumplimiento+docs+PR
+    g.add_node("pipeline_detenido",   pipeline_detenido)
+    g.add_node("lightning_complete",  lightning_complete)  # ⚡ terminal lightning (sin QA/PR)
 
     # ── Flujo ─────────────────────────────────────────────────────────────────
 
@@ -259,39 +326,21 @@ def build_graph() -> StateGraph:
         },
     )
 
-    # 1b. Los tres caminos convergen en _route_after_approval
-    g.add_conditional_edges(
-        "confidence_auto_approve",
-        _route_after_approval,
-        {
-            "completo":      "a2_db",
-            "lite":          "a4_backend",
-            "frontend_only": "a5_frontend",
-            "rechazado":     "pipeline_detenido",
-        },
-    )
-    g.add_conditional_edges(
-        "veto_window",
-        _route_after_approval,
-        {
-            "completo":      "a2_db",
-            "lite":          "a4_backend",
-            "frontend_only": "a5_frontend",
-            "rechazado":     "pipeline_detenido",
-        },
-    )
+    # ── Mapa compartido de salidas post-aprobación ────────────────────────────
+    _approval_targets = {
+        "completo":      "a2_db",
+        "lite":          "a4_backend",
+        "lightning":     "a4_backend",   # ⚡ lightning: salta A2/A3; diverge en downstream
+        "frontend_only": "a5_frontend",  # lite/lightning + skip_backend
+        "rechazado":     "pipeline_detenido",
+    }
 
-    # 2. Aprobado → infraestructura (completo) | código directo (lite) | frontend-only | fin
-    g.add_conditional_edges(
-        "stop_protocol",
-        _route_after_approval,
-        {
-            "completo":      "a2_db",
-            "lite":          "a4_backend",
-            "frontend_only": "a5_frontend",  # G5: lite + skip_backend
-            "rechazado":     "pipeline_detenido",
-        },
-    )
+    # 1b. Los tres caminos convergen en _route_after_approval
+    g.add_conditional_edges("confidence_auto_approve", _route_after_approval, _approval_targets)
+    g.add_conditional_edges("veto_window",             _route_after_approval, _approval_targets)
+
+    # 2. Aprobado → infraestructura (completo) | código directo (lite/lightning) | fin
+    g.add_conditional_edges("stop_protocol", _route_after_approval, _approval_targets)
 
     # 3. Modo completo: DB → (A3 MCP condicional G4) → Backend o Frontend
     g.add_conditional_edges(
@@ -314,16 +363,26 @@ def build_graph() -> StateGraph:
         },
     )
 
-    # 4. Backend → Frontend condicional (G5: skip_frontend)
+    # 4. Backend → Frontend condicional (G5: skip_frontend) | A10 directo (lightning)
     g.add_conditional_edges(
         "a4_backend",
         _route_after_backend,
         {
-            "a5_frontend": "a5_frontend",
-            "a6_refactor": "a6_refactor",  # G5: skip_frontend
+            "a5_frontend":    "a5_frontend",
+            "a6_refactor":    "a6_refactor",    # G5: skip_frontend
+            "a10_code_writer": "a10_code_writer", # ⚡ lightning: skip A5/A6/A7/A8
         },
     )
-    g.add_edge("a5_frontend", "a6_refactor")
+
+    # A5 Frontend → A6 Refactor (normal) | A10 Code Writer (lightning)
+    g.add_conditional_edges(
+        "a5_frontend",
+        _route_after_frontend,
+        {
+            "a6_refactor":    "a6_refactor",
+            "a10_code_writer": "a10_code_writer",  # ⚡ lightning
+        },
+    )
 
     # 5. A6 → QA (aprobado) | detener (bloqueante crítico)
     g.add_conditional_edges(
@@ -360,8 +419,15 @@ def build_graph() -> StateGraph:
         },
     )
 
-    # 9. A10 Code Writer → A9 Sandbox (G1: archivos ya en disco → tests sobre código real)
-    g.add_edge("a10_code_writer", "a9_sandbox")
+    # 9. A10 Code Writer → A9 Sandbox (normal) | lightning_complete (lightning)
+    g.add_conditional_edges(
+        "a10_code_writer",
+        _route_after_code_writer,
+        {
+            "a9_sandbox":         "a9_sandbox",
+            "lightning_complete": "lightning_complete",  # ⚡ skip sandbox
+        },
+    )
 
     # 10. Sandbox: passed → DevOps/PR | fallos → A6 Refactor | agotó → escala
     g.add_conditional_edges(
@@ -379,8 +445,9 @@ def build_graph() -> StateGraph:
     g.add_edge("a11_devops", "a1_pr_final")
 
     # 12. PM Final → FIN
-    g.add_edge("a1_pr_final",       END)
-    g.add_edge("pipeline_detenido", END)
+    g.add_edge("a1_pr_final",         END)
+    g.add_edge("pipeline_detenido",   END)
+    g.add_edge("lightning_complete",  END)  # ⚡
 
     return g
 

@@ -16,8 +16,9 @@ class FabricaState(TypedDict):
     # ── Identidad del feature ─────────────────────────────────────────────────
     feature_id: str
     feature_name: str
-    mode: Literal["completo", "lite", "auto"]
-    # "auto" → el Agente 1 elige y actualiza a "completo" o "lite" en su nodo
+    mode: Literal["completo", "lite", "auto", "lightning"]
+    # "auto"      → el Agente 1 elige y actualiza a "completo" o "lite" en su nodo
+    # "lightning" → A1→A4→A5→A10→END; omite DB, MCP, QA, SecOps, Sandbox, DevOps, PR
 
     # ── Repositorio destino ───────────────────────────────────────────────────
     repo_name: str          # ej: "omni-erp"
@@ -104,7 +105,7 @@ class FabricaState(TypedDict):
 def initial_state(
     feature_id: str,
     feature_name: str,
-    mode: Literal["completo", "lite", "auto"],
+    mode: Literal["completo", "lite", "auto", "lightning"],
     repo_name: str,
     repo_path: str,
     project_mode: bool = False,
