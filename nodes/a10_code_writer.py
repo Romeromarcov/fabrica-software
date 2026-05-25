@@ -154,6 +154,28 @@ def a10_code_writer(state: FabricaState) -> dict:
     #   • El feature está en modo completo (probablemente tiene modelos/deps nuevas)
     needs_devops = bool(files_written) or state.get("mode") == "completo"
 
+    # ── II-1: Actualizar fingerprint con los archivos nuevos ──────────────────
+    if files_written:
+        try:
+            from tools.repo_scanner import update_fingerprint
+            update_fingerprint(repo_path, list(files_written))
+        except Exception as _fp_exc:
+            logger.warning("update_fingerprint: %s", _fp_exc)
+
+    # ── II-3: Registrar rollbacks en session_memory si hubo backups ───────────
+    if files_backup and state.get("project_id"):
+        try:
+            from tools.session_memory import record_rollback
+            record_rollback(
+                project_id=state["project_id"],
+                feature_id=feature_id,
+                feature_name=state.get("feature_name", feature_id),
+                reason="Archivos sobreescritos con backup previo (G9)",
+                files_affected=list(files_backup.keys()),
+            )
+        except Exception as _roll_exc:
+            logger.warning("session_memory record_rollback: %s", _roll_exc)
+
     return {
         "files_written":  list(files_written),
         "files_backup":   files_backup,

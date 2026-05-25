@@ -10,8 +10,10 @@ def a5_frontend(state: FabricaState) -> dict:
     from tools.architecture_record import adr_context_block
     from tools.project_memory import get_memory_context
     from tools.stack_reader import read_stack, get_frontend_instructions
-    adr_block    = adr_context_block(state["repo_path"])
-    memory_block = get_memory_context(state.get("project_id"))
+    from tools.context_retriever import get_relevant_context
+    adr_block         = adr_context_block(state["repo_path"])
+    memory_block      = get_memory_context(state.get("project_id"))
+    fingerprint_block = get_relevant_context(state["repo_path"])
 
     # Sistema de aprendizaje: lecciones del proyecto
     lessons_block = load_lessons(state["repo_path"])
@@ -35,7 +37,7 @@ Corrige ÚNICAMENTE los bugs listados en el frontend.
 
     task = f"""
 Eres el Agente 5 — Frontend Developer.
-{adr_block}{memory_block}{lessons_block}{stack_block}
+{adr_block}{memory_block}{fingerprint_block}{lessons_block}{stack_block}
 MASTER_PLAN del feature (especialmente secciones 5 y 6 — UI/UX):
 ---
 {state['master_plan']}

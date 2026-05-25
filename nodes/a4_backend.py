@@ -11,8 +11,10 @@ def a4_backend(state: FabricaState) -> dict:
     from tools.architecture_record import adr_context_block
     from tools.project_memory import get_memory_context
     from tools.stack_reader import read_stack, get_backend_instructions
-    adr_block    = adr_context_block(state["repo_path"])
-    memory_block = get_memory_context(state.get("project_id"))
+    from tools.context_retriever import get_relevant_context
+    adr_block         = adr_context_block(state["repo_path"])
+    memory_block      = get_memory_context(state.get("project_id"))
+    fingerprint_block = get_relevant_context(state["repo_path"])
 
     # Sistema de aprendizaje: lecciones del proyecto + few-shots
     lessons_block  = load_lessons(state["repo_path"])
@@ -37,7 +39,7 @@ Corrige ÚNICAMENTE los bugs listados. No cambies lo que ya funciona.
 
     task = f"""
 Eres el Agente 4 — Backend Developer.
-{adr_block}{memory_block}{lessons_block}{fewshot_block}{stack_block}
+{adr_block}{memory_block}{fingerprint_block}{lessons_block}{fewshot_block}{stack_block}
 MASTER_PLAN del feature:
 ---
 {state['master_plan']}

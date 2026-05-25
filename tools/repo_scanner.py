@@ -28,6 +28,7 @@ ALWAYS_INCLUDE = [
     "agents/PROJECT_CONTEXT.md",
     "agents/DECISION_LOG.md",
     "agents/CODING_STANDARDS.md",
+    "agents/CODEBASE_FINGERPRINT.md",  # II-1: fingerprint generado por build_fingerprint()
     "requirements.txt",
     "pyproject.toml",
     "package.json",
@@ -247,3 +248,365 @@ def get_repo_context_for_a0(repo_path: str, stack: dict | None = None) -> str:
     )
 
     return intro + snapshot
+
+
+# ── II-1: Agente Indexador de Codebase ───────────────────────────────────────
+
+FINGERPRINT_FILE = Path("agents") / "CODEBASE_FINGERPRINT.md"
+
+
+def _detect_stack_info(repo: Path) -> dict:
+    """Detecta el stack tecnológico a partir de los archivos de dependencias."""
+    info: dict = {"backend": None, "frontend": None, "extras": [], "db": None}
+
+    # ── Python / backend ──────────────────────────────────────────────────────
+    py_content = ""
+    for dep_file in ("requirements.txt", "pyproject.toml", "setup.py"):
+        p = repo / dep_file
+        if p.exists():
+            py_content += p.read_text(encoding="utf-8", errors="replace")
+
+    if py_content:
+        cl = py_content.lower()
+        if "django" in cl:
+            info["backend"] = "Django"
+            if "djangorestframework" in cl or "rest_framework" in cl:
+                info["backend"] += " + DRF"
+            if "graphene" in cl:
+                info["backend"] += " + GraphQL"
+        elif "fastapi" in cl:
+            info["backend"] = "FastAPI"
+        elif "flask" in cl:
+            info["backend"] = "Flask"
+
+        if "psycopg" in cl or "postgresql" in cl:
+            info["db"] = "PostgreSQL"
+        elif "mysqlclient" in cl or "pymysql" in cl:
+            info["db"] = "MySQL"
+        elif "sqlite" in cl:
+            info["db"] = "SQLite"
+
+        for pkg in ("celery", "redis", "elasticsearch", "boto3", "stripe"):
+            if pkg in cl:
+                info["extras"].append(pkg.capitalize())
+
+    # ── JavaScript / frontend ─────────────────────────────────────────────────
+    pkg_json = repo / "package.json"
+    if pkg_json.exists():
+        try:
+            import json as _json
+            pkg = _json.loads(pkg_json.read_text(encoding="utf-8"))
+            all_deps = {**pkg.get("dependencies", {}), **pkg.get("devDependencies", {})}
+            dl = {k.lower() for k in all_deps}
+
+            if "react" in dl:
+                info["frontend"] = "React"
+                if "typescript" in dl or any("@types/" in d for d in dl):
+                    info["frontend"] += " + TypeScript"
+            elif "vue" in dl:
+                info["frontend"] = "Vue"
+            elif "next" in dl:
+                info["frontend"] = "Next.js"
+            elif "svelte" in dl:
+                info["frontend"] = "Svelte"
+
+            for lib, label in (
+                ("@tanstack/react-query", "TanStack Query"),
+                ("react-query", "TanStack Query"),
+                ("@mui/material", "MUI"),
+                ("tailwindcss", "Tailwind"),
+                ("zustand", "Zustand"),
+                ("pinia", "Pinia"),
+            ):
+                if lib in all_deps or lib.lower() in dl:
+                    info["extras"].append(label)
+        except Exception:
+            pass
+
+    return info
+
+
+def _find_django_modules(repo: Path) -> list[dict]:
+    """Encuentra módulos Django y su estado de implementación."""
+    modules: list[dict] = []
+
+    for models_file in sorted(repo.glob("*/models.py")):
+        app_dir = models_file.parent
+        rel = str(app_dir.relative_to(repo)).replace("\\", "/")
+        if _NEVER_RE.search(rel):
+            continue
+
+        modules.append({
+            "name":         app_dir.name,
+            "path":         rel,
+            "has_models":   True,
+            "has_services": (app_dir / "services.py").exists() or any(app_dir.glob("services/")),
+            "has_tests":    (app_dir / "tests.py").exists() or any(app_dir.glob("tests/")) or any(app_dir.glob("test_*.py")),
+            "has_api":      (app_dir / "serializers.py").exists() or (app_dir / "views.py").exists(),
+            "has_urls":     (app_dir / "urls.py").exists(),
+        })
+
+    return modules
+
+
+def _detect_conventions(repo: Path) -> list[str]:
+    """Detecta convenciones de código a partir de muestras reales."""
+    conventions: list[str] = []
+
+    # FK pattern (ej: id_empresa)
+    fk_pattern = _re.compile(r"\b(id_\w+)\s*=\s*models\.ForeignKey")
+    for models_file in list(repo.glob("*/models.py"))[:6]:
+        try:
+            content = models_file.read_text(encoding="utf-8", errors="replace")
+            fk_matches = fk_pattern.findall(content)
+            if fk_matches:
+                example = fk_matches[0]
+                conventions.append(
+                    f"FK con prefijo `id_`: todos los modelos usan `{example} = models.ForeignKey(...)`"
+                )
+                break
+        except Exception:
+            pass
+
+    # @transaction.atomic
+    for service_file in list(repo.glob("*/services.py"))[:5]:
+        try:
+            content = service_file.read_text(encoding="utf-8", errors="replace")
+            if "@transaction.atomic" in content:
+                conventions.append("Services: `@transaction.atomic` en operaciones de escritura")
+                break
+        except Exception:
+            pass
+
+    # Logger estándar
+    for py_file in list(repo.glob("**/*.py"))[:30]:
+        if _NEVER_RE.search(str(py_file.relative_to(repo))):
+            continue
+        try:
+            content = py_file.read_text(encoding="utf-8", errors="replace")
+            if "logger = logging.getLogger(__name__)" in content:
+                conventions.append("Logger: `logger = logging.getLogger(__name__)` al inicio de cada módulo")
+                break
+        except Exception:
+            pass
+
+    # Fixtures de conftest
+    conftest = repo / "conftest.py"
+    if conftest.exists():
+        try:
+            content = conftest.read_text(encoding="utf-8", errors="replace")
+            fixtures = _re.findall(r"@pytest\.fixture[^\n]*\ndef (\w+)", content)
+            if fixtures:
+                flist = ", ".join(f"`{f}`" for f in fixtures[:5])
+                conventions.append(f"Fixtures de conftest.py disponibles: {flist}")
+        except Exception:
+            pass
+
+    # BaseModel / soft-delete
+    for models_file in list(repo.glob("*/models.py"))[:6]:
+        try:
+            content = models_file.read_text(encoding="utf-8", errors="replace")
+            if "BaseModel" in content and "deleted_at" in content:
+                conventions.append("Modelos usan `BaseModel` con soft-delete (`deleted_at`)")
+                break
+        except Exception:
+            pass
+
+    return conventions
+
+
+def _detect_env_vars(repo: Path) -> list[str]:
+    """Detecta variables de entorno referenciadas en el proyecto."""
+    env_vars: list[str] = []
+    seen: set[str] = set()
+
+    # Desde .env.example
+    for env_file in (".env.example", ".env.template", ".env.sample"):
+        p = repo / env_file
+        if p.exists():
+            try:
+                for line in p.read_text(encoding="utf-8", errors="replace").splitlines():
+                    line = line.strip()
+                    if line and not line.startswith("#") and "=" in line:
+                        key = line.split("=")[0].strip()
+                        if key and key not in seen:
+                            seen.add(key)
+                            env_vars.append(key)
+            except Exception:
+                pass
+            break
+
+    # Desde settings.py
+    for settings_file in list(repo.glob("**/settings*.py"))[:3]:
+        if _NEVER_RE.search(str(settings_file.relative_to(repo))):
+            continue
+        try:
+            content = settings_file.read_text(encoding="utf-8", errors="replace")
+            for key in _re.findall(r'os\.environ\.get\(["\'](\w+)["\']', content):
+                if key not in seen:
+                    seen.add(key)
+                    env_vars.append(key)
+        except Exception:
+            pass
+
+    return env_vars[:20]
+
+
+def build_fingerprint(repo_path: str) -> str:
+    """
+    Escanea el repo completo y genera `agents/CODEBASE_FINGERPRINT.md`.
+
+    Extrae del código real:
+    - Stack detectado (requirements.txt, package.json)
+    - Convenciones del código (FKs, decoradores, loggers, fixtures)
+    - Estado de módulos (tabla: models / services / tests / API)
+    - Gaps detectados (módulos sin tests, sin servicios, etc.)
+    - Variables de entorno referenciadas
+
+    Retorna el contenido del fingerprint (también lo escribe en disco).
+    """
+    from datetime import datetime as _dt
+
+    repo = Path(repo_path)
+    if not repo.exists():
+        logger.warning("build_fingerprint: repo no encontrado: %s", repo_path)
+        return ""
+
+    stack_info  = _detect_stack_info(repo)
+    modules     = _find_django_modules(repo)
+    conventions = _detect_conventions(repo)
+    env_vars    = _detect_env_vars(repo)
+
+    # ── Construir el documento ────────────────────────────────────────────────
+    lines = [
+        f"# Codebase Fingerprint — `{repo.name}`",
+        f"> Generado: {_dt.utcnow().strftime('%Y-%m-%d %H:%M UTC')} | Auto-actualizado por A10 tras cada feature",
+        "",
+        "## Stack detectado",
+    ]
+
+    be = stack_info.get("backend")
+    fe = stack_info.get("frontend")
+    db = stack_info.get("db")
+    extras = stack_info.get("extras", [])
+
+    if be:
+        be_line = f"- **Backend:** {be}"
+        if db:
+            be_line += f" + {db}"
+        if extras:
+            be_line += " + " + " + ".join(extras)
+        lines.append(be_line)
+    if fe:
+        lines.append(f"- **Frontend:** {fe}")
+    if not be and not fe:
+        lines.append("- Stack no identificado (ver requirements.txt / package.json)")
+    lines.append("")
+
+    if conventions:
+        lines.append("## Convenciones detectadas (del código real)")
+        for c in conventions:
+            lines.append(f"- {c}")
+        lines.append("")
+
+    if modules:
+        lines.append("## Módulos y su estado")
+        lines.append("| Módulo | Models | Services | Tests | API |")
+        lines.append("|--------|--------|----------|-------|-----|")
+        for m in modules:
+            lines.append(
+                f"| `{m['name']}` "
+                f"| {'✅' if m['has_models']   else '❌'} "
+                f"| {'✅' if m['has_services'] else '❌'} "
+                f"| {'✅' if m['has_tests']    else '⚠️'} "
+                f"| {'✅' if m['has_api']      else '❌'} |"
+            )
+        lines.append("")
+
+    # Gaps detectados
+    gaps: list[str] = []
+    for m in modules:
+        if not m["has_services"]:
+            gaps.append(f"Capa de servicios ausente en `{m['name']}/`")
+        if not m["has_tests"]:
+            gaps.append(f"Tests ausentes en `{m['name']}/`")
+        if not m["has_api"]:
+            gaps.append(f"API (serializers/views) ausente en `{m['name']}/`")
+
+    if gaps:
+        lines.append("## Gaps detectados (por ausencia en el código)")
+        for gap in gaps[:12]:
+            lines.append(f"- {gap}")
+        lines.append("")
+
+    if env_vars:
+        lines.append("## Variables de entorno referenciadas")
+        lines.append(", ".join(f"`{v}`" for v in env_vars))
+        lines.append("")
+
+    content = "\n".join(lines)
+
+    # ── Guardar en disco ──────────────────────────────────────────────────────
+    fp_path = repo / FINGERPRINT_FILE
+    fp_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        fp_path.write_text(content, encoding="utf-8")
+        logger.info("build_fingerprint: %s (%d chars)", fp_path, len(content))
+    except Exception as exc:
+        logger.error("build_fingerprint: error al escribir: %s", exc)
+
+    return content
+
+
+def update_fingerprint(repo_path: str, files_changed: list[str]) -> None:
+    """
+    Actualización incremental del fingerprint tras que A10 escribe archivos.
+    Para repos de hasta ~200 archivos el full-rebuild es suficientemente rápido (< 5 s).
+    """
+    if not repo_path or not files_changed:
+        return
+    try:
+        build_fingerprint(repo_path)
+        logger.info(
+            "update_fingerprint: actualizado tras %d archivo(s): %s",
+            len(files_changed), ", ".join(files_changed[:5]),
+        )
+    except Exception as exc:
+        logger.error("update_fingerprint: error: %s", exc)
+
+
+def load_fingerprint(repo_path: str) -> str:
+    """
+    Carga el CODEBASE_FINGERPRINT.md para inyectarlo en el prompt de un agente.
+    Si no existe, genera uno. Devuelve string vacío si el repo no existe.
+    """
+    if not repo_path:
+        return ""
+
+    fp_path = Path(repo_path) / FINGERPRINT_FILE
+
+    if fp_path.exists():
+        try:
+            content = fp_path.read_text(encoding="utf-8")
+            if content.strip():
+                return content
+        except Exception as exc:
+            logger.warning("load_fingerprint: error al leer %s: %s", fp_path, exc)
+
+    # Primera vez — generar ahora
+    return build_fingerprint(repo_path)
+
+
+def fingerprint_context_block(repo_path: str) -> str:
+    """
+    Retorna el fingerprint formateado para inyectar en un prompt de agente.
+    Prefijo de sección incluido. Devuelve string vacío si el repo no existe o está vacío.
+    """
+    fp = load_fingerprint(repo_path)
+    if not fp:
+        return ""
+    return (
+        "\n## 🗺️ CODEBASE FINGERPRINT (estado real del repo)\n\n"
+        + fp
+        + "\n"
+    )

@@ -8,12 +8,17 @@ from config import MODEL_A2
 def a2_db(state: FabricaState) -> dict:
     from tools.architecture_record import adr_context_block
     from tools.project_memory import get_memory_context
-    adr_block    = adr_context_block(state["repo_path"])
-    memory_block = get_memory_context(state.get("project_id"))
+    from tools.context_retriever import get_relevant_context
+    from tools.session_memory import load_memory
+
+    adr_block         = adr_context_block(state["repo_path"])
+    memory_block      = get_memory_context(state.get("project_id"))
+    fingerprint_block = get_relevant_context(state["repo_path"])
+    session_block     = load_memory(state.get("project_id", ""))
 
     task = f"""
 Eres el Agente 2 — DB Architect.
-{adr_block}{memory_block}
+{adr_block}{memory_block}{fingerprint_block}{session_block}
 
 MASTER_PLAN del feature a implementar:
 ---
