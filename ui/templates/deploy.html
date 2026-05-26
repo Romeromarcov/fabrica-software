@@ -1,0 +1,270 @@
+{% extends "base.html" %}
+{% block title %}Deploy — Railway{% endblock %}
+
+{% block head %}
+<style>
+  .service-card {
+    background: #16161d; border: 1px solid #2a2a3a; border-radius: 10px;
+    padding: 1rem; cursor: pointer; transition: border-color .15s;
+  }
+  .service-card:hover, .service-card.selected { border-color: var(--brand); }
+  .service-card .svc-name { font-weight: 600; font-size: .9rem; }
+  .service-card .svc-meta { font-size: .75rem; color: #666; margin-top: .3rem; }
+  .deploy-status {
+    border-radius: 8px; padding: .75rem 1rem; font-size: .85rem;
+    background: #1e1e28; border: 1px solid #2a2a3a; display: none;
+  }
+  .deploy-status.active { display: block; }
+  #logStream {
+    background: #0a0a10; border-radius: 8px; padding: .75rem;
+    height: 240px; overflow-y: auto; font-family: monospace;
+    font-size: .72rem; color: #7ec8e3; border: 1px solid #2a2a3a;
+    margin-top: .75rem; display: none;
+  }
+  #logStream.active { display: block; }
+  .status-pill {
+    display: inline-flex; align-items: center; gap: .3rem;
+    border-radius: 20px; padding: .15rem .6rem; font-size: .72rem; font-weight: 600;
+  }
+  .status-BUILDING  { background: #f59e0b22; color: #f59e0b; border: 1px solid #f59e0b55; }
+  .status-SUCCESS   { background: #16a34a22; color: #4ade80; border: 1px solid #16a34a55; }
+  .status-FAILED    { background: #dc262622; color: #f87171; border: 1px solid #dc262655; }
+  .status-DEPLOYING { background: #7c3aed22; color: #a78bfa; border: 1px solid #7c3aed55; }
+  .status-UNKNOWN   { background: #71717a22; color: #a1a1aa; border: 1px solid #71717a55; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center mb-4">
+  <div class="flex-grow-1">
+    <h4 class="mb-0 fw-semibold">🚀 Deploy a Railway</h4>
+    <small class="text-muted">Despliega tu proyecto con un click</small>
+  </div>
+</div>
+
+{% if not railway_configured %}
+<div class="alert border-0 p-3 mb-4" style="background:#f59e0b11;border:1px solid #f59e0b33!important;border-radius:10px">
+  <div class="fw-semibold mb-1" style="color:#f59e0b">
+    <i class="bi bi-exclamation-triangle-fill me-2"></i>Railway no configurado
+  </div>
+  <div style="font-size:.82rem;color:#888">
+    Agrega <code>RAILWAY_TOKEN</code> y <code>RAILWAY_PROJECT_ID</code> en
+    <a href="/config" style="color:#f59e0b">Configuración</a> o en tu <code>.env</code>.
+  </div>
+  <div class="mt-2" style="font-size:.78rem;color:#666">
+    1. Crea un token en <a href="https://railway.com" target="_blank" style="color:#f59e0b">railway.com</a>
+       → Account Settings → Tokens<br>
+    2. Copia el Project ID desde la URL de tu proyecto en Railway
+  </div>
+</div>
+{% endif %}
+
+<!-- Selector de servicio -->
+<div class="card p-4 mb-3" {% if not railway_configured %}style="opacity:.5;pointer-events:none"{% endif %}>
+  <div class="fw-semibold mb-3" style="font-size:.9rem">
+    <i class="bi bi-boxes me-1" style="color:var(--brand-light)"></i>Servicios del Proyecto
+  </div>
+
+  <div class="d-flex gap-2 mb-3">
+    <button class="btn btn-sm btn-outline-secondary" onclick="loadServices()" id="loadServicesBtn">
+      <i class="bi bi-arrow-clockwise me-1"></i> Cargar servicios
+    </button>
+    <div id="servicesSpinner" class="d-none">
+      <span class="spinner-border spinner-border-sm text-secondary" role="status"></span>
+      <span class="ms-1" style="font-size:.8rem;color:#888">Cargando…</span>
+    </div>
+  </div>
+
+  <div id="servicesList" class="row g-2">
+    <div class="col-12" style="font-size:.8rem;color:#555">
+      Haz click en "Cargar servicios" para ver los servicios disponibles.
+    </div>
+  </div>
+</div>
+
+<!-- Opciones de deploy -->
+<div class="card p-4 mb-3" id="deployOptions" style="display:none">
+  <div class="fw-semibold mb-3" style="font-size:.9rem">
+    <i class="bi bi-gear me-1" style="color:var(--brand-light)"></i>Opciones de Deploy
+  </div>
+  <div class="row g-3 align-items-end">
+    <div class="col-md-4">
+      <label class="form-label" style="font-size:.78rem;color:#888">Entorno</label>
+      <select id="deployEnv" class="form-select form-select-sm">
+        <option value="production">Production</option>
+        <option value="staging">Staging</option>
+      </select>
+    </div>
+    <div class="col-md-8">
+      <button class="btn btn-brand px-4" onclick="triggerDeploy()" id="deployBtn">
+        <i class="bi bi-rocket-takeoff me-2"></i>Iniciar Deploy
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Estado del deploy -->
+<div class="deploy-status" id="deployStatus">
+  <div class="d-flex align-items-center justify-content-between mb-2">
+    <span class="fw-semibold" style="font-size:.85rem">Estado del Deploy</span>
+    <span id="deployStatusBadge" class="status-pill status-BUILDING">⏳ BUILDING</span>
+  </div>
+  <div id="deployUrl" style="font-size:.78rem;color:#888"></div>
+  <div id="deployId" style="font-size:.72rem;color:#555;font-family:monospace"></div>
+</div>
+
+<!-- Log stream -->
+<div id="logStream">
+  <div style="color:#555;margin-bottom:.5rem;font-size:.75rem">— Logs del deploy —</div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+let selectedServiceId  = null;
+let currentDeploymentId = null;
+let pollInterval       = null;
+
+async function loadServices() {
+  document.getElementById("loadServicesBtn").disabled = true;
+  document.getElementById("servicesSpinner").classList.remove("d-none");
+
+  try {
+    const r = await fetch("/api/deploy/railway/services");
+    const d = await r.json();
+
+    if (d.error) {
+      document.getElementById("servicesList").innerHTML =
+        `<div class="col-12"><div class="alert border-0 py-2" style="background:#dc262622;color:#f87171;font-size:.82rem">${d.error}</div></div>`;
+      return;
+    }
+
+    const list = document.getElementById("servicesList");
+    list.innerHTML = "";
+
+    if (!d.services || d.services.length === 0) {
+      list.innerHTML = `<div class="col-12" style="font-size:.8rem;color:#555">No se encontraron servicios en el proyecto.</div>`;
+      return;
+    }
+
+    for (const svc of d.services) {
+      const dep = svc.latest_deployment || {};
+      const statusClass = "status-" + (dep.status || "UNKNOWN");
+      const col = document.createElement("div");
+      col.className = "col-md-6";
+      col.innerHTML = `
+        <div class="service-card" onclick="selectService('${svc.id}', '${svc.name}', this)">
+          <div class="svc-name"><i class="bi bi-box me-1"></i>${svc.name}</div>
+          <div class="svc-meta">
+            ID: <code>${svc.id.slice(0, 8)}…</code>
+            ${dep.status ? `<span class="status-pill ${statusClass} ms-2">${dep.status}</span>` : ""}
+          </div>
+          ${dep.url ? `<div class="svc-meta mt-1"><a href="${dep.url}" target="_blank" style="color:#a78bfa;font-size:.72rem">${dep.url}</a></div>` : ""}
+        </div>`;
+      list.appendChild(col);
+    }
+  } catch (e) {
+    document.getElementById("servicesList").innerHTML =
+      `<div class="col-12" style="color:#f87171;font-size:.8rem">Error: ${e.message}</div>`;
+  } finally {
+    document.getElementById("loadServicesBtn").disabled = false;
+    document.getElementById("servicesSpinner").classList.add("d-none");
+  }
+}
+
+function selectService(id, name, el) {
+  document.querySelectorAll(".service-card").forEach(c => c.classList.remove("selected"));
+  el.classList.add("selected");
+  selectedServiceId = id;
+  document.getElementById("deployOptions").style.display = "block";
+  document.getElementById("deployOptions").scrollIntoView({ behavior: "smooth" });
+}
+
+async function triggerDeploy() {
+  if (!selectedServiceId) { alert("Selecciona un servicio"); return; }
+
+  const btn = document.getElementById("deployBtn");
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Iniciando…';
+
+  try {
+    const env = document.getElementById("deployEnv").value;
+    const r   = await fetch("/api/deploy/railway", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ service_id: selectedServiceId, environment: env }),
+    });
+    const d = await r.json();
+
+    if (d.error) {
+      alert("Error: " + d.error);
+      return;
+    }
+
+    currentDeploymentId = d.deployment_id;
+    showDeployStatus("BUILDING");
+    document.getElementById("deployId").textContent = "Deploy ID: " + currentDeploymentId;
+
+    // Iniciar polling de estado
+    startPolling();
+
+  } catch(e) {
+    alert("Error: " + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-rocket-takeoff me-2"></i>Iniciar Deploy';
+  }
+}
+
+function showDeployStatus(status) {
+  const statusEl = document.getElementById("deployStatus");
+  statusEl.classList.add("active");
+  const badge = document.getElementById("deployStatusBadge");
+  const icons = { BUILDING: "⏳", SUCCESS: "✅", FAILED: "❌", DEPLOYING: "🚀", UNKNOWN: "❓" };
+  badge.className = "status-pill status-" + status;
+  badge.textContent = (icons[status] || "❓") + " " + status;
+  document.getElementById("logStream").classList.add("active");
+}
+
+function startPolling() {
+  if (pollInterval) clearInterval(pollInterval);
+  pollInterval = setInterval(async () => {
+    if (!currentDeploymentId) return;
+    try {
+      const r = await fetch(`/api/deploy/railway/status?deployment_id=${currentDeploymentId}`);
+      const d = await r.json();
+      if (d.error) return;
+
+      showDeployStatus(d.status);
+
+      if (d.url) {
+        document.getElementById("deployUrl").innerHTML =
+          `<a href="${d.url}" target="_blank" style="color:#4ade80">${d.url}</a>`;
+      }
+
+      addLog(`[${new Date().toLocaleTimeString()}] Status: ${d.status}`);
+
+      if (["SUCCESS", "FAILED"].includes(d.status)) {
+        clearInterval(pollInterval);
+        if (d.status === "SUCCESS") {
+          addLog("✅ Deploy completado exitosamente!");
+          window._showToast?.("✅ Deploy exitoso en Railway");
+        } else {
+          addLog("❌ Deploy fallido. Revisa los logs en Railway.");
+          window._showToast?.("❌ Deploy fallido", "danger");
+        }
+      }
+    } catch {}
+  }, 3000);
+}
+
+function addLog(line) {
+  const area = document.getElementById("logStream");
+  const span = document.createElement("div");
+  span.textContent = line;
+  area.appendChild(span);
+  area.scrollTop = area.scrollHeight;
+}
+</script>
+{% endblock %}

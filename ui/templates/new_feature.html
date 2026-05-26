@@ -132,9 +132,14 @@
         <div class="d-flex gap-2">
           <button type="submit" class="btn btn-brand px-4 flex-grow-1"
                   id="submitBtn" {% if not api_key_ok %}disabled{% endif %}>
-            <i class="bi bi-play-fill me-1"></i> Iniciar Pipeline
+            <i class="bi bi-play-fill me-1"></i> Lanzar directo
           </button>
-          <a href="/" class="btn btn-outline-secondary px-3">Cancelar</a>
+          <button type="button" class="btn btn-outline-secondary px-3" id="preChatBtn"
+                  onclick="goToPreChat()" {% if not api_key_ok %}disabled{% endif %}
+                  title="Refinar el brief con el A0 antes de lanzar">
+            <i class="bi bi-chat-dots me-1"></i> Pre-chat
+          </button>
+          <a href="/" class="btn btn-outline-secondary px-2">✕</a>
         </div>
 
       </form>
@@ -188,5 +193,14 @@ document.getElementById("newFeatureForm")?.addEventListener("submit", function()
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status"></span>Iniciando…';
 });
+
+// Pre-chat: redirigir a la página de chat con los parámetros del formulario
+function goToPreChat() {
+  const featureName = document.getElementById("featureName").value.trim();
+  const repoName    = document.querySelector("select[name='repo_name']")?.value || "";
+  const mode        = document.querySelector("input[name='mode']:checked")?.value || "auto";
+  const params = new URLSearchParams({ feature_name: featureName, repo: repoName, mode });
+  window.location.href = "/prechat?" + params.toString();
+}
 </script>
 {% endblock %}

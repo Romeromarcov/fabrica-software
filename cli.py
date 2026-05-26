@@ -71,7 +71,23 @@ def cmd_new_feature(feature_name: str, mode: str, repo_name: str) -> None:
         title="🏭 Fábrica de Software"
     ))
 
+    # VII-1: cargar refined_brief del pre-chat si existe
+    refined_brief = os.environ.get("REFINED_BRIEF_OVERRIDE", "").strip() or None
+    if not refined_brief:
+        # Fallback: leerlo de metadata si el servidor ya lo guardó
+        try:
+            import json as _json
+            from tools.file_tools import RUNS_DIR as _RUNS_DIR
+            _meta_path = _RUNS_DIR / feature_id / "metadata.json"
+            if _meta_path.exists():
+                _meta = _json.loads(_meta_path.read_text())
+                refined_brief = _meta.get("refined_brief") or None
+        except Exception:
+            pass
+
     state = initial_state(feature_id, feature_name, mode, repo_name, repo_path)
+    if refined_brief:
+        state["refined_brief"] = refined_brief
     app = _get_app()
     config = _thread_config(feature_id)
 

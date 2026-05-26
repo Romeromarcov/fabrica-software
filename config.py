@@ -81,6 +81,15 @@ CHECKPOINT_TIMEOUT_SECONDS = int(os.getenv("CHECKPOINT_TIMEOUT_SECONDS", "1800")
 # Cada cuántos features completados corre el A0 Revisor (0 = desactivado)
 ARCH_REVIEW_INTERVAL = int(os.getenv("ARCH_REVIEW_INTERVAL", "3"))
 
+# ── VII-1: Pre-planificación chat ────────────────────────────────────────────
+# Si True, el botón "Nuevo Feature" redirige al chat pre-planificación antes de A1.
+PRECHAT_ENABLED = os.getenv("PRECHAT_ENABLED", "true").lower() == "true"
+
+# ── VII-3: Railway Deploy ─────────────────────────────────────────────────────
+RAILWAY_TOKEN      = os.getenv("RAILWAY_TOKEN",      "")
+RAILWAY_PROJECT_ID = os.getenv("RAILWAY_PROJECT_ID", "")
+RAILWAY_ENABLED    = bool(RAILWAY_TOKEN and RAILWAY_PROJECT_ID)
+
 # ── P0-B: GitHub OAuth 2.0 ───────────────────────────────────────────────────
 # Si están configurados, el flujo OAuth reemplaza el PAT manual.
 # Crear OAuth App en github.com → Settings → Developer Settings → OAuth Apps

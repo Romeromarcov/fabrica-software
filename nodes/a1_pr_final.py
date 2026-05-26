@@ -397,6 +397,13 @@ Al final escribe: `✅ CICLO COMPLETADO`
         pr_url=pr_url,
     )
 
+    # VII-2: señal de fin de pipeline para cerrar SSE
+    try:
+        from tools.event_bus import emit_pipeline_end
+        emit_pipeline_end(state["feature_id"], "completado")
+    except Exception:
+        pass
+
     return {
         "pr_message":     pr_message,
         "feature_branch": feature_branch,

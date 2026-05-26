@@ -1,0 +1,272 @@
+{% extends "base.html" %}
+{% block title %}Session en vivo — {{ feature_id }}{% endblock %}
+
+{% block head %}
+<style>
+  .agent-row {
+    display: flex; align-items: center; gap: .75rem;
+    padding: .6rem .75rem; border-radius: 8px;
+    border: 1px solid #2a2a3a; margin-bottom: .4rem;
+    background: #16161d; transition: border-color .2s;
+  }
+  .agent-row.running { border-color: #f59e0b88; background: #f59e0b08; }
+  .agent-row.done    { border-color: #16a34a55; background: #16a34a08; }
+  .agent-row.error   { border-color: #dc262655; background: #dc262608; }
+  .agent-icon { font-size: 1.1rem; width: 28px; text-align: center; flex-shrink: 0; }
+  .agent-name { font-size: .85rem; font-weight: 600; color: #ddd; flex: 1; }
+  .agent-meta { font-size: .72rem; color: #666; text-align: right; white-space: nowrap; }
+  .agent-cost { font-size: .75rem; color: #a78bfa; }
+  .pulse { animation: pulse 1.2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+  #log-area {
+    background: #0a0a10; border-radius: 8px; padding: .75rem;
+    height: 200px; overflow-y: auto; font-family: monospace;
+    font-size: .72rem; color: #7ec8e3; border: 1px solid #2a2a3a;
+  }
+  .progress-bar-custom {
+    height: 6px; border-radius: 3px;
+    background: linear-gradient(90deg, var(--brand), #a78bfa);
+    transition: width .5s ease;
+  }
+  .stat-mini { font-size: .72rem; color: #888; }
+  .stat-mini strong { color: #ddd; font-size: .85rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center mb-3">
+  <a href="/" class="btn btn-sm btn-outline-secondary me-3"><i class="bi bi-arrow-left"></i></a>
+  <div class="flex-grow-1">
+    <h5 class="mb-0 fw-semibold">
+      📡 Sesión en vivo
+      <span id="statusBadge" class="badge ms-2" style="font-size:.7rem;background:#f59e0b22;color:#f59e0b;border:1px solid #f59e0b55">
+        Conectando…
+      </span>
+    </h5>
+    <small class="text-muted font-monospace">{{ feature_id }}</small>
+  </div>
+  <a href="/feature/{{ feature_id }}" class="btn btn-sm btn-outline-secondary">
+    <i class="bi bi-file-text me-1"></i> Ver detalle
+  </a>
+</div>
+
+<!-- Stats row -->
+<div class="row g-3 mb-3">
+  <div class="col-md-3">
+    <div class="card p-3 stat-mini">
+      <strong id="statAgentsDone">0</strong> / <span id="statAgentsTotal">—</span>
+      <div>Agentes completados</div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card p-3 stat-mini">
+      <strong id="statTokensIn">0</strong>
+      <div>Tokens entrada</div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card p-3 stat-mini">
+      <strong id="statTokensOut">0</strong>
+      <div>Tokens salida</div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card p-3 stat-mini">
+      <strong id="statCost">$0.0000</strong>
+      <div>Costo acumulado</div>
+    </div>
+  </div>
+</div>
+
+<!-- Barra de progreso -->
+<div class="card p-3 mb-3">
+  <div class="d-flex justify-content-between mb-1" style="font-size:.75rem;color:#888">
+    <span>Progreso del pipeline</span>
+    <span id="progressPct">0%</span>
+  </div>
+  <div style="background:#2a2a3a;border-radius:3px;overflow:hidden">
+    <div class="progress-bar-custom" id="progressBar" style="width:0%"></div>
+  </div>
+</div>
+
+<div class="row g-3">
+  <!-- Agentes -->
+  <div class="col-md-7">
+    <div class="card p-3">
+      <div class="fw-semibold mb-3" style="font-size:.85rem">
+        <i class="bi bi-cpu me-1" style="color:var(--brand-light)"></i> Agentes
+      </div>
+      <div id="agentsList">
+        {% for ev in recent_events %}
+        {% if ev.status in ('start', 'end', 'error') and ev.agent != '__pipeline__' %}
+        <div class="agent-row {{ 'done' if ev.status == 'end' else ('error' if ev.status == 'error' else 'running') }}"
+             id="agent-{{ ev.agent|replace(' ', '-') }}">
+          <div class="agent-icon">{{ '✅' if ev.status == 'end' else ('❌' if ev.status == 'error' else '⏳') }}</div>
+          <div class="agent-name">{{ ev.agent }}</div>
+          <div class="agent-meta">
+            {% if ev.status == 'end' %}
+            <div class="agent-cost">${{ "%.4f"|format(ev.cost_usd) }}</div>
+            <div>{{ ev.tokens_in }}↑ {{ ev.tokens_out }}↓</div>
+            {% else %}
+            <div class="pulse" style="color:#f59e0b">En curso…</div>
+            {% endif %}
+          </div>
+        </div>
+        {% endif %}
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Log -->
+  <div class="col-md-5">
+    <div class="card p-3">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <span class="fw-semibold" style="font-size:.85rem">
+          <i class="bi bi-terminal me-1" style="color:var(--brand-light)"></i> Log en vivo
+        </span>
+        <button class="btn btn-sm btn-outline-secondary" onclick="clearLog()" style="font-size:.7rem;padding:.1rem .4rem">
+          Limpiar
+        </button>
+      </div>
+      <div id="log-area"></div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const FEATURE_ID = "{{ feature_id }}";
+const AGENT_ICONS = {
+  "A1": "📋", "A2": "🗄️", "A3": "🔧", "A4": "⚙️", "A5": "🖥️",
+  "A6": "✨", "A7": "🧪", "A8": "🔒", "A9": "🧬", "A10": "💾",
+  "A11": "🚀", "__pipeline__": "🏭",
+};
+const PIPELINE_AGENTS = ["A1 Planificador","A2 DB","A3 MCP","A4 Backend","A5 Frontend",
+                         "A6 Refactor","A7 QA","A8 SecOps","A10 Code Writer","A9 Sandbox",
+                         "A11 DevOps","A1 PR Final"];
+
+let totalCost = 0, totalIn = 0, totalOut = 0, doneCount = 0;
+const agentState = {};  // agentLabel → {status, cost, in, out}
+
+function agentIcon(label) {
+  for (const [k,v] of Object.entries(AGENT_ICONS)) {
+    if (label.includes(k)) return v;
+  }
+  return "🤖";
+}
+
+function safeId(label) { return "agent-" + label.replace(/[^a-zA-Z0-9]/g, "-"); }
+
+function getOrCreateAgentRow(label) {
+  const id = safeId(label);
+  let row = document.getElementById(id);
+  if (!row) {
+    row = document.createElement("div");
+    row.id = id;
+    row.className = "agent-row";
+    row.innerHTML = `
+      <div class="agent-icon">${agentIcon(label)}</div>
+      <div class="agent-name">${label}</div>
+      <div class="agent-meta" id="${id}-meta"></div>`;
+    document.getElementById("agentsList").appendChild(row);
+  }
+  return row;
+}
+
+function handleEvent(ev) {
+  if (!ev || ev.type === "connected") return;
+  if (ev.type === "timeout" || ev.type === "idle_timeout") {
+    updateStatus("Timeout", "#888");
+    return;
+  }
+
+  const label  = ev.agent || "";
+  const status = ev.status || "";
+  const ts     = new Date(ev.ts || Date.now()).toLocaleTimeString();
+
+  addLog(`[${ts}] ${label} → ${status}` + (ev.msg ? ` — ${ev.msg}` : ""));
+
+  if (label === "__pipeline__") {
+    if (status === "end") {
+      updateStatus("✅ Completado", "#4ade80");
+      setProgress(100);
+    }
+    return;
+  }
+
+  const row  = getOrCreateAgentRow(label);
+  const meta = document.getElementById(safeId(label) + "-meta");
+
+  if (status === "start") {
+    row.className = "agent-row running";
+    if (meta) meta.innerHTML = `<div class="pulse" style="color:#f59e0b">En curso…</div>`;
+    updateStatus(`⏳ ${label}`, "#f59e0b");
+  } else if (status === "end") {
+    row.className = "agent-row done";
+    const cost = ev.cost_usd || 0;
+    if (meta) meta.innerHTML = `
+      <div class="agent-cost">$${cost.toFixed(4)}</div>
+      <div>${ev.tokens_in || 0}↑ ${ev.tokens_out || 0}↓</div>`;
+    // Acumular stats
+    totalCost += cost;
+    totalIn   += ev.tokens_in  || 0;
+    totalOut  += ev.tokens_out || 0;
+    doneCount++;
+    document.getElementById("statCost").textContent       = "$" + totalCost.toFixed(4);
+    document.getElementById("statTokensIn").textContent   = totalIn.toLocaleString();
+    document.getElementById("statTokensOut").textContent  = totalOut.toLocaleString();
+    document.getElementById("statAgentsDone").textContent = doneCount;
+    // Actualizar progreso estimado
+    const pct = Math.min(95, Math.round((doneCount / PIPELINE_AGENTS.length) * 100));
+    setProgress(pct);
+  } else if (status === "error") {
+    row.className = "agent-row error";
+    if (meta) meta.innerHTML = `<div style="color:#f87171">Error</div>`;
+  }
+}
+
+function updateStatus(text, color) {
+  const badge = document.getElementById("statusBadge");
+  badge.textContent = text;
+  badge.style.color = color;
+  badge.style.borderColor = color + "55";
+  badge.style.background  = color + "22";
+}
+
+function setProgress(pct) {
+  document.getElementById("progressBar").style.width = pct + "%";
+  document.getElementById("progressPct").textContent = pct + "%";
+}
+
+function addLog(line) {
+  const area = document.getElementById("log-area");
+  const span = document.createElement("div");
+  span.textContent = line;
+  area.appendChild(span);
+  area.scrollTop = area.scrollHeight;
+}
+
+function clearLog() { document.getElementById("log-area").innerHTML = ""; }
+
+// ── Conectar SSE ──────────────────────────────────────────────────────────────
+const evtSource = new EventSource(`/api/sessions/${FEATURE_ID}/stream`);
+evtSource.onmessage = function(e) {
+  try { handleEvent(JSON.parse(e.data)); } catch {}
+};
+evtSource.onerror = function() {
+  updateStatus("Desconectado", "#f87171");
+};
+
+// Inicializar counts con eventos históricos
+document.addEventListener("DOMContentLoaded", () => {
+  // Contar agentes done de los eventos previos inyectados por Jinja
+  document.querySelectorAll(".agent-row.done").forEach(() => doneCount++);
+  document.getElementById("statAgentsDone").textContent = doneCount;
+  document.getElementById("statAgentsTotal").textContent = PIPELINE_AGENTS.length;
+  const pct = Math.min(95, Math.round((doneCount / PIPELINE_AGENTS.length) * 100));
+  setProgress(pct);
+});
+</script>
+{% endblock %}

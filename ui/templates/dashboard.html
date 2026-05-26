@@ -115,10 +115,20 @@
           <td style="font-size:.78rem;color:#888">
             {{ (r.get("started_at") or "")[:19] }}
           </td>
-          <td>
-            <a href="/feature/{{ r.feature_id }}" class="btn btn-sm btn-outline-secondary btn-sm py-0 px-2" style="font-size:.75rem">
+          <td class="d-flex gap-1">
+            <a href="/feature/{{ r.feature_id }}" class="btn btn-sm btn-outline-secondary py-0 px-2" style="font-size:.75rem">
               Ver <i class="bi bi-arrow-right"></i>
             </a>
+            {% if r.get("status") in ["iniciando", "building", "approved", "auto_approved"] %}
+            <a href="/session/{{ r.feature_id }}" class="btn btn-sm py-0 px-2"
+               style="font-size:.75rem;background:#f59e0b22;color:#f59e0b;border:1px solid #f59e0b55">
+              📡 En vivo
+            </a>
+            {% else %}
+            <a href="/session/{{ r.feature_id }}" class="btn btn-sm btn-outline-secondary py-0 px-2" style="font-size:.75rem;opacity:.5">
+              <i class="bi bi-clock-history"></i>
+            </a>
+            {% endif %}
           </td>
         </tr>
         {% endfor %}

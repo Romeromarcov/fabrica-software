@@ -288,6 +288,7 @@ def call_agent(
     include_static: list[str] | None = None,
     extra_context: dict[str, str] | None = None,
     repo_path: str | None = None,
+    feature_id: str | None = None,   # VII-2: para emitir eventos de observabilidad
 ) -> tuple[str, CostEntry]:
     static_keys = include_static if include_static is not None else _STATIC_KEYS
 
@@ -318,22 +319,49 @@ def call_agent(
         except Exception as _skill_exc:
             logger.warning("Error al cargar skills del proyecto: %s", _skill_exc)
 
+    # VII-2: señal de inicio al event bus (best-effort, nunca bloquea el pipeline)
+    # feature_id puede venir como parámetro o del env var que el CLI inyecta
+    _fid = feature_id or os.getenv("FEATURE_ID_OVERRIDE", "")
+    if _fid:
+        try:
+            from tools.event_bus import emit
+            emit(_fid, agent_label, "start", model=model)
+        except Exception:
+            pass
+
     if USE_OPENCLAW:
         logger.info("→ %s [OpenClaw] | repo: %s", agent_label, repo_path or "—")
-        return _call_openclaw(
+        text, cost_entry = _call_openclaw(
             agent_key=agent_key, agent_label=agent_label, model=model,
             static_keys=[], extra_context=resolved_extra, task_content=task_content,
         )
+    else:
+        provider = _provider(model)
+        logger.info("→ %s [directo] | modelo: %s | repo: %s", agent_label, model, repo_path or "—")
 
-    provider = _provider(model)
-    logger.info("→ %s [directo] | modelo: %s | repo: %s", agent_label, model, repo_path or "—")
+        kwargs = dict(
+            agent_key=agent_key, agent_label=agent_label, model=model,
+            static_keys=[], extra_context=resolved_extra, task_content=task_content,
+        )
+        if provider == "anthropic":
+            text, cost_entry = _call_anthropic(**kwargs)
+        elif provider == "google-native":
+            text, cost_entry = _call_google_native(**kwargs)
+        else:
+            text, cost_entry = _call_openai_compat(provider=provider, **kwargs)
 
-    kwargs = dict(
-        agent_key=agent_key, agent_label=agent_label, model=model,
-        static_keys=[], extra_context=resolved_extra, task_content=task_content,
-    )
-    if provider == "anthropic":
-        return _call_anthropic(**kwargs)
-    if provider == "google-native":
-        return _call_google_native(**kwargs)
-    return _call_openai_compat(provider=provider, **kwargs)
+    # VII-2: señal de fin con métricas reales
+    if _fid:
+        try:
+            from tools.event_bus import emit
+            emit(
+                _fid, agent_label, "end",
+                model=model,
+                tokens_in=cost_entry.get("input_tokens", 0),
+                tokens_out=cost_entry.get("output_tokens", 0),
+                cost_usd=cost_entry.get("cost_usd", 0.0),
+            )
+        except Exception:
+            pass
+
+    return text, cost_entry

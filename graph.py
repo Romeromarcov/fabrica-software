@@ -235,6 +235,13 @@ def lightning_complete(state: FabricaState) -> dict:
     except Exception:
         pass  # best-effort
 
+    # VII-2: señal de fin de pipeline para cerrar SSE
+    try:
+        from tools.event_bus import emit_pipeline_end
+        emit_pipeline_end(state["feature_id"], "completado_lightning")
+    except Exception:
+        pass
+
     return {"current_agent": "lightning_complete"}
 
 

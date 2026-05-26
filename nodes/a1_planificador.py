@@ -121,6 +121,17 @@ El plan SOLO debe cubrir lo estrictamente necesario para implementar el cambio:
    `MODO_SELECCIONADO: COMPLETO` o `MODO_SELECCIONADO: LITE`
 """
 
+    # VII-1: Inyectar brief refinado del pre-chat si existe
+    refined_brief_block = ""
+    if state.get("refined_brief"):
+        refined_brief_block = f"""
+⚠️ BRIEF REFINADO (acordado con el Founder en pre-planificación):
+---
+{state['refined_brief']}
+---
+Tu plan DEBE respetar exactamente este scope. No amplíes ni reduzcas sin justificación.
+"""
+
     task = f"""
 Eres el Agente 1 en FASE A (Planificador / Product Owner).
 
@@ -128,7 +139,7 @@ El Founder ha solicitado el siguiente feature para el proyecto **{repo_name}**:
 **Nombre:** {state['feature_name']}
 **Modo configurado:** {state['mode'].upper()}
 **Repositorio:** {repo_path}
-{fingerprint_block}{session_memory_block}{fewshot_block}{project_context}
+{fingerprint_block}{session_memory_block}{fewshot_block}{refined_brief_block}{project_context}
 
 Tu tarea:
 1. Analiza la naturaleza del feature y los módulos afectados.

@@ -1361,3 +1361,229 @@ async def stream_logs(feature_id: str):
         yield "data: [TIMEOUT]\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# VII-1 — Chat pre-planificación
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@app.get("/prechat", response_class=HTMLResponse)
+async def prechat_page(request: Request, feature_name: str = "", repo: str = "", mode: str = "auto"):
+    """Página de chat pre-planificación — se llega desde /new con params opcionales."""
+    return templates.TemplateResponse(request, "prechat.html", {
+        "feature_name": feature_name,
+        "repo":         repo,
+        "mode":         mode,
+        "repos":        list_repos(),
+        "active_page":  "new",
+    })
+
+
+@app.post("/api/prechat")
+async def api_prechat(request: Request):
+    """
+    Stream SSE del chat pre-planificación con el A0.
+    Body JSON: {messages: [{role, content}], model?: str}
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "Body JSON inválido")
+
+    messages = body.get("messages", [])
+    model    = body.get("model", None)
+
+    if not messages:
+        raise HTTPException(400, "messages requerido")
+
+    async def event_generator():
+        import asyncio
+        from nodes.a0_prechat import stream_response
+
+        loop = asyncio.get_event_loop()
+        # stream_response es síncrono con yield — lo ejecutamos en un thread
+        def _gen():
+            return list(stream_response(messages, model))
+
+        try:
+            # Ejecutar en thread para no bloquear el event loop
+            tokens = await loop.run_in_executor(None, _gen)
+            for token in tokens:
+                # Escapar newlines en el valor SSE
+                safe = token.replace("\n", "\\n")
+                yield f"data: {json.dumps({'token': token})}\n\n"
+            yield f"data: {json.dumps({'done': True})}\n\n"
+        except Exception as exc:
+            logger.exception("prechat stream error: %s", exc)
+            yield f"data: {json.dumps({'error': str(exc)})}\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@app.post("/api/prechat/confirm")
+async def api_prechat_confirm(request: Request):
+    """
+    Guarda el refined_brief y lanza el pipeline con él.
+    Body JSON: {feature_name, repo_name, mode, refined_brief, conversation}
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "Body JSON inválido")
+
+    feature_name  = body.get("feature_name", "").strip()
+    repo_name     = body.get("repo_name", "").strip()
+    mode          = body.get("mode", "auto")
+    refined_brief = body.get("refined_brief", "").strip()
+
+    if not feature_name or not repo_name:
+        raise HTTPException(400, "feature_name y repo_name son requeridos")
+
+    feature_id = (
+        f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_"
+        f"{feature_name[:20].replace(' ', '_').lower()}"
+    )
+
+    # Guardar el refined_brief en metadata para que el CLI lo cargue
+    (RUNS_DIR / feature_id).mkdir(parents=True, exist_ok=True)
+    import json as _json
+    (RUNS_DIR / feature_id / "metadata.json").write_text(
+        _json.dumps({"refined_brief": refined_brief, "feature_name": feature_name}),
+        encoding="utf-8",
+    )
+
+    # Lanzar pipeline con env var adicional para el refined_brief
+    cmd = [
+        sys.executable, "cli.py", "new-feature",
+        feature_name,
+        "--repo", repo_name,
+        "--mode", mode,
+    ]
+    env = {
+        **os.environ,
+        "FEATURE_ID_OVERRIDE":   feature_id,
+        "REFINED_BRIEF_OVERRIDE": refined_brief[:2000],  # limitado para env var
+    }
+    proc = subprocess.Popen(
+        cmd,
+        cwd=str(Path(__file__).parent.parent),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        env=env,
+    )
+    (RUNS_DIR / feature_id / "process.pid").write_text(str(proc.pid))
+
+    return JSONResponse({"ok": True, "feature_id": feature_id, "redirect": f"/feature/{feature_id}"})
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# VII-2 — Observabilidad en vivo (SSE de eventos)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@app.get("/session/{feature_id}", response_class=HTMLResponse)
+async def session_live(request: Request, feature_id: str):
+    """Vista en vivo del feature — muestra agentes, tokens, costos en tiempo real."""
+    run_dir = RUNS_DIR / feature_id
+    meta = {}
+    if (run_dir / "metadata.json").exists():
+        meta = json.loads((run_dir / "metadata.json").read_text())
+
+    from tools.event_bus import get_recent_events
+    recent_events = get_recent_events(feature_id, limit=200)
+
+    return templates.TemplateResponse(request, "session_detail.html", {
+        "feature_id":    feature_id,
+        "meta":          meta,
+        "recent_events": recent_events,
+        "active_page":   "dashboard",
+    })
+
+
+@app.get("/api/sessions/{feature_id}/stream")
+async def session_stream(feature_id: str):
+    """SSE endpoint — hace tail del events.jsonl y lo streamea al cliente."""
+    from tools.event_bus import tail_sse
+
+    async def event_generator():
+        async for chunk in tail_sse(feature_id):
+            yield chunk
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control":               "no-cache",
+            "X-Accel-Buffering":           "no",   # nginx: deshabilitar buffer
+            "Access-Control-Allow-Origin": "*",
+        },
+    )
+
+
+@app.get("/api/sessions/{feature_id}/events")
+async def session_events(feature_id: str, limit: int = 100):
+    """Devuelve los últimos N eventos del feature (para carga inicial)."""
+    from tools.event_bus import get_recent_events
+    return JSONResponse({"events": get_recent_events(feature_id, limit=limit)})
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# VII-3 — Railway Deploy
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@app.get("/deploy", response_class=HTMLResponse)
+async def deploy_page(request: Request):
+    """Panel de deploy a Railway."""
+    from config import FABRICA_DIR
+    cfg = store.load(masked=False)
+    railway_token      = cfg.get("RAILWAY_TOKEN", "") or os.getenv("RAILWAY_TOKEN", "")
+    railway_project_id = cfg.get("RAILWAY_PROJECT_ID", "") or os.getenv("RAILWAY_PROJECT_ID", "")
+
+    return templates.TemplateResponse(request, "deploy.html", {
+        "railway_configured": bool(railway_token and railway_project_id),
+        "railway_project_id": railway_project_id,
+        "repos":              list_repos(),
+        "active_page":        "deploy",
+    })
+
+
+@app.post("/api/deploy/railway")
+async def api_deploy_railway(request: Request):
+    """Dispara un deploy en Railway."""
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "Body JSON inválido")
+
+    service_id  = body.get("service_id", "")
+    environment = body.get("environment", "production")
+
+    try:
+        from tools.railway_client import trigger_deploy
+        result = await trigger_deploy(service_id=service_id, environment=environment)
+        return JSONResponse(result)
+    except Exception as exc:
+        logger.exception("railway deploy error: %s", exc)
+        return JSONResponse({"error": str(exc)}, status_code=500)
+
+
+@app.get("/api/deploy/railway/status")
+async def api_deploy_status(deployment_id: str = ""):
+    """Polling del estado de un deploy Railway."""
+    try:
+        from tools.railway_client import get_deployment_status
+        result = await get_deployment_status(deployment_id)
+        return JSONResponse(result)
+    except Exception as exc:
+        return JSONResponse({"error": str(exc)}, status_code=500)
+
+
+@app.get("/api/deploy/railway/services")
+async def api_railway_services():
+    """Lista los servicios del proyecto Railway configurado."""
+    try:
+        from tools.railway_client import list_services
+        result = await list_services()
+        return JSONResponse(result)
+    except Exception as exc:
+        return JSONResponse({"error": str(exc)}, status_code=500)

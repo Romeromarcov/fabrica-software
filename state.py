@@ -29,6 +29,9 @@ class FabricaState(TypedDict):
     project_id: Optional[str]   # ID del proyecto padre
     a0_feature_spec: Optional[str]  # Spec exacta del A0 para este feature (name+desc+phase+criteria)
 
+    # ── VII-1: Pre-planificación (chat con A0 antes del pipeline) ────────────────
+    refined_brief: Optional[str]      # Brief refinado tras el chat pre-planificación
+
     # ── Fase A: planificación ─────────────────────────────────────────────────
     master_plan: Optional[str]        # Contenido completo del MASTER_PLAN
     master_plan_path: Optional[str]   # Ruta al archivo guardado
@@ -121,6 +124,7 @@ def initial_state(
         project_mode=project_mode,
         project_id=project_id,
         a0_feature_spec=None,
+        refined_brief=None,
         master_plan=None,
         master_plan_path=None,
         founder_approval=False,
