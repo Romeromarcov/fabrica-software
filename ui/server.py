@@ -1527,6 +1527,31 @@ async def session_events(feature_id: str, limit: int = 100):
     return JSONResponse({"events": get_recent_events(feature_id, limit=limit)})
 
 
+@app.post("/api/sessions/{feature_id}/intervene")
+async def session_intervene(feature_id: str, request: Request):
+    """
+    VIII-1: Envía instrucción correctiva al pipeline en curso.
+    El próximo agente en llamar al LLM leerá e inyectará esta instrucción.
+    Body JSON: { "text": "Instrucción del Founder..." }
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "Body JSON inválido")
+
+    text = body.get("text", "").strip()
+    if not text:
+        raise HTTPException(400, "El campo 'text' es requerido")
+
+    try:
+        from tools.event_bus import post_intervention
+        post_intervention(feature_id, text)
+        return JSONResponse({"ok": True, "feature_id": feature_id, "preview": text[:100]})
+    except Exception as exc:
+        logger.exception("session_intervene error: %s", exc)
+        raise HTTPException(500, str(exc))
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # VII-3 — Railway Deploy
 # ═══════════════════════════════════════════════════════════════════════════════

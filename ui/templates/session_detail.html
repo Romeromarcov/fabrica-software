@@ -133,6 +133,32 @@
     </div>
   </div>
 </div>
+
+<!-- VIII-1: Panel de Intervención Mid-flight -->
+<div class="card mt-3 p-3" id="interventionPanel">
+  <div class="fw-semibold mb-2" style="font-size:.85rem">
+    <i class="bi bi-lightning-charge me-1" style="color:#f59e0b"></i>
+    Intervención Mid-flight
+    <span class="badge ms-1" style="background:#f59e0b22;color:#f59e0b;border:1px solid #f59e0b55;font-size:.65rem">
+      FOUNDER OVERRIDE
+    </span>
+  </div>
+  <div style="font-size:.75rem;color:#888;margin-bottom:.75rem;line-height:1.5">
+    Envía una instrucción correctiva al agente en curso — se inyectará antes de su próxima llamada al LLM.
+    No aborta el pipeline; el agente la lee y ajusta su output.
+  </div>
+  <div class="d-flex gap-2 align-items-start">
+    <textarea id="interventionText" class="form-control" rows="2"
+              placeholder="ej. Asegúrate de usar transacciones atómicas en todas las escrituras a BD…"
+              style="font-size:.82rem;resize:vertical"></textarea>
+    <button class="btn btn-sm px-3 flex-shrink-0"
+            style="background:#f59e0b22;color:#f59e0b;border:1px solid #f59e0b55;font-size:.8rem;white-space:nowrap;height:fit-content;margin-top:2px"
+            onclick="sendIntervention()" id="interventionBtn">
+      <i class="bi bi-send me-1"></i> Enviar
+    </button>
+  </div>
+  <div id="interventionFeedback" class="mt-2" style="font-size:.75rem;display:none"></div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -249,6 +275,46 @@ function addLog(line) {
 }
 
 function clearLog() { document.getElementById("log-area").innerHTML = ""; }
+
+// ── VIII-1: Intervención mid-flight ──────────────────────────────────────────
+async function sendIntervention() {
+  const text = document.getElementById("interventionText").value.trim();
+  if (!text) return;
+  const btn      = document.getElementById("interventionBtn");
+  const feedback = document.getElementById("interventionFeedback");
+  btn.disabled   = true;
+  btn.innerHTML  = '<span class="spinner-border spinner-border-sm me-1"></span>Enviando…';
+  feedback.style.display = "none";
+
+  try {
+    const r = await fetch(`/api/sessions/${FEATURE_ID}/intervene`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({text}),
+    });
+    const d = await r.json();
+    if (d.ok) {
+      feedback.style.cssText = "display:block;color:#4ade80";
+      feedback.textContent = "✅ Instrucción enviada — el próximo agente la leerá antes de llamar al LLM.";
+      document.getElementById("interventionText").value = "";
+      addLog(`[Intervención] ${text}`);
+    } else {
+      feedback.style.cssText = "display:block;color:#f87171";
+      feedback.textContent = "Error: " + (d.detail || "respuesta inesperada");
+    }
+  } catch(e) {
+    feedback.style.cssText = "display:block;color:#f87171";
+    feedback.textContent = "Error de red: " + e.message;
+  } finally {
+    btn.disabled  = false;
+    btn.innerHTML = '<i class="bi bi-send me-1"></i> Enviar';
+  }
+}
+
+// Enviar con Ctrl+Enter desde el textarea
+document.getElementById("interventionText")?.addEventListener("keydown", e => {
+  if (e.ctrlKey && e.key === "Enter") { e.preventDefault(); sendIntervention(); }
+});
 
 // ── Conectar SSE ──────────────────────────────────────────────────────────────
 const evtSource = new EventSource(`/api/sessions/${FEATURE_ID}/stream`);

@@ -322,6 +322,27 @@ def call_agent(
     # VII-2: señal de inicio al event bus (best-effort, nunca bloquea el pipeline)
     # feature_id puede venir como parámetro o del env var que el CLI inyecta
     _fid = feature_id or os.getenv("FEATURE_ID_OVERRIDE", "")
+
+    # VIII-1: Verificar intervención del Founder antes de llamar al LLM
+    if _fid:
+        try:
+            from tools.event_bus import pop_intervention
+            _intervention = pop_intervention(_fid)
+            if _intervention:
+                task_content = (
+                    "⚡ INSTRUCCIÓN CORRECTIVA DEL FOUNDER (máxima prioridad):\n"
+                    "---\n"
+                    f"{_intervention}\n"
+                    "---\n\n"
+                    + task_content
+                )
+                logger.info(
+                    "%s: intervención del Founder inyectada (%d chars)",
+                    agent_label, len(_intervention),
+                )
+        except Exception:
+            pass
+
     if _fid:
         try:
             from tools.event_bus import emit

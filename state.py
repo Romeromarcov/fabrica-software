@@ -98,6 +98,10 @@ class FabricaState(TypedDict):
     # ── Bloque IV: Calidad Autónoma Reforzada ──────────────────────────────────
     sandbox_gate_failures: list[dict]  # [{"gate": str, "layer": str, "stderr": str, "hard": bool}]
 
+    # ── VIII-3: Debate inter-agente (solo RISK_LEVEL=HIGH) ───────────────────────
+    debate_done: bool              # True tras ejecutar el panel de debate
+    debate_summary: Optional[str]  # Resumen de objeciones y resolución del árbitro
+
     # ── Control interno ───────────────────────────────────────────────────────
     current_agent: str
     # operator.add permite que múltiples nodos appendeen a esta lista sin conflictos
@@ -161,6 +165,8 @@ def initial_state(
         risk_level="MEDIUM",
         veto_deadline=None,
         sandbox_gate_failures=[],
+        debate_done=False,
+        debate_summary=None,
         current_agent="inicio",
         errors=[],
         cost_entries=[],

@@ -132,6 +132,17 @@ El plan SOLO debe cubrir lo estrictamente necesario para implementar el cambio:
 Tu plan DEBE respetar exactamente este scope. No amplíes ni reduzcas sin justificación.
 """
 
+    # VIII-2: Routing dinámico — sugerencia TF-IDF basada en historial del proyecto
+    routing_hint_block = ""
+    if state.get("project_id"):
+        try:
+            from tools.dynamic_router import predict_routing, build_routing_hint
+            _dr_prediction = predict_routing(state["feature_name"], state.get("project_id"))
+            routing_hint_block = build_routing_hint(_dr_prediction)
+        except Exception as _dr_exc:
+            import logging as _log
+            _log.getLogger(__name__).debug("dynamic_router en A1: %s", _dr_exc)
+
     task = f"""
 Eres el Agente 1 en FASE A (Planificador / Product Owner).
 
@@ -139,7 +150,7 @@ El Founder ha solicitado el siguiente feature para el proyecto **{repo_name}**:
 **Nombre:** {state['feature_name']}
 **Modo configurado:** {state['mode'].upper()}
 **Repositorio:** {repo_path}
-{fingerprint_block}{session_memory_block}{fewshot_block}{refined_brief_block}{project_context}
+{fingerprint_block}{session_memory_block}{fewshot_block}{refined_brief_block}{routing_hint_block}{project_context}
 
 Tu tarea:
 1. Analiza la naturaleza del feature y los módulos afectados.

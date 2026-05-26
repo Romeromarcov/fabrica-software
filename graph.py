@@ -44,6 +44,7 @@ from state import FabricaState
 from config import DB_PATH, MAX_QA_ITER_COMPLETO, MAX_QA_ITER_LITE, MAX_SECOPS_ITER, MAX_SANDBOX_ITER, VETO_WINDOW_MINUTES
 
 # ── Nodos de agentes ──────────────────────────────────────────────────────────
+from nodes.debate_panel    import run_debate
 from nodes.a1_planificador import a1_planificador
 from nodes.a1_pr_final     import a1_pr_final
 from nodes.a2_db           import a2_db
@@ -87,6 +88,21 @@ def _route_after_plan(state: FabricaState) -> str:
     if conf >= 60 and risk != "HIGH":
         return "veto_window"
     return "stop_protocol"
+
+
+def _route_after_plan_or_debate(state: FabricaState) -> str:
+    """
+    VIII-3: Si RISK_LEVEL=HIGH y el modo no es lightning y el debate no se hizo
+    todavía → debate_panel (2 revisores + árbitro A1).
+    Cualquier otro caso → flujo normal de aprobación via _route_after_plan().
+    """
+    if (
+        state.get("risk_level") == "HIGH"
+        and state.get("mode") != "lightning"
+        and not state.get("debate_done")
+    ):
+        return "debate_panel"
+    return _route_after_plan(state)
 
 
 def _route_after_approval(state: FabricaState) -> str:
@@ -318,13 +334,26 @@ def build_graph() -> StateGraph:
     g.add_node("a1_pr_final",         a1_pr_final)         # PM cierre: cumplimiento+docs+PR
     g.add_node("pipeline_detenido",   pipeline_detenido)
     g.add_node("lightning_complete",  lightning_complete)  # ⚡ terminal lightning (sin QA/PR)
+    g.add_node("debate_panel",        run_debate)          # VIII-3: revisión inter-agente (HIGH risk)
 
     # ── Flujo ─────────────────────────────────────────────────────────────────
 
-    # 1. PM genera MASTER_PLAN → router de aprobación (Bloque III)
+    # 1. PM genera MASTER_PLAN → debate (si HIGH) o aprobación directa (Bloque III + VIII-3)
     g.set_entry_point("a1_planificador")
     g.add_conditional_edges(
         "a1_planificador",
+        _route_after_plan_or_debate,
+        {
+            "debate_panel":            "debate_panel",         # VIII-3: HIGH risk
+            "confidence_auto_approve": "confidence_auto_approve",
+            "veto_window":             "veto_window",
+            "stop_protocol":           "stop_protocol",
+        },
+    )
+
+    # 1b. Debate completado → flujo normal de aprobación (debate_done=True, no re-entra)
+    g.add_conditional_edges(
+        "debate_panel",
         _route_after_plan,
         {
             "confidence_auto_approve": "confidence_auto_approve",

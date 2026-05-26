@@ -171,3 +171,45 @@ def get_recent_events(feature_id: str, limit: int = 100) -> list[dict]:
         return events
     except Exception:
         return []
+
+
+# ── VIII-1: Intervención mid-flight ──────────────────────────────────────────
+
+_INTERVENTION_FILE = "pending_intervention.txt"
+
+
+def post_intervention(feature_id: str, text: str) -> None:
+    """
+    Envía una instrucción correctiva al pipeline en curso.
+    El agente actual (o el próximo en iniciar) la leerá antes de llamar al LLM.
+    Solo puede haber una intervención pendiente a la vez (sobrescribe la anterior).
+    """
+    try:
+        path = RUNS_DIR / feature_id / _INTERVENTION_FILE
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text.strip(), encoding="utf-8")
+        # También registrar en el event bus para que la UI lo muestre
+        emit(feature_id, "__intervention__", "info", msg=text[:300])
+        logger.info(
+            "intervention posted for feature %s: %.80s…", feature_id, text
+        )
+    except Exception as exc:
+        logger.warning("post_intervention error: %s", exc)
+
+
+def pop_intervention(feature_id: str) -> str | None:
+    """
+    Consume la intervención pendiente (si existe) y la devuelve.
+    Atómico: elimina el archivo tras leer para que la instrucción no se aplique dos veces.
+    Devuelve None si no hay intervención pendiente.
+    """
+    try:
+        path = RUNS_DIR / feature_id / _INTERVENTION_FILE
+        if not path.exists():
+            return None
+        text = path.read_text(encoding="utf-8").strip()
+        path.unlink(missing_ok=True)
+        return text if text else None
+    except Exception as exc:
+        logger.debug("pop_intervention error: %s", exc)
+        return None
