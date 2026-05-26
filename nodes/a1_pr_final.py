@@ -22,7 +22,7 @@ from pathlib import Path
 from state import FabricaState
 from nodes.base import call_agent
 from tools.file_tools import save_agent_output, save_run_metadata
-from tools.cost_tracker import format_cost_report
+from tools.cost_tracker import format_cost_report, format_cost_report_extended
 from tools.git_tools import (
     current_branch,
     create_feature_branch,
@@ -165,8 +165,21 @@ def _read_written_files(repo_path: str, files_written: list[str]) -> str:
 
 
 def a1_pr_final(state: FabricaState) -> dict:
-    cost_table  = format_cost_report(state.get("cost_entries", []))
-    total_cost  = sum(e.get("cost_usd", 0) for e in state.get("cost_entries", []))
+    _entries    = state.get("cost_entries", [])
+    total_cost  = sum(e.get("cost_usd", 0) for e in _entries)
+
+    # Métricas del pipeline para calcular efectividad por agente
+    _eff_metrics = {
+        "qa_iterations":      state.get("qa_iterations", 0),
+        "secops_iterations":  state.get("secops_iterations", 0),
+        "sandbox_iterations": state.get("sandbox_iterations", 0),
+        "sandbox_passed":     state.get("sandbox_passed", True),
+        "debate_done":        state.get("debate_done", False),
+        "risk_level":         state.get("risk_level", "MEDIUM"),
+        "confidence_score":   state.get("confidence_score", 70),
+        "had_rollback":       bool(state.get("files_backup")),
+    }
+    cost_table = format_cost_report_extended(_entries, _eff_metrics)
     repo_name   = state["repo_name"]
     repo_path   = state["repo_path"]
     files_written: list[str] = state.get("files_written", [])
