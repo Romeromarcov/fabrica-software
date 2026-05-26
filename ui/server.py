@@ -28,7 +28,7 @@ from starlette.middleware.sessions import SessionMiddleware
 # Asegurar imports del orquestador
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from config import RUNS_DIR, PRICES, MODEL_PM, MODEL_STANDARD, MODEL_FAST, DB_PATH, list_repos, FABRICA_DIR
+from config import RUNS_DIR, PRICES, MODEL_PM, MODEL_STANDARD, MODEL_FAST, DB_PATH, list_repos, FABRICA_DIR, RBAC_ENABLED
 from ui.config_store import ConfigStore
 
 logging.basicConfig(
@@ -59,6 +59,28 @@ class _BasicAuthMiddleware(BaseHTTPMiddleware):
             status_code=401,
             headers={"WWW-Authenticate": 'Basic realm="Fábrica de Software"'},
         )
+
+
+class _RBACMiddleware(BaseHTTPMiddleware):
+    """
+    IX-1: Si RBAC_ENABLED, todas las rutas protegidas requieren sesión activa.
+    Las rutas públicas (login, static, auth) están excluidas.
+    """
+    _PUBLIC = {
+        "/login", "/login/setup", "/register", "/logout",
+        "/auth/github", "/auth/callback", "/health", "/favicon.ico",
+    }
+    _PUBLIC_PREFIXES = ("/static/",)
+
+    async def dispatch(self, request, call_next):
+        if not RBAC_ENABLED:
+            return await call_next(request)
+        path = request.url.path
+        if path in self._PUBLIC or any(path.startswith(p) for p in self._PUBLIC_PREFIXES):
+            return await call_next(request)
+        if not request.session.get("user_id"):
+            return RedirectResponse(f"/login?next={path}")
+        return await call_next(request)
 
 
 # ── Scheduler de noticias ─────────────────────────────────────────────────────
@@ -254,9 +276,13 @@ app = FastAPI(title="Fábrica de Software", docs_url=None, redoc_url=None, lifes
 from config import GITHUB_OAUTH_SECRET
 app.add_middleware(SessionMiddleware, secret_key=GITHUB_OAUTH_SECRET, session_cookie="fabrica_session")
 
+# IX-1: RBAC middleware (activo solo si RBAC_ENABLED=true)
+app.add_middleware(_RBACMiddleware)
+
 _ui_user = os.getenv("UI_USERNAME", "")
 _ui_pass = os.getenv("UI_PASSWORD", "")
-if _ui_user and _ui_pass:
+if _ui_user and _ui_pass and not RBAC_ENABLED:
+    # BasicAuth solo si RBAC está desactivado (son mutuamente excluyentes)
     app.add_middleware(_BasicAuthMiddleware, username=_ui_user, password=_ui_pass)
     logger.info("UI: Basic Auth habilitado para usuario '%s'", _ui_user)
 
@@ -266,6 +292,259 @@ _STATIC_DIR.mkdir(exist_ok=True)   # BUG-019: crea el dir si no existe
 app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
 templates = Jinja2Templates(directory=_UI_DIR / "templates")
 store = ConfigStore()
+
+# ── IX-1: RBAC helpers ───────────────────────────────────────────────────────
+
+def _get_current_user(request: Request) -> dict | None:
+    """Devuelve el usuario de sesión activo o None."""
+    if not RBAC_ENABLED:
+        return None
+    user_id = request.session.get("user_id")
+    if not user_id:
+        return None
+    try:
+        from tools.auth_manager import get_user_by_id
+        return get_user_by_id(user_id)
+    except Exception:
+        return None
+
+
+def _base_ctx(request: Request, **extra) -> dict:
+    """Contexto base para todos los templates (incluye current_user para la sidebar)."""
+    return {"current_user": _get_current_user(request), "rbac_enabled": RBAC_ENABLED, **extra}
+
+
+def _require_perm(request: Request, action: str) -> dict:
+    """
+    Verifica que el usuario tenga permiso para la acción.
+    Si RBAC está desactivado, devuelve un usuario virtual con rol owner.
+    Lanza HTTPException 403 si no tiene permiso.
+    """
+    if not RBAC_ENABLED:
+        return {"role": "owner", "id": 0, "display_name": "Admin"}
+    user = _get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=302, headers={"Location": "/login"})
+    from tools.auth_manager import can
+    if not can(user, action):
+        raise HTTPException(status_code=403, detail="Permiso insuficiente para esta acción")
+    return user
+
+
+# ── IX-1: Rutas de autenticación ─────────────────────────────────────────────
+
+@app.get("/login", response_class=HTMLResponse)
+async def login_page(request: Request, next: str = "/", error: str = "", success: str = ""):
+    if RBAC_ENABLED and request.session.get("user_id"):
+        return RedirectResponse("/")  # ya autenticado
+    try:
+        from tools.auth_manager import ensure_owner_exists
+        no_users = not ensure_owner_exists()
+    except Exception:
+        no_users = False
+    from config import GITHUB_OAUTH_ENABLED
+    return templates.TemplateResponse(request, "login.html", {
+        "mode": "login",
+        "error": error,
+        "success": success,
+        "no_users": no_users,
+        "github_oauth_enabled": GITHUB_OAUTH_ENABLED,
+        "current_user": None,
+    })
+
+
+@app.post("/login")
+async def login_submit(
+    request: Request,
+    email: str = Form(...),
+    password: str = Form(...),
+):
+    from tools.auth_manager import authenticate
+    user = authenticate(email.strip(), password)
+    if not user:
+        return templates.TemplateResponse(request, "login.html", {
+            "mode": "login", "current_user": None,
+            "error": "Email o contraseña incorrectos.",
+            "no_users": False,
+            "github_oauth_enabled": False,
+        })
+    request.session["user_id"]      = user["id"]
+    request.session["user_role"]    = user["role"]
+    request.session["display_name"] = user["display_name"]
+    next_url = request.query_params.get("next", "/")
+    return RedirectResponse(next_url, status_code=303)
+
+
+@app.post("/login/setup")
+async def login_setup(
+    request: Request,
+    email: str = Form(...),
+    display_name: str = Form(...),
+    password: str = Form(...),
+):
+    """Crea el primer usuario owner (solo si no hay ninguno)."""
+    from tools.auth_manager import list_users, create_user
+    if list_users():
+        raise HTTPException(400, "Ya hay usuarios registrados")
+    if len(password) < 8:
+        raise HTTPException(400, "La contraseña debe tener mínimo 8 caracteres")
+    user = create_user(email.strip(), display_name.strip(), role="owner", password=password)
+    request.session["user_id"]      = user["id"]
+    request.session["user_role"]    = "owner"
+    request.session["display_name"] = user["display_name"]
+    return RedirectResponse("/", status_code=303)
+
+
+@app.get("/logout")
+async def logout(request: Request):
+    request.session.clear()
+    if RBAC_ENABLED:
+        return RedirectResponse("/login?success=Sesión+cerrada+correctamente")
+    return RedirectResponse("/")
+
+
+@app.get("/register", response_class=HTMLResponse)
+async def register_page(request: Request, token: str = ""):
+    """Registro via token de invitación."""
+    from tools.auth_manager import consume_invite_token
+    invite = consume_invite_token(token) if token else None
+    if not invite:
+        return templates.TemplateResponse(request, "login.html", {
+            "mode": "login", "current_user": None,
+            "error": "Enlace de invitación inválido o expirado.",
+            "no_users": False, "github_oauth_enabled": False,
+        })
+    return templates.TemplateResponse(request, "login.html", {
+        "mode":          "register",
+        "invite_token":  token,
+        "prefill_email": invite["email"],
+        "current_user":  None,
+    })
+
+
+@app.post("/register")
+async def register_submit(
+    request: Request,
+    token: str = Form(...),
+    email: str = Form(...),
+    display_name: str = Form(...),
+    password: str = Form(...),
+):
+    from tools.auth_manager import consume_invite_token, create_user, get_user_by_email
+    invite = consume_invite_token(token)
+    if not invite:
+        raise HTTPException(400, "Token de invitación inválido o ya usado")
+    if len(password) < 8:
+        raise HTTPException(400, "La contraseña debe tener mínimo 8 caracteres")
+    existing = get_user_by_email(email.strip())
+    if existing:
+        # Actualizar password si ya existe (re-registro)
+        from tools.auth_manager import update_user
+        update_user(existing["id"], password=password, display_name=display_name.strip())
+        user = existing
+    else:
+        user = create_user(email.strip(), display_name.strip(), invite["role"], password=password)
+    request.session["user_id"]      = user["id"]
+    request.session["user_role"]    = user["role"]
+    request.session["display_name"] = user["display_name"]
+    return RedirectResponse("/", status_code=303)
+
+
+# ── IX-1: Admin de usuarios (solo owners) ────────────────────────────────────
+
+@app.get("/admin/users", response_class=HTMLResponse)
+async def admin_users_page(request: Request, invite_link: str = ""):
+    _require_perm(request, "manage_users")
+    from tools.auth_manager import list_users, PERMISSIONS
+
+    permissions_matrix = [
+        ("Ver dashboard y features",  {"owner", "developer", "viewer"}),
+        ("Lanzar features",           {"owner", "developer"}),
+        ("Aprobar planes",            {"owner", "developer"}),
+        ("Intervenir mid-flight",     {"owner", "developer"}),
+        ("Deploy a Railway",          {"owner"}),
+        ("Configuración del sistema", {"owner"}),
+        ("Crear/editar proyectos",    {"owner"}),
+        ("Gestionar usuarios",        {"owner"}),
+    ]
+
+    user = _get_current_user(request)
+    return templates.TemplateResponse(request, "admin_users.html", {
+        **_base_ctx(request),
+        "users":              list_users(),
+        "current_user_id":    user["id"] if user else 0,
+        "permissions_matrix": permissions_matrix,
+        "invite_link":        invite_link,
+        "active_page":        "config",
+    })
+
+
+@app.post("/admin/users/invite")
+async def admin_invite_user(
+    request: Request,
+    email: str = Form(...),
+    role: str = Form("viewer"),
+):
+    user = _require_perm(request, "manage_users")
+    from tools.auth_manager import create_invite_token
+    token = create_invite_token(email.strip(), role, user["id"])
+    base_url = str(request.base_url).rstrip("/")
+    invite_url = f"{base_url}/register?token={token}"
+    return RedirectResponse(f"/admin/users?invite_link={invite_url}", status_code=303)
+
+
+@app.post("/admin/users/update")
+async def admin_update_user(
+    request: Request,
+    user_id: int = Form(...),
+    display_name: str = Form(...),
+    role: str = Form("viewer"),
+    password: str = Form(""),
+):
+    _require_perm(request, "manage_users")
+    from tools.auth_manager import update_user
+    kwargs: dict = {"display_name": display_name, "role": role}
+    if password:
+        kwargs["password"] = password
+    update_user(user_id, **kwargs)
+    return RedirectResponse("/admin/users", status_code=303)
+
+
+@app.post("/admin/users/{user_id}/deactivate")
+async def admin_deactivate_user(request: Request, user_id: int):
+    _require_perm(request, "manage_users")
+    from tools.auth_manager import deactivate_user
+    deactivate_user(user_id)
+    return JSONResponse({"ok": True})
+
+
+@app.post("/admin/users/{user_id}/activate")
+async def admin_activate_user(request: Request, user_id: int):
+    _require_perm(request, "manage_users")
+    from tools.auth_manager import update_user
+    update_user(user_id, active=1)
+    return JSONResponse({"ok": True})
+
+
+# ── IX-2: Service Worker y Push Notifications ─────────────────────────────────
+
+@app.post("/api/push/subscribe")
+async def push_subscribe(request: Request):
+    """Guarda la suscripción push del cliente para notificaciones futuras."""
+    try:
+        sub = await request.json()
+    except Exception:
+        raise HTTPException(400, "Body JSON inválido")
+    # Guardar en archivo (simple, sin DB)
+    sub_dir = RUNS_DIR.parent / "push_subscriptions"
+    sub_dir.mkdir(parents=True, exist_ok=True)
+    import hashlib as _hl
+    sub_id = _hl.md5(sub.get("endpoint", "").encode()).hexdigest()[:16]
+    (sub_dir / f"{sub_id}.json").write_text(
+        json.dumps(sub, ensure_ascii=False), encoding="utf-8"
+    )
+    return JSONResponse({"ok": True})
+
 
 # ── P0-B: GitHub OAuth 2.0 ───────────────────────────────────────────────────
 
@@ -340,6 +619,21 @@ async def auth_callback(request: Request):
     request.session["github_login"]  = github_login
     request.session["github_name"]   = github_name
 
+    # IX-1: Si RBAC activo, crear o recuperar el usuario de GitHub
+    if RBAC_ENABLED and github_login:
+        try:
+            from tools.auth_manager import authenticate_or_create_github
+            rbac_user = authenticate_or_create_github(
+                github_login,
+                github_name or github_login,
+                email=f"{github_login}@github.oauth",
+            )
+            request.session["user_id"]      = rbac_user["id"]
+            request.session["user_role"]    = rbac_user["role"]
+            request.session["display_name"] = rbac_user.get("display_name", github_login)
+        except Exception as exc:
+            logger.warning("RBAC: no se pudo autenticar usuario GitHub %s: %s", github_login, exc)
+
     # Guardar en ConfigStore (→ .env) Y en os.environ para la sesión actual
     # git_tools.py llama os.getenv("GITHUB_TOKEN") en runtime, así lo ve inmediatamente
     if github_token:
@@ -412,6 +706,7 @@ def _cost_by_status(runs: list[dict]) -> dict:
 async def dashboard(request: Request):
     runs = _all_runs()
     return templates.TemplateResponse(request, "dashboard.html", {
+        **_base_ctx(request),
         "runs": runs,
         "total_cost": _total_cost(runs),
         "cost_by_status": _cost_by_status(runs),
@@ -573,6 +868,7 @@ async def new_feature_page(request: Request):
     api_key_ok = bool(cfg.get("ANTHROPIC_API_KEY", "").startswith("sk-ant-"))
     repos = list_repos()
     return templates.TemplateResponse(request, "new_feature.html", {
+        **_base_ctx(request),
         "active_page": "new",
         "api_key_ok": api_key_ok,
         "repos": repos,

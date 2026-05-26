@@ -102,6 +102,17 @@ GITHUB_OAUTH_CALLBACK = os.getenv(
 )
 GITHUB_OAUTH_ENABLED = bool(GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET)
 
+# ── IX-1: Multi-usuario RBAC ─────────────────────────────────────────────────
+# Si True, todas las rutas web requieren login.
+# El primer arranque con RBAC_ENABLED=true migra el usuario de BasicAuth como owner.
+RBAC_ENABLED = os.getenv("RBAC_ENABLED", "false").lower() == "true"
+
+# ── IX-2: PWA / Push Notifications ───────────────────────────────────────────
+# Claves VAPID para Web Push (opcional — solo para notificaciones push reales).
+VAPID_PUBLIC_KEY  = os.getenv("VAPID_PUBLIC_KEY",  "")
+VAPID_PRIVATE_KEY = os.getenv("VAPID_PRIVATE_KEY", "")
+VAPID_SUBJECT     = os.getenv("VAPID_SUBJECT",     "mailto:admin@fabrica.local")
+
 # ── Bloque VI: Paralelismo de Features ───────────────────────────────────────
 # PARALLEL_FEATURES_ENABLED: si True, el Project Loop ejecuta features
 # independientes en paralelo (requiere pipeline estable, error rate < 10%).
