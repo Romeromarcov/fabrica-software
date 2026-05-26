@@ -700,6 +700,15 @@ def _cost_by_status(runs: list[dict]) -> dict:
     return buckets
 
 
+# ── Health check (Docker / Railway) ──────────────────────────────────────────
+
+@app.get("/health")
+async def health_check():
+    """Endpoint de salud para Docker healthcheck y Railway."""
+    from datetime import datetime, timezone
+    return {"status": "ok", "ts": datetime.now(timezone.utc).isoformat()}
+
+
 # ── Rutas — Dashboard ─────────────────────────────────────────────────────────
 
 @app.get("/", response_class=HTMLResponse)
