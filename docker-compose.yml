@@ -30,10 +30,10 @@ services:
     ports:
       - "7860:7860"
     volumes:
+      # Código fuente montado en vivo — cambios se reflejan sin rebuild
+      - .:/app
       # Todos los repos montados bajo /workspace (multi-repo)
       - C:/Users/PC/Proyectos:/workspace
-      # .env montado para que la UI de Config pueda escribirlo
-      - ./.env:/app/.env
       # Persistencia de runs y estado LangGraph (visible desde el host)
       - ./data:/data
     env_file:
@@ -45,6 +45,8 @@ services:
       # Pipeline behaviour — override from .env if needed
       WRITE_TO_REPO: ${WRITE_TO_REPO:-true}
       ARCH_REVIEW_INTERVAL: ${ARCH_REVIEW_INTERVAL:-3}
+    # --reload: uvicorn detecta cambios en archivos .py y recarga automáticamente
+    command: ["uvicorn", "ui.server:app", "--host", "0.0.0.0", "--port", "7860", "--reload"]
     depends_on:
       openclaw:
         condition: service_healthy
