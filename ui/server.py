@@ -729,6 +729,24 @@ async def health_check():
     return {"status": "ok", "ts": datetime.now(timezone.utc).isoformat()}
 
 
+@app.get("/api/sidebar-data")
+async def sidebar_data():
+    """Datos para el sidebar: últimos 18 runs para mostrar como historial."""
+    runs = _all_runs()[:18]
+    return JSONResponse({
+        "runs": [
+            {
+                "id":           r.get("feature_id", ""),
+                "feature_name": r.get("feature_name", r.get("feature_id", ""))[:52],
+                "repo":         r.get("repo_name", ""),
+                "status":       r.get("status", ""),
+                "started_at":   r.get("started_at", ""),
+            }
+            for r in runs
+        ]
+    })
+
+
 # ── Rutas — Dashboard ─────────────────────────────────────────────────────────
 
 @app.get("/", response_class=HTMLResponse)

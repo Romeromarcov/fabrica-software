@@ -1,137 +1,168 @@
 {% extends "base.html" %}
 
-{% block title %}{{ feature_id[:24] }}{% endblock %}
-
-{% block head %}
-<style>
-  .output-tab-content pre { max-height: 500px; }
-  .approve-section { border: 1px solid #7c3aed55; background: #7c3aed0a; border-radius: 10px; }
-  .meta-pill {
-    display: inline-flex; align-items: center; gap: .3rem;
-    background: #ffffff08; border: 1px solid #2a2a3a;
-    border-radius: 20px; padding: .15rem .7rem;
-    font-size: .72rem; color: #888;
-  }
-</style>
-{% endblock %}
+{% block title %}{{ meta.get("feature_name", feature_id)[:32] }}{% endblock %}
 
 {% block content %}
-<!-- Header -->
-<div class="d-flex align-items-start justify-content-between mb-4">
-  <div>
-    <a href="/" class="text-muted text-decoration-none" style="font-size:.8rem">
-      <i class="bi bi-arrow-left me-1"></i> Dashboard
+<!-- ── Page header ─────────────────────────────────────────────────────── -->
+<div class="page-header d-flex align-items-start gap-3">
+  <div style="flex:1;min-width:0">
+    <a href="/" style="display:inline-flex;align-items:center;gap:.3rem;font-size:12px;color:var(--text-3);text-decoration:none;margin-bottom:.5rem">
+      <i class="bi bi-arrow-left"></i> Dashboard
     </a>
-    <h4 class="mt-1 mb-1 fw-semibold">{{ meta.get("feature_name", feature_id) }}</h4>
-    <div class="d-flex gap-2 flex-wrap">
-      <span class="meta-pill"><i class="bi bi-hash"></i>{{ feature_id }}</span>
-      <span class="meta-pill"><i class="bi bi-clock"></i>{{ (meta.get("started_at") or "")[:19] }}</span>
-      <span class="meta-pill"><i class="bi bi-lightning"></i>{{ meta.get("mode", "?") }}</span>
-      <span class="badge badge-status-{{ meta.get('status','?') }} rounded-pill px-2">
-        {{ meta.get("status", "?") }}
+    <h1 class="page-title">{{ meta.get("feature_name", feature_id) }}</h1>
+    <div style="display:flex;align-items:center;flex-wrap:wrap;gap:.4rem;margin-top:.4rem">
+      <span style="display:inline-flex;align-items:center;gap:.3rem;background:var(--surface-3);border:1px solid var(--border);border-radius:20px;padding:.15rem .65rem;font-size:12px;color:var(--text-3)">
+        <i class="bi bi-hash"></i><code style="font-size:11px">{{ feature_id[:20] }}</code>
       </span>
+      {% if meta.get("started_at") %}
+      <span style="display:inline-flex;align-items:center;gap:.3rem;background:var(--surface-3);border:1px solid var(--border);border-radius:20px;padding:.15rem .65rem;font-size:12px;color:var(--text-3)">
+        <i class="bi bi-clock"></i>{{ (meta.get("started_at") or "")[:19] }}
+      </span>
+      {% endif %}
+      {% if meta.get("mode") %}
+      <span style="display:inline-flex;align-items:center;gap:.3rem;background:var(--surface-3);border:1px solid var(--border);border-radius:20px;padding:.15rem .65rem;font-size:12px;color:var(--text-3)">
+        <i class="bi bi-lightning"></i>{{ meta.get("mode") }}
+      </span>
+      {% endif %}
+      <span class="badge badge-{{ meta.get('status','?') }}">{{ meta.get("status", "?") }}</span>
     </div>
   </div>
-  <div class="text-end">
-    <div class="fw-bold" style="font-size:1.4rem;color:#fff">
+  <div style="text-align:right;flex-shrink:0">
+    <div style="font-size:1.75rem;font-weight:700;color:var(--text-1);line-height:1">
       ${{ "%.4f"|format(meta.get("total_cost_usd", 0)) }}
     </div>
-    <div style="font-size:.72rem;color:#888">costo total USD</div>
+    <div style="font-size:11px;color:var(--text-3);margin-top:.15rem">USD total</div>
   </div>
 </div>
 
+<!-- ── Two-column layout ───────────────────────────────────────────────── -->
 <div class="row g-3">
 
-  <!-- Left column: log + approve -->
-  <div class="col-md-5">
+  <!-- LEFT: 5/12 — log, actions, cost -->
+  <div class="col-lg-5">
 
-    <!-- Live log -->
+    <!-- Live log card -->
     <div class="card mb-3">
-      <div class="p-3 border-bottom d-flex align-items-center justify-content-between" style="border-color:#2a2a3a!important">
-        <span class="fw-semibold" style="font-size:.85rem"><i class="bi bi-terminal me-1"></i>Log en tiempo real</span>
-        <span id="logStatus" class="badge" style="background:#2a2a3a;color:#888;font-size:.65rem">conectando…</span>
+      <div class="card-header">
+        <span class="card-header-title"><i class="bi bi-terminal me-1"></i>Terminal</span>
+        <span id="logStatus" class="badge badge-running" style="font-size:11px">conectando…</span>
       </div>
-      <div class="p-2">
+      <div class="card-body" style="padding:.5rem">
         <div id="log-box"></div>
       </div>
     </div>
 
-    <!-- Approve / Pause -->
+    <!-- Intervention card — only while pipeline is active -->
+    {% if meta.get("status") in ["running", "approved", "building", "iniciando"] %}
+    <div class="card mb-3">
+      <div class="card-header">
+        <span class="card-header-title">
+          <i class="bi bi-lightning-charge me-1" style="color:var(--orange)"></i>
+          Intervención mid-flight
+        </span>
+        <span style="display:inline-flex;align-items:center;gap:.3rem;background:var(--surface-3);border:1px solid var(--border);border-radius:20px;padding:.15rem .65rem;font-size:12px;color:var(--text-3)">FOUNDER OVERRIDE</span>
+      </div>
+      <div class="card-body">
+        <p style="font-size:12px;color:var(--text-3);margin-bottom:.65rem;line-height:1.5">
+          Envía una instrucción correctiva al agente en curso — se inyectará antes de su próxima llamada al LLM.
+        </p>
+        <textarea id="interventionText" class="form-control mb-2" rows="2"
+                  placeholder="ej. Usa transacciones atómicas en todas las escrituras a BD…"
+                  style="font-size:.82rem;resize:vertical;background:var(--surface-3);border-color:var(--border);color:var(--text-1)"></textarea>
+        <button class="btn btn-secondary btn-sm" onclick="sendIntervention()">
+          <i class="bi bi-send me-1"></i> Enviar intervención
+        </button>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Approval card -->
     {% if meta.get("status") in ["awaiting_approval", "building", "approved"] %}
     <div class="approve-section p-3 mb-3">
-      <div class="fw-semibold mb-1" style="font-size:.85rem;color:var(--brand-light)">
+      <div style="font-size:.85rem;font-weight:600;color:var(--brand-2);margin-bottom:.4rem">
         <i class="bi bi-pause-circle me-1"></i> Acción requerida
       </div>
-      <p class="text-muted mb-3" style="font-size:.78rem">
-        El pipeline está esperando tu aprobación para continuar. Revisa el MASTER PLAN y decide.
+      <p style="font-size:12px;color:var(--text-3);margin-bottom:.75rem">
+        El pipeline espera tu aprobación. Revisa el MASTER PLAN y decide.
       </p>
-      <div class="d-flex gap-2">
-        <button class="btn btn-brand btn-sm flex-grow-1"
-                onclick="sendApproval('approve')">
+      <div style="display:flex;gap:.5rem">
+        <button class="btn btn-success btn-sm" style="flex:1" onclick="sendApproval('approve')">
           <i class="bi bi-check-circle me-1"></i> Aprobar
         </button>
-        <button class="btn btn-outline-danger btn-sm"
-                onclick="sendApproval('pausa')">
+        <button class="btn btn-danger btn-sm" onclick="sendApproval('pausa')">
           <i class="bi bi-stop-circle me-1"></i> PAUSA
         </button>
       </div>
     </div>
     {% endif %}
 
-    <!-- QA Escalation -->
-    {% if meta.get("status") == "awaiting_approval" and meta.get("qa_escalated") %}
-    <div class="card p-3 mb-3" style="border-color:#dc262655">
-      <div class="fw-semibold mb-1" style="font-size:.85rem;color:#f87171">
-        <i class="bi bi-exclamation-triangle-fill me-1"></i> QA Escalado al Founder
+    <!-- QA Escalation card -->
+    {% if meta.get("qa_escalated") %}
+    <div class="card mb-3" style="border-color:color-mix(in srgb,var(--red) 40%,transparent)">
+      <div class="card-header">
+        <span class="card-header-title" style="color:var(--red)">
+          <i class="bi bi-exclamation-triangle-fill me-1"></i> QA Escalado al Founder
+        </span>
       </div>
-      <p class="text-muted mb-3" style="font-size:.78rem">
-        Se agotaron las iteraciones de QA. Decide cómo continuar.
-      </p>
-      <div class="d-flex flex-column gap-2">
-        <button class="btn btn-sm btn-outline-warning" onclick="sendApproval('rediseñar')">
-          <i class="bi bi-arrow-clockwise me-1"></i> REDISEÑAR (A2+A3 desde cero)
-        </button>
-        <button class="btn btn-sm btn-outline-success" onclick="sendApproval('aceptar')">
-          <i class="bi bi-check me-1"></i> ACEPTAR con deuda técnica
-        </button>
-        <button class="btn btn-sm btn-outline-danger" onclick="sendApproval('cancelar')">
-          <i class="bi bi-x me-1"></i> CANCELAR feature
-        </button>
+      <div class="card-body">
+        <p style="font-size:12px;color:var(--text-3);margin-bottom:.75rem">
+          Se agotaron las iteraciones de QA. Decide cómo continuar.
+        </p>
+        <div style="display:flex;flex-direction:column;gap:.4rem">
+          <button class="btn btn-secondary btn-sm" onclick="sendApproval('rediseñar')">
+            <i class="bi bi-arrow-clockwise me-1"></i> REDISEÑAR (A2 + A3 desde cero)
+          </button>
+          <button class="btn btn-success btn-sm" onclick="sendApproval('aceptar')">
+            <i class="bi bi-check me-1"></i> ACEPTAR con deuda técnica
+          </button>
+          <button class="btn btn-danger btn-sm" onclick="sendApproval('cancelar')">
+            <i class="bi bi-x me-1"></i> CANCELAR feature
+          </button>
+        </div>
       </div>
     </div>
     {% endif %}
 
     <!-- Cost breakdown -->
     {% if meta.get("cost_by_agent") %}
-    <div class="card p-3">
-      <div class="mb-2 fw-semibold" style="font-size:.85rem">Costo por agente</div>
-      <table class="table table-sm mb-0">
-        <thead><tr><th>Agente</th><th class="text-end">USD</th></tr></thead>
-        <tbody>
-          {% for agent, cost in meta.get("cost_by_agent", {}).items() %}
-          <tr>
-            <td style="font-size:.78rem">{{ agent }}</td>
-            <td class="text-end" style="font-family:monospace;font-size:.78rem">${{ "%.4f"|format(cost) }}</td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+    <div class="card">
+      <div class="card-header">
+        <span class="card-header-title"><i class="bi bi-currency-dollar me-1"></i>Costo por agente</span>
+      </div>
+      <div class="card-body" style="padding:0">
+        <table class="table table-sm mb-0" style="font-size:12px">
+          <thead>
+            <tr>
+              <th style="padding:.5rem .75rem;font-weight:500;color:var(--text-3)">Agente</th>
+              <th style="padding:.5rem .75rem;font-weight:500;color:var(--text-3);text-align:right">USD</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for agent, cost in meta.get("cost_by_agent", {}).items() %}
+            <tr>
+              <td style="padding:.4rem .75rem;color:var(--text-2)">{{ agent }}</td>
+              <td style="padding:.4rem .75rem;font-family:monospace;color:var(--brand-2);text-align:right">${{ "%.4f"|format(cost) }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
     </div>
     {% endif %}
 
   </div>
 
-  <!-- Right column: master plan + agent outputs -->
-  <div class="col-md-7">
+  <!-- RIGHT: 7/12 — master plan + agent outputs -->
+  <div class="col-lg-7">
 
     <!-- Master Plan -->
     {% if master_plan %}
     <div class="card mb-3">
-      <div class="p-3 border-bottom" style="border-color:#2a2a3a!important">
-        <span class="fw-semibold" style="font-size:.85rem"><i class="bi bi-file-text me-1"></i>MASTER PLAN</span>
+      <div class="card-header">
+        <span class="card-header-title"><i class="bi bi-file-text me-1"></i>MASTER PLAN</span>
       </div>
-      <div class="p-3">
-        <pre id="masterPlanPre">{{ master_plan }}</pre>
+      <div class="card-body">
+        <pre id="masterPlanPre" style="max-height:380px;overflow-y:auto">{{ master_plan }}</pre>
       </div>
     </div>
     {% endif %}
@@ -139,15 +170,15 @@
     <!-- Agent outputs -->
     {% if outputs %}
     <div class="card">
-      <div class="p-3 border-bottom" style="border-color:#2a2a3a!important">
-        <span class="fw-semibold" style="font-size:.85rem"><i class="bi bi-layers me-1"></i>Salidas por Agente</span>
+      <div class="card-header">
+        <span class="card-header-title"><i class="bi bi-layers me-1"></i>Salidas por Agente</span>
       </div>
-      <div class="p-3">
+      <div class="card-body">
         <ul class="nav nav-pills gap-1 mb-3" id="outputTabs">
           {% for agent_key in outputs %}
           <li class="nav-item">
             <button class="nav-link {% if loop.first %}active{% endif %} py-1 px-2"
-                    style="font-size:.75rem"
+                    style="font-size:12px"
                     onclick="showOutput('{{ agent_key }}', this)">
               {{ agent_key }}
             </button>
@@ -157,17 +188,19 @@
         <div id="outputContent">
           {% for agent_key, content in outputs.items() %}
           <div class="output-tab-content" id="output-{{ agent_key }}"
-               style="{% if not loop.first %}display:none{% endif %}">
-            <pre>{{ content }}</pre>
+               {% if not loop.first %}style="display:none"{% endif %}>
+            <pre style="max-height:480px;overflow-y:auto">{{ content }}</pre>
           </div>
           {% endfor %}
         </div>
       </div>
     </div>
     {% else %}
-    <div class="card p-4 text-center text-muted">
-      <i class="bi bi-hourglass-split" style="font-size:1.5rem;opacity:.3"></i>
-      <p class="mt-2 mb-0" style="font-size:.82rem">Los agentes aún no han generado salidas.</p>
+    <div class="card">
+      <div class="card-body" style="text-align:center;padding:2.5rem 1rem">
+        <i class="bi bi-hourglass-split" style="font-size:2rem;color:var(--text-3);opacity:.4"></i>
+        <p style="margin:.75rem 0 0;font-size:13px;color:var(--text-3)">Los agentes aún no han generado salidas.</p>
+      </div>
     </div>
     {% endif %}
 
@@ -177,7 +210,7 @@
 
 {% block scripts %}
 <script>
-// Tab switcher
+// ── Tab switcher ─────────────────────────────────────────────────────────
 function showOutput(key, btn) {
   document.querySelectorAll(".output-tab-content").forEach(el => el.style.display = "none");
   document.querySelectorAll("#outputTabs .nav-link").forEach(b => b.classList.remove("active"));
@@ -186,7 +219,7 @@ function showOutput(key, btn) {
   btn.classList.add("active");
 }
 
-// Approve action
+// ── Approve / pipeline actions ───────────────────────────────────────────
 async function sendApproval(action) {
   const fd = new FormData();
   fd.append("action", action);
@@ -196,15 +229,32 @@ async function sendApproval(action) {
   }
 }
 
-// SSE log streaming
+// ── Intervention mid-flight ──────────────────────────────────────────────
+async function sendIntervention() {
+  const text = document.getElementById("interventionText").value.trim();
+  if (!text) return;
+  await fetch("/api/sessions/{{ feature_id }}/intervene", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({instruction: text})
+  });
+  document.getElementById("interventionText").value = "";
+  window._showToast("Intervención enviada al pipeline");
+}
+
+document.getElementById("interventionText")?.addEventListener("keydown", e => {
+  if (e.ctrlKey && e.key === "Enter") { e.preventDefault(); sendIntervention(); }
+});
+
+// ── SSE log streaming ────────────────────────────────────────────────────
 const featureId = "{{ feature_id }}";
-const logBox = document.getElementById("log-box");
+const logBox    = document.getElementById("log-box");
 const logStatus = document.getElementById("logStatus");
 
 function appendLog(line) {
-  const span = document.createElement("div");
-  span.textContent = line;
-  logBox.appendChild(span);
+  const div = document.createElement("div");
+  div.textContent = line;
+  logBox.appendChild(div);
   logBox.scrollTop = logBox.scrollHeight;
 }
 
@@ -212,17 +262,14 @@ function appendLog(line) {
 {% if meta.get("status") not in terminal_statuses %}
 const es = new EventSource("/stream/" + featureId);
 logStatus.textContent = "en vivo";
-logStatus.style.background = "#16a34a22";
-logStatus.style.color = "#4ade80";
+logStatus.className   = "badge badge-running";
 
 es.onmessage = function(e) {
   const line = e.data;
   if (line.startsWith("[DONE]") || line === "[TIMEOUT]") {
     es.close();
     logStatus.textContent = "finalizado";
-    logStatus.style.background = "#2a2a3a";
-    logStatus.style.color = "#888";
-    // Reload para mostrar salidas actualizadas
+    logStatus.className   = "badge badge-completado";
     setTimeout(() => window.location.reload(), 1500);
     return;
   }
@@ -231,13 +278,11 @@ es.onmessage = function(e) {
 
 es.onerror = function() {
   logStatus.textContent = "sin conexión";
-  logStatus.style.background = "#dc262622";
-  logStatus.style.color = "#f87171";
+  logStatus.className   = "badge badge-failed";
 };
 {% else %}
 logStatus.textContent = "{{ meta.get('status') }}";
-logStatus.style.background = "#2a2a3a";
-logStatus.style.color = "#888";
+logStatus.className   = "badge badge-{{ meta.get('status') }}";
 appendLog("— run finalizado —");
 {% endif %}
 </script>

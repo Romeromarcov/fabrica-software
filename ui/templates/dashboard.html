@@ -4,157 +4,209 @@
 
 {% block head %}
 <style>
-  .run-row td:first-child { font-family: monospace; font-size: .78rem; color: #888; }
   .chart-wrap { position: relative; height: 220px; }
+  .run-cost-badge {
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 11.5px;
+    color: var(--text-3);
+    white-space: nowrap;
+  }
+  .run-item-chevron {
+    color: var(--text-3);
+    font-size: 13px;
+    flex-shrink: 0;
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+  .run-item:hover .run-item-chevron { opacity: 1; }
+  .run-item-live {
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--orange);
+    background: var(--orange-dim);
+    border: 1px solid rgba(249,115,22,.25);
+    border-radius: 20px;
+    padding: .15rem .55rem;
+    white-space: nowrap;
+  }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="d-flex align-items-center justify-content-between mb-4">
+
+{# ── Stats computation ───────────────────────────────────────────────────── #}
+{% set completed_count = runs|selectattr("status","equalto","completado")|list|length %}
+{% set running_statuses = ["iniciando","building","approved","auto_approved","running"] %}
+{% set in_progress_count = runs|selectattr("status","in",running_statuses)|list|length %}
+
+{# ── Page header ─────────────────────────────────────────────────────────── #}
+<div class="d-flex align-items-center justify-content-between page-header">
   <div>
-    <h4 class="mb-0 fw-semibold">Dashboard</h4>
-    <small class="text-muted">Fábrica de Software Multi-Repo</small>
+    <h1 class="page-title">Dashboard</h1>
+    <p class="page-subtitle">Fábrica de Software — Multi-Repo · Omni ERP</p>
   </div>
-  <a href="/new" class="btn btn-brand btn-sm px-3">
-    <i class="bi bi-plus-circle me-1"></i> Nuevo Feature
+  <a href="/new" class="btn btn-primary">
+    <i class="bi bi-plus-lg"></i> Nuevo Feature
   </a>
 </div>
 
-<!-- Stat Cards -->
+{# ── Stat cards ──────────────────────────────────────────────────────────── #}
 <div class="row g-3 mb-4">
-  <div class="col-md-3">
-    <div class="card stat-card p-3">
+  <div class="col-6 col-md-3">
+    <div class="card stat-card">
       <div class="stat-value">${{ "%.4f"|format(total_cost) }}</div>
       <div class="stat-label">Costo Total USD</div>
     </div>
   </div>
-  <div class="col-md-3">
-    <div class="card stat-card p-3">
+  <div class="col-6 col-md-3">
+    <div class="card stat-card">
       <div class="stat-value">{{ runs|length }}</div>
       <div class="stat-label">Runs Totales</div>
     </div>
   </div>
-  <div class="col-md-3">
-    <div class="card stat-card p-3">
-      <div class="stat-value">
-        {{ runs|selectattr("status", "equalto", "completado")|list|length }}
-      </div>
+  <div class="col-6 col-md-3">
+    <div class="card stat-card">
+      <div class="stat-value" style="color:var(--green)">{{ completed_count }}</div>
       <div class="stat-label">Completados</div>
     </div>
   </div>
-  <div class="col-md-3">
-    <div class="card stat-card p-3">
-      <div class="stat-value">
-        {{ runs|selectattr("status", "in", ["iniciando","building","approved"])|list|length }}
-      </div>
+  <div class="col-6 col-md-3">
+    <div class="card stat-card">
+      <div class="stat-value" style="color:var(--orange)">{{ in_progress_count }}</div>
       <div class="stat-label">En Progreso</div>
     </div>
   </div>
 </div>
 
-<!-- Charts Row -->
+{# ── Charts row ──────────────────────────────────────────────────────────── #}
 <div class="row g-3 mb-4">
   <div class="col-md-8">
-    <div class="card p-3">
-      <div class="mb-2 fw-semibold" style="font-size:.85rem">Costo diario (USD)</div>
-      <div class="chart-wrap"><canvas id="chartDaily"></canvas></div>
+    <div class="card">
+      <div class="card-header">
+        <i class="bi bi-bar-chart-line" style="color:var(--brand-2)"></i>
+        <span class="card-header-title">Costo diario (USD)</span>
+      </div>
+      <div class="card-body">
+        <div class="chart-wrap"><canvas id="chartDaily"></canvas></div>
+      </div>
     </div>
   </div>
   <div class="col-md-4">
-    <div class="card p-3">
-      <div class="mb-2 fw-semibold" style="font-size:.85rem">Costo por agente</div>
-      <div class="chart-wrap"><canvas id="chartAgent"></canvas></div>
+    <div class="card">
+      <div class="card-header">
+        <i class="bi bi-pie-chart" style="color:var(--brand-2)"></i>
+        <span class="card-header-title">Costo por agente</span>
+      </div>
+      <div class="card-body">
+        <div class="chart-wrap"><canvas id="chartAgent"></canvas></div>
+      </div>
     </div>
   </div>
 </div>
 
-<!-- Runs Table -->
+{# ── Recent features list ────────────────────────────────────────────────── #}
 <div class="card">
-  <div class="p-3 border-bottom d-flex align-items-center justify-content-between" style="border-color:#2a2a3a!important">
-    <span class="fw-semibold" style="font-size:.9rem">Features Recientes</span>
-    <span class="text-muted" style="font-size:.75rem">{{ runs|length }} runs</span>
+  <div class="card-header">
+    <i class="bi bi-list-task" style="color:var(--brand-2)"></i>
+    <span class="card-header-title">Features Recientes</span>
+    <span class="ms-auto" style="font-size:12px;color:var(--text-3)">{{ runs|length }} runs</span>
   </div>
+
   {% if runs %}
-  <div class="table-responsive">
-    <table class="table mb-0">
-      <thead>
-        <tr>
-          <th>ID</th>
-          <th>Feature</th>
-          <th>Repo</th>
-          <th>Modo</th>
-          <th>Estado</th>
-          <th>Costo</th>
-          <th>Fecha</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for r in runs %}
-        <tr>
-          <td>{{ r.feature_id[:20] }}…</td>
-          <td>{{ r.get("feature_name", r.feature_id) }}</td>
-          <td>
-            <span class="badge bg-secondary bg-opacity-25 text-secondary" style="font-size:.7rem">
-              {{ r.get("repo_name", "—") }}
-            </span>
-          </td>
-          <td>
-            <span class="badge bg-secondary bg-opacity-25 text-secondary" style="font-size:.7rem">
-              {{ r.get("mode", "?") }}
-            </span>
-          </td>
-          <td>
-            <span class="badge badge-status-{{ r.get('status','?') }} rounded-pill px-2">
-              {{ r.get("status", "?") }}
-            </span>
-          </td>
-          <td style="font-family:monospace;font-size:.8rem">
-            ${{ "%.4f"|format(r.get("total_cost_usd", 0)) }}
-          </td>
-          <td style="font-size:.78rem;color:#888">
-            {{ (r.get("started_at") or "")[:19] }}
-          </td>
-          <td class="d-flex gap-1">
-            <a href="/feature/{{ r.feature_id }}" class="btn btn-sm btn-outline-secondary py-0 px-2" style="font-size:.75rem">
-              Ver <i class="bi bi-arrow-right"></i>
-            </a>
-            {% if r.get("status") in ["iniciando", "building", "approved", "auto_approved"] %}
-            <a href="/session/{{ r.feature_id }}" class="btn btn-sm py-0 px-2"
-               style="font-size:.75rem;background:#f59e0b22;color:#f59e0b;border:1px solid #f59e0b55">
-              📡 En vivo
-            </a>
-            {% else %}
-            <a href="/session/{{ r.feature_id }}" class="btn btn-sm btn-outline-secondary py-0 px-2" style="font-size:.75rem;opacity:.5">
-              <i class="bi bi-clock-history"></i>
-            </a>
-            {% endif %}
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
+    {% for r in runs %}
+    {# ── Determine icon + color per status ── #}
+    {% set st = r.get("status","?") %}
+    {% if st == "completado" %}
+      {% set icon_char = "✅" %}
+      {% set icon_bg   = "var(--green-dim)" %}
+    {% elif st in ["running","building","iniciando","approved","auto_approved"] %}
+      {% set icon_char = "🔄" %}
+      {% set icon_bg   = "var(--orange-dim)" %}
+    {% elif st in ["awaiting_approval","planning"] %}
+      {% set icon_char = "⏸" %}
+      {% set icon_bg   = "var(--brand-dim)" %}
+    {% elif st == "paused" %}
+      {% set icon_char = "⏸" %}
+      {% set icon_bg   = "rgba(113,113,122,.12)" %}
+    {% else %}
+      {% set icon_char = "❌" %}
+      {% set icon_bg   = "var(--red-dim)" %}
+    {% endif %}
+
+    <a href="/feature/{{ r.get('id', r.get('feature_id','')) }}" class="run-item">
+      {# Icon #}
+      <div class="run-item-icon" style="background:{{ icon_bg }}">{{ icon_char }}</div>
+
+      {# Title + meta #}
+      <div style="flex:1;min-width:0">
+        <div class="run-item-title">{{ r.get("feature_name", r.get("feature_id","—")) }}</div>
+        <div class="run-item-meta d-flex gap-2 align-items-center flex-wrap">
+          {% if r.get("repo_name") %}
+          <span><i class="bi bi-folder2-open" style="font-size:10px"></i> {{ r.get("repo_name") }}</span>
+          {% endif %}
+          {% if r.get("mode") %}
+          <span>· {{ r.get("mode") }}</span>
+          {% endif %}
+          {% if r.get("started_at") %}
+          <span>· {{ (r.get("started_at") or "")[:16] }}</span>
+          {% endif %}
+        </div>
+      </div>
+
+      {# Live badge if running #}
+      {% if st in ["iniciando","building","approved","auto_approved","running"] %}
+      <span class="run-item-live"><i class="bi bi-broadcast"></i> En vivo</span>
+      {% endif %}
+
+      {# Status badge #}
+      <span class="badge badge-{{ st }}">{{ st }}</span>
+
+      {# Cost #}
+      <span class="run-cost-badge">${{ "%.4f"|format(r.get("total_cost_usd",0)) }}</span>
+
+      {# Chevron #}
+      <i class="bi bi-chevron-right run-item-chevron"></i>
+    </a>
+    {% endfor %}
+
   {% else %}
-  <div class="p-5 text-center text-muted">
-    <i class="bi bi-inbox" style="font-size:2rem;opacity:.3"></i>
-    <p class="mt-2 mb-0" style="font-size:.85rem">No hay runs todavía. <a href="/new" class="text-decoration-none" style="color:var(--brand-light)">Crear primer feature →</a></p>
+  {# Empty state #}
+  <div class="empty-state">
+    <div class="empty-state-icon"><i class="bi bi-inbox"></i></div>
+    <div class="empty-state-title">Sin features todavía</div>
+    <div class="empty-state-text">
+      <a href="/new" style="color:var(--brand-2)">Crea tu primer feature →</a>
+    </div>
   </div>
   {% endif %}
 </div>
+
 {% endblock %}
 
 {% block scripts %}
 <script>
-window._dashInit = async function() {
-  const res = await fetch("/api/costs");
-  const data = await res.json();
+(async () => {
+  let data = { daily: {}, by_agent: {} };
+  try {
+    const res = await fetch("/api/costs");
+    data = await res.json();
+  } catch(e) {}
 
-  // Daily cost chart
+  // ── Chart defaults ──────────────────────────────────────────────────────
+  Chart.defaults.color = "var(--text-3)";
+  Chart.defaults.borderColor = "rgba(255,255,255,0.06)";
+  Chart.defaults.font.family = "'Inter', system-ui, sans-serif";
+  Chart.defaults.font.size = 11;
+
+  // ── Daily cost line chart ───────────────────────────────────────────────
   const dailyCtx = document.getElementById("chartDaily");
-  if (dailyCtx && Object.keys(data.daily).length) {
-    const labels = Object.keys(data.daily).sort();
-    const values = labels.map(d => data.daily[d]);
+  const dailyData = data.daily || {};
+  if (dailyCtx && Object.keys(dailyData).length) {
+    const labels = Object.keys(dailyData).sort();
+    const values = labels.map(d => dailyData[d]);
     new Chart(dailyCtx, {
       type: "line",
       data: {
@@ -162,45 +214,103 @@ window._dashInit = async function() {
         datasets: [{
           label: "USD",
           data: values,
-          borderColor: "#7c3aed",
-          backgroundColor: "#7c3aed22",
+          borderColor: "rgba(139,92,246,0.8)",
+          backgroundColor: "rgba(139,92,246,0.08)",
           fill: true,
-          tension: 0.35,
+          tension: 0.4,
           pointRadius: 3,
+          pointBackgroundColor: "rgba(139,92,246,0.8)",
+          borderWidth: 2,
         }]
       },
       options: {
-        responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: "var(--surface-2)",
+            borderColor: "rgba(255,255,255,0.1)",
+            borderWidth: 1,
+            titleColor: "var(--text-2)",
+            bodyColor: "var(--text-1)",
+            callbacks: { label: ctx => " $" + ctx.parsed.y.toFixed(4) }
+          }
+        },
         scales: {
-          x: { ticks: { color: "#666", font: { size: 10 } }, grid: { color: "#2a2a3a" } },
-          y: { ticks: { color: "#666", font: { size: 10 }, callback: v => "$"+v.toFixed(4) }, grid: { color: "#2a2a3a" } }
+          x: {
+            grid: { color: "rgba(255,255,255,0.04)" },
+            ticks: { maxRotation: 0 }
+          },
+          y: {
+            grid: { color: "rgba(255,255,255,0.04)" },
+            ticks: { callback: v => "$" + v.toFixed(3) }
+          }
         }
       }
     });
+  } else if (dailyCtx) {
+    dailyCtx.closest(".card-body").innerHTML =
+      '<div class="empty-state" style="padding:2rem 1rem"><div class="empty-state-icon" style="font-size:1.5rem"><i class="bi bi-bar-chart"></i></div><div class="empty-state-text">Sin datos de costo aún</div></div>';
   }
 
-  // By-agent donut
+  // ── By-agent doughnut ───────────────────────────────────────────────────
   const agCtx = document.getElementById("chartAgent");
-  if (agCtx && Object.keys(data.by_agent).length) {
-    const agLabels = Object.keys(data.by_agent);
-    const agValues = agLabels.map(k => data.by_agent[k]);
-    const palette = ["#7c3aed","#a78bfa","#6d28d9","#4c1d95","#8b5cf6","#c4b5fd","#ede9fe","#ddd6fe"];
+  const agentData = data.by_agent || {};
+  if (agCtx && Object.keys(agentData).length) {
+    const agLabels = Object.keys(agentData);
+    const agValues = agLabels.map(k => agentData[k]);
+    const palette  = [
+      "rgba(139,92,246,0.85)",
+      "rgba(167,139,250,0.85)",
+      "rgba(109,40,217,0.85)",
+      "rgba(76,29,149,0.85)",
+      "rgba(196,181,253,0.85)",
+      "rgba(237,233,254,0.85)",
+      "rgba(91,33,182,0.85)",
+      "rgba(221,214,254,0.85)",
+    ];
     new Chart(agCtx, {
       type: "doughnut",
       data: {
         labels: agLabels,
-        datasets: [{ data: agValues, backgroundColor: palette, borderWidth: 0 }]
+        datasets: [{
+          data: agValues,
+          backgroundColor: palette,
+          borderWidth: 0,
+          hoverBorderWidth: 2,
+          hoverBorderColor: "rgba(139,92,246,0.5)",
+        }]
       },
       options: {
-        responsive: true, maintainAspectRatio: false,
+        responsive: true,
+        maintainAspectRatio: false,
+        cutout: "65%",
         plugins: {
-          legend: { position: "bottom", labels: { color: "#888", font: { size: 10 }, boxWidth: 10 } }
+          legend: {
+            position: "bottom",
+            labels: {
+              boxWidth: 10,
+              boxHeight: 10,
+              padding: 10,
+              font: { size: 10.5 },
+            }
+          },
+          tooltip: {
+            backgroundColor: "var(--surface-2)",
+            borderColor: "rgba(255,255,255,0.1)",
+            borderWidth: 1,
+            titleColor: "var(--text-2)",
+            bodyColor: "var(--text-1)",
+            callbacks: { label: ctx => " $" + ctx.parsed.toFixed(4) }
+          }
         }
       }
     });
+  } else if (agCtx) {
+    agCtx.closest(".card-body").innerHTML =
+      '<div class="empty-state" style="padding:2rem 1rem"><div class="empty-state-icon" style="font-size:1.5rem"><i class="bi bi-pie-chart"></i></div><div class="empty-state-text">Sin datos aún</div></div>';
   }
-};
-window._dashInit();
+})();
 </script>
 {% endblock %}

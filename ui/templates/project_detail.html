@@ -5,30 +5,32 @@
 {% block head %}
 <style>
   .phase-badge { font-size:.65rem; padding:2px 8px; border-radius:999px; }
-  .feature-row { border-left:2px solid #2a2a3a; padding-left:1rem; margin-bottom:.5rem; }
+  .feature-row { border-left:2px solid var(--border); padding-left:1rem; margin-bottom:.5rem; }
   .feature-row.completed  { border-color:#22c55e; }
   .feature-row.running    { border-color:#a78bfa; }
   .feature-row.failed     { border-color:#f87171; }
-  .feature-row.pending    { border-color:#444; }
-  .progress-bar-proj { height:6px; border-radius:3px; background:#2a2a3a; overflow:hidden; }
+  .feature-row.pending    { border-color:var(--border); }
+  .progress-bar-proj { height:6px; border-radius:3px; background:var(--surface-3); overflow:hidden; }
   .progress-bar-fill { height:100%; background:var(--brand); transition:width .5s; }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="d-flex align-items-start justify-content-between mb-4">
-  <div>
-    <h4 class="mb-0 fw-semibold">{{ meta.get("project_name", project_id) }}</h4>
-    <small class="text-muted">{{ meta.get("repo_name", "—") }} · Project Loop</small>
-  </div>
-  <div class="d-flex gap-2">
-    {% set status = meta.get("project_status", "?") %}
-    <span class="badge badge-status-{{ status }} rounded-pill px-3 py-2">{{ status }}</span>
-    {% if status in ["awaiting_approval"] %}
-    <button class="btn btn-brand btn-sm px-3" onclick="approveRoadmap()">
-      <i class="bi bi-check-circle me-1"></i> Aprobar Roadmap
-    </button>
-    {% endif %}
+<div class="page-header mb-4">
+  <div class="d-flex align-items-start justify-content-between">
+    <div>
+      <h4 class="page-title">{{ meta.get("project_name", project_id) }}</h4>
+      <p class="page-subtitle">{{ meta.get("repo_name", "—") }} · Project Loop</p>
+    </div>
+    <div class="d-flex gap-2">
+      {% set status = meta.get("project_status", "?") %}
+      <span class="badge badge-status-{{ status }} rounded-pill px-3 py-2">{{ status }}</span>
+      {% if status in ["awaiting_approval"] %}
+      <button class="btn btn-primary btn-sm px-3" onclick="approveRoadmap()">
+        <i class="bi bi-check-circle me-1"></i> Aprobar Roadmap
+      </button>
+      {% endif %}
+    </div>
   </div>
 </div>
 
@@ -64,8 +66,8 @@
 {% set pct = meta.get("progress_pct", 0) %}
 <div class="card p-3 mb-4">
   <div class="d-flex justify-content-between mb-2">
-    <span style="font-size:.82rem;font-weight:600">Progreso del proyecto</span>
-    <span style="font-size:.82rem;color:#888">{{ pct }}%</span>
+    <span style="font-size:.82rem;font-weight:600;color:var(--text-1)">Progreso del proyecto</span>
+    <span style="font-size:.82rem;color:var(--text-3)">{{ pct }}%</span>
   </div>
   <div class="progress-bar-proj">
     <div class="progress-bar-fill" style="width:{{ pct }}%"></div>
@@ -77,58 +79,72 @@
 
   <!-- Columna izquierda: estado actual -->
   <div class="col-md-6">
-    <div class="card p-3">
-      <div class="fw-semibold mb-3" style="font-size:.85rem">Estado actual</div>
-      <table class="table table-sm mb-0" style="font-size:.8rem">
-        <tbody>
-          <tr><td class="text-muted">Repo</td><td>{{ meta.get("repo_name", "—") }}</td></tr>
-          <tr><td class="text-muted">Feature activo</td>
-              <td>{{ meta.get("current_feature", "—") }}</td></tr>
-          <tr><td class="text-muted">Iniciado</td>
-              <td>{{ (meta.get("started_at") or "")[:19] }}</td></tr>
-          <tr><td class="text-muted">Actualizado</td>
-              <td>{{ (meta.get("updated_at") or "")[:19] }}</td></tr>
-        </tbody>
-      </table>
+    <div class="card">
+      <div class="card-header">
+        <span class="card-header-title">Estado actual</span>
+      </div>
+      <div class="p-3">
+        <table class="table table-sm mb-0" style="font-size:.8rem">
+          <tbody>
+            <tr><td class="text-muted">Repo</td><td>{{ meta.get("repo_name", "—") }}</td></tr>
+            <tr><td class="text-muted">Feature activo</td>
+                <td>{{ meta.get("current_feature", "—") }}</td></tr>
+            <tr><td class="text-muted">Iniciado</td>
+                <td>{{ (meta.get("started_at") or "")[:19] }}</td></tr>
+            <tr><td class="text-muted">Actualizado</td>
+                <td>{{ (meta.get("updated_at") or "")[:19] }}</td></tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
 
   <!-- Columna derecha: bloqueante si existe -->
   <div class="col-md-6">
     {% if meta.get("blocker") %}
-    <div class="card p-3" style="border-color:#f87171!important">
-      <div class="fw-semibold mb-2" style="font-size:.85rem;color:#f87171">
-        <i class="bi bi-exclamation-triangle-fill me-1"></i> Bloqueante detectado
+    <div class="card" style="border-color:#f87171!important">
+      <div class="card-header" style="border-color:#f87171!important">
+        <span class="card-header-title" style="color:#f87171">
+          <i class="bi bi-exclamation-triangle-fill me-1"></i> Bloqueante detectado
+        </span>
       </div>
-      <div style="font-size:.78rem">
+      <div class="p-3" style="font-size:.78rem">
         <strong>Feature:</strong> {{ meta.blocker.get("feature", "—") }}<br>
         <strong>Tipo:</strong> {{ meta.blocker.get("tipo", "—") }}<br>
         <strong>En:</strong> {{ (meta.blocker.get("at") or "")[:19] }}
       </div>
     </div>
     {% elif meta.get("suggestions") %}
-    <div class="card p-3" style="border-color:#fb923c!important">
-      <div class="fw-semibold mb-2" style="font-size:.85rem;color:#fb923c">
-        <i class="bi bi-lightbulb-fill me-1"></i> Sugerencias del PM
+    <div class="card" style="border-color:#fb923c!important">
+      <div class="card-header" style="border-color:#fb923c!important">
+        <span class="card-header-title" style="color:#fb923c">
+          <i class="bi bi-lightbulb-fill me-1"></i> Sugerencias del PM
+        </span>
       </div>
-      <ul style="font-size:.75rem;margin:0;padding-left:1.2rem">
-        {% for s in meta.get("suggestions", [])[:5] %}
-        <li>{{ s }}</li>
-        {% endfor %}
-      </ul>
+      <div class="p-3">
+        <ul style="font-size:.75rem;margin:0;padding-left:1.2rem">
+          {% for s in meta.get("suggestions", [])[:5] %}
+          <li>{{ s }}</li>
+          {% endfor %}
+        </ul>
+      </div>
     </div>
     {% else %}
-    <div class="card p-3">
-      <div class="fw-semibold mb-2" style="font-size:.85rem">Historial de evaluaciones</div>
-      {% if meta.get("evaluation_history") %}
-      <ul style="font-size:.75rem;margin:0;padding-left:1.2rem">
-        {% for e in meta.get("evaluation_history", [])[:5] %}
-        <li><strong>{{ e.get("feature", "—") }}</strong>: {{ e.get("verdict", "—") }}</li>
-        {% endfor %}
-      </ul>
-      {% else %}
-      <div style="font-size:.78rem;color:#555">Sin evaluaciones aún.</div>
-      {% endif %}
+    <div class="card">
+      <div class="card-header">
+        <span class="card-header-title">Historial de evaluaciones</span>
+      </div>
+      <div class="p-3">
+        {% if meta.get("evaluation_history") %}
+        <ul style="font-size:.75rem;margin:0;padding-left:1.2rem">
+          {% for e in meta.get("evaluation_history", [])[:5] %}
+          <li><strong>{{ e.get("feature", "—") }}</strong>: {{ e.get("verdict", "—") }}</li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <div style="font-size:.78rem;color:var(--text-3)">Sin evaluaciones aún.</div>
+        {% endif %}
+      </div>
     </div>
     {% endif %}
   </div>
@@ -136,20 +152,24 @@
 
 <!-- Archivos subidos -->
 {% if meta.get("uploaded_files") %}
-<div class="card mb-3 p-3">
-  <div class="fw-semibold mb-2" style="font-size:.85rem">
-    <i class="bi bi-paperclip me-1" style="color:var(--brand-light)"></i>
-    Documentos de contexto ({{ meta.uploaded_files|length }})
-  </div>
-  <div class="d-flex flex-wrap gap-2">
-    {% for f in meta.uploaded_files %}
-    {% set ext = f.split('.')[-1].lower() %}
-    <span class="badge"
-          style="background:#1e1e28;color:#aaa;border:1px solid #2a2a3a;font-size:.72rem;font-weight:400">
-      {% if ext == 'pdf' %}📄{% elif ext in ['docx','doc'] %}📝{% elif ext == 'md' %}📋{% elif ext == 'json' %}🔧{% elif ext == 'csv' %}📊{% else %}📎{% endif %}
-      {{ f }}
+<div class="card mb-3">
+  <div class="card-header">
+    <span class="card-header-title">
+      <i class="bi bi-paperclip me-1" style="color:var(--brand)"></i>
+      Documentos de contexto ({{ meta.uploaded_files|length }})
     </span>
-    {% endfor %}
+  </div>
+  <div class="p-3">
+    <div class="d-flex flex-wrap gap-2">
+      {% for f in meta.uploaded_files %}
+      {% set ext = f.split('.')[-1].lower() %}
+      <span class="badge"
+            style="background:var(--surface-3);color:var(--text-2);border:1px solid var(--border);font-size:.72rem;font-weight:400">
+        {% if ext == 'pdf' %}📄{% elif ext in ['docx','doc'] %}📝{% elif ext == 'md' %}📋{% elif ext == 'json' %}🔧{% elif ext == 'csv' %}📊{% else %}📎{% endif %}
+        {{ f }}
+      </span>
+      {% endfor %}
+    </div>
   </div>
 </div>
 {% endif %}
@@ -157,16 +177,15 @@
 <!-- Roadmap completo (desplegable) -->
 {% if meta.get("roadmap") %}
 <div class="card mb-3">
-  <div class="p-3 border-bottom d-flex align-items-center justify-content-between"
-       style="border-color:#2a2a3a!important;cursor:pointer"
+  <div class="card-header" style="cursor:pointer"
        onclick="document.getElementById('roadmapBody').classList.toggle('d-none')">
-    <span class="fw-semibold" style="font-size:.9rem">
-      <i class="bi bi-map me-1" style="color:var(--brand-light)"></i> Roadmap completo
+    <span class="card-header-title">
+      <i class="bi bi-map me-1" style="color:var(--brand)"></i> Roadmap completo
     </span>
-    <i class="bi bi-chevron-down" style="font-size:.75rem;color:#888"></i>
+    <i class="bi bi-chevron-down" style="font-size:.75rem;color:var(--text-3)"></i>
   </div>
   <div id="roadmapBody" class="p-3 d-none">
-    <pre style="font-size:.72rem;color:#aaa;white-space:pre-wrap;max-height:400px;overflow-y:auto">{{ meta.get("roadmap", "")[:4000] }}</pre>
+    <pre style="font-size:.72rem;color:var(--text-2);white-space:pre-wrap;max-height:400px;overflow-y:auto">{{ meta.get("roadmap", "")[:4000] }}</pre>
   </div>
 </div>
 {% endif %}
@@ -174,9 +193,9 @@
 <!-- Backlog de features -->
 {% if meta.get("backlog") %}
 <div class="card">
-  <div class="p-3 border-bottom" style="border-color:#2a2a3a!important">
-    <span class="fw-semibold" style="font-size:.9rem">Backlog de features</span>
-    <span class="ms-2 text-muted" style="font-size:.75rem">{{ meta.backlog|length }} features</span>
+  <div class="card-header">
+    <span class="card-header-title">Backlog de features</span>
+    <span class="text-muted" style="font-size:.75rem">{{ meta.backlog|length }} features</span>
   </div>
   <div class="p-3">
     {% for f in meta.get("backlog", []) %}
@@ -185,20 +204,20 @@
         <div>
           <span class="fw-semibold" style="font-size:.82rem">{{ f.get("name", "?") }}</span>
           <span class="ms-2 phase-badge"
-                style="background:#2a2a3a;color:#888">{{ f.get("phase", "") }}</span>
+                style="background:var(--surface-3);color:var(--text-3)">{{ f.get("phase", "") }}</span>
         </div>
         <span class="badge rounded-pill px-2"
               style="font-size:.65rem;
               {% if f.get('status') == 'completed' %}background:#22c55e22;color:#22c55e
               {% elif f.get('status') == 'running' %}background:#7c3aed22;color:#a78bfa
               {% elif f.get('status') == 'failed' %}background:#dc262622;color:#f87171
-              {% else %}background:#2a2a3a;color:#666{% endif %}">
+              {% else %}background:var(--surface-3);color:var(--text-3){% endif %}">
           {{ f.get("status", "pending") }}
         </span>
       </div>
-      <div style="font-size:.72rem;color:#666;margin-top:2px">{{ f.get("description", "")[:100] }}</div>
+      <div style="font-size:.72rem;color:var(--text-3);margin-top:2px">{{ f.get("description", "")[:100] }}</div>
       {% if f.get("evaluation_notes") %}
-      <div style="font-size:.7rem;color:#888;margin-top:4px;font-style:italic">
+      <div style="font-size:.7rem;color:var(--text-2);margin-top:4px;font-style:italic">
         PM: {{ f.evaluation_notes[:100] }}
       </div>
       {% endif %}
@@ -210,15 +229,14 @@
 
 <!-- Panel de calidad (Bloque I) -->
 <div class="card mb-3" id="qualityPanel" style="display:none">
-  <div class="p-3 border-bottom d-flex align-items-center justify-content-between"
-       style="border-color:#2a2a3a!important;cursor:pointer"
+  <div class="card-header" style="cursor:pointer"
        onclick="document.getElementById('qualityBody').classList.toggle('d-none')">
-    <span class="fw-semibold" style="font-size:.9rem">
-      <i class="bi bi-bar-chart-line me-1" style="color:var(--brand-light)"></i>
+    <span class="card-header-title">
+      <i class="bi bi-bar-chart-line me-1" style="color:var(--brand)"></i>
       Métricas de calidad
-      <span id="qualityDir" class="ms-2" style="font-size:.75rem;color:#888"></span>
+      <span id="qualityDir" class="ms-2" style="font-size:.75rem;color:var(--text-3)"></span>
     </span>
-    <i class="bi bi-chevron-down" style="font-size:.75rem;color:#888"></i>
+    <i class="bi bi-chevron-down" style="font-size:.75rem;color:var(--text-3)"></i>
   </div>
   <div id="qualityBody" class="p-3">
     <div class="row g-3 mb-3" id="qualityStats"></div>

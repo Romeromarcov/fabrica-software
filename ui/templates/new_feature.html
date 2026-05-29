@@ -3,202 +3,171 @@
 {% block title %}Nuevo Feature{% endblock %}
 
 {% block content %}
-<div class="mb-4">
-  <h4 class="mb-0 fw-semibold">Nuevo Feature</h4>
-  <small class="text-muted">Lanza el pipeline completo o Lite para cualquier repositorio</small>
-</div>
+{% set active_page = "new" %}
 
 {% if not api_key_ok %}
-<div class="alert border-0 mb-4 py-2 px-3 d-flex align-items-center gap-2"
-     style="background:#dc262622;color:#f87171;font-size:.85rem">
+<div class="alert d-flex align-items-center gap-2 mb-0"
+     style="background:#dc262618;color:#f87171;border:1px solid #dc262640;border-radius:8px;font-size:.83rem;position:fixed;top:1rem;left:50%;transform:translateX(-50%);z-index:1000;white-space:nowrap;padding:.5rem .9rem">
   <i class="bi bi-exclamation-triangle-fill"></i>
   No hay una Anthropic API Key válida configurada.
-  <a href="/config" class="ms-1" style="color:#f87171">Ir a Configuración →</a>
+  <a href="/config" class="ms-1" style="color:#f87171;text-decoration:underline">Ir a Configuración →</a>
 </div>
 {% endif %}
 
-<div class="row justify-content-center">
-  <div class="col-md-7">
-    <div class="card p-4">
+<form method="POST" action="/new" id="newFeatureForm">
+  <input type="hidden" name="mode" id="modeHidden" value="{{ mode or 'completo' }}">
 
-      <form method="POST" action="/new" id="newFeatureForm">
+  <div class="composer-page">
 
-        <!-- Selector de repositorio -->
-        <div class="mb-4">
-          <label class="form-label fw-semibold" style="font-size:.85rem">
-            Repositorio Destino
-          </label>
+    <div class="composer-hero">
+      <h1 class="composer-hero-title">¿Qué quieres construir hoy?</h1>
+      <p class="composer-hero-sub">
+        Describe el feature, elige el repo y el modo — el pipeline hace el resto.
+      </p>
+    </div>
+
+    <div class="composer-box">
+      <div class="composer-input-wrap">
+
+        <textarea
+          class="composer-textarea"
+          name="feature_name"
+          id="featureName"
+          placeholder="Describe el feature que quieres implementar…"
+          rows="4"
+          autofocus
+          required
+          {% if not api_key_ok %}disabled{% endif %}
+        ></textarea>
+
+        <div class="composer-bar">
+
+          <!-- Repo selector -->
           {% if repos %}
-          <select name="repo_name" class="form-select"
+          <select class="composer-select" name="repo_name" id="repoName"
                   {% if not api_key_ok %}disabled{% endif %} required>
-            <option value="" disabled selected>Selecciona un repositorio…</option>
+            <option value="" disabled selected>Repositorio…</option>
             {% for r in repos %}
             <option value="{{ r.name }}">{{ r.name }}</option>
             {% endfor %}
           </select>
-          <div class="form-text" style="font-size:.72rem;color:#555">
-            Repositorios detectados en <code>WORKSPACES_ROOT</code>.
-          </div>
           {% else %}
-          <div class="alert border-0 py-2 px-3" style="background:#dc262622;color:#f87171;font-size:.82rem">
-            <i class="bi bi-exclamation-triangle-fill me-1"></i>
-            No se detectaron repositorios git. Verifica <code>WORKSPACES_ROOT</code>.
-          </div>
+          <span style="font-size:.78rem;color:#f87171;display:flex;align-items:center;gap:.35rem">
+            <i class="bi bi-exclamation-triangle-fill"></i> Sin repos — verifica <code>WORKSPACES_ROOT</code>
+          </span>
           {% endif %}
-        </div>
 
-        <div class="mb-4">
-          <label class="form-label fw-semibold" style="font-size:.85rem">
-            Nombre del Feature
-          </label>
-          <input type="text" name="feature_name" id="featureName"
-                 class="form-control form-control-lg"
-                 placeholder="ej. Módulo de Facturación Electrónica"
-                 required autofocus
-                 {% if not api_key_ok %}disabled{% endif %}>
-          <div class="form-text" style="font-size:.72rem;color:#555">
-            Describe el feature claramente — esto se convierte en el título del MASTER_PLAN.
+          <!-- Mode chips -->
+          <div class="d-flex align-items-center gap-1" id="modeChips">
+            <button type="button" class="mode-chip selected" data-mode="completo"
+                    {% if not api_key_ok %}disabled{% endif %}>
+              Completo
+            </button>
+            <button type="button" class="mode-chip" data-mode="lite"
+                    {% if not api_key_ok %}disabled{% endif %}>
+              Lite
+            </button>
+            <button type="button" class="mode-chip lightning" data-mode="lightning"
+                    {% if not api_key_ok %}disabled{% endif %}>
+              ⚡ Lightning
+            </button>
           </div>
-        </div>
 
-        <div class="mb-4">
-          <label class="form-label fw-semibold" style="font-size:.85rem">Modo de Ejecución</label>
-          <div class="row g-3 mt-0">
+          <!-- Cost estimate -->
+          <span id="costLabel" style="font-size:.72rem;color:var(--text-3);white-space:nowrap">
+            ~$0.08–0.25
+          </span>
 
-            <div class="col-6">
-              <input type="radio" class="btn-check" name="mode" id="modeCompleto"
-                     value="completo" checked {% if not api_key_ok %}disabled{% endif %}>
-              <label class="btn btn-outline-secondary w-100 text-start p-3" for="modeCompleto"
-                     style="border-color:#2a2a3a;height:auto">
-                <div class="fw-semibold mb-1" style="font-size:.85rem">
-                  <i class="bi bi-diagram-3 me-1" style="color:var(--brand-light)"></i> Completo
-                </div>
-                <div style="font-size:.72rem;color:#888;line-height:1.4">
-                  A1 → A2 DB → A3 MCP → A4 → A5 → A6 → A7 QA → A8 SecOps → A10 → PR<br>
-                  Incluye DB, MCP y SecOps. Recomendado para features nuevos.
-                </div>
-              </label>
-            </div>
+          <div class="ms-auto d-flex align-items-center gap-2">
+            <!-- Pre-chat -->
+            <button type="button" class="btn btn-ghost btn-sm" id="preChatBtn"
+                    onclick="goToPreChat()"
+                    {% if not api_key_ok %}disabled{% endif %}>
+              <i class="bi bi-chat-dots me-1"></i>Pre-chat
+            </button>
 
-            <div class="col-6">
-              <input type="radio" class="btn-check" name="mode" id="modeLite"
-                     value="lite" {% if not api_key_ok %}disabled{% endif %}>
-              <label class="btn btn-outline-secondary w-100 text-start p-3" for="modeLite"
-                     style="border-color:#2a2a3a;height:auto">
-                <div class="fw-semibold mb-1" style="font-size:.85rem">
-                  <i class="bi bi-lightning me-1" style="color:#fb923c"></i> Lite
-                </div>
-                <div style="font-size:.72rem;color:#888;line-height:1.4">
-                  A1 → A4 Backend → A5 Frontend → A6 → A7 QA → A8 SecOps → A10 → PR<br>
-                  Sin DB ni MCP. Ideal para bugfixes y pequeños ajustes.
-                </div>
-              </label>
-            </div>
-
-            <div class="col-12">
-              <input type="radio" class="btn-check" name="mode" id="modeLightning"
-                     value="lightning" {% if not api_key_ok %}disabled{% endif %}>
-              <label class="btn btn-outline-secondary w-100 text-start p-3" for="modeLightning"
-                     style="border-color:#2a2a3a;height:auto;border-color:#eab30855!important">
-                <div class="fw-semibold mb-1" style="font-size:.85rem">
-                  <i class="bi bi-lightning-charge-fill me-1" style="color:#eab308"></i> Lightning
-                  <span class="badge ms-1" style="background:#eab30822;color:#eab308;border:1px solid #eab30855;font-size:.65rem;font-weight:500">ULTRA-RÁPIDO</span>
-                </div>
-                <div style="font-size:.72rem;color:#888;line-height:1.4">
-                  ⚡ A1 (plan) → A4 Backend → A5 Frontend → A10 Code Writer → Listo<br>
-                  Sin QA, sin SecOps, sin PR formal. Para hotfixes urgentes y prototipos desechables.<br>
-                  <span style="color:#eab308">⚠ Los cambios van al repo sin revisión — úsalo con cuidado.</span>
-                </div>
-              </label>
-            </div>
-
+            <!-- Submit -->
+            <button type="submit" class="btn btn-primary btn-sm" id="submitBtn"
+                    {% if not api_key_ok or not repos %}disabled{% endif %}>
+              <i class="bi bi-play-fill me-1"></i>Lanzar
+            </button>
           </div>
-        </div>
+        </div><!-- /.composer-bar -->
 
-        <!-- Cost estimate -->
-        <div class="p-3 mb-4 rounded" style="background:#0a0a10;border:1px solid #2a2a3a">
-          <div class="d-flex justify-content-between align-items-center mb-2">
-            <span style="font-size:.78rem;color:#888">Estimación de costo</span>
-            <span id="costBadge" class="badge" style="background:#7c3aed22;color:#a78bfa;border:1px solid #7c3aed55;font-size:.72rem">
-              Completo ~$0.08–0.25 USD
-            </span>
-          </div>
-          <div style="font-size:.72rem;color:#555;line-height:1.5">
-            Varía según longitud del contexto y número de iteraciones QA.<br>
-            El costo real se muestra en detalle una vez finalizado el run.
-          </div>
-        </div>
-
-        <div class="d-flex gap-2">
-          <button type="submit" class="btn btn-brand px-4 flex-grow-1"
-                  id="submitBtn" {% if not api_key_ok %}disabled{% endif %}>
-            <i class="bi bi-play-fill me-1"></i> Lanzar directo
-          </button>
-          <button type="button" class="btn btn-outline-secondary px-3" id="preChatBtn"
-                  onclick="goToPreChat()" {% if not api_key_ok %}disabled{% endif %}
-                  title="Refinar el brief con el A0 antes de lanzar">
-            <i class="bi bi-chat-dots me-1"></i> Pre-chat
-          </button>
-          <a href="/" class="btn btn-outline-secondary px-2">✕</a>
-        </div>
-
-      </form>
-    </div>
+      </div><!-- /.composer-input-wrap -->
+    </div><!-- /.composer-box -->
 
     <!-- Pipeline diagram -->
-    <div class="card mt-3 p-3">
-      <div class="mb-2" style="font-size:.78rem;color:#888;text-transform:uppercase;letter-spacing:.05em">
-        Flujo del pipeline
-      </div>
-      <div id="pipelineDiagram" style="font-size:.72rem;color:#666;line-height:1.8;font-family:monospace">
-        <!-- se actualiza con JS según modo -->
+    <div style="width:100%;max-width:680px;margin-top:1.25rem">
+      <div class="card">
+        <div class="card-header">
+          <span class="card-header-title">Flujo del pipeline</span>
+        </div>
+        <div class="card-body">
+          <p id="pipelineDiagram"
+             style="font-size:.72rem;color:var(--text-3);font-family:monospace;line-height:1.8;margin:0"></p>
+        </div>
       </div>
     </div>
 
-  </div>
-</div>
+  </div><!-- /.composer-page -->
+</form>
 {% endblock %}
 
 {% block scripts %}
 <script>
+// ── Data ────────────────────────────────────────────────────────────────────
 const diagrams = {
   completo:  "A1 (Plan) → Auto-aprobado / STOP ⛔ → A2 DB → A3 MCP → A4 Backend → A5 Frontend → A6 Refactor → A7 QA ↺ → A8 SecOps ↺ → A10 Code Writer → A9 Sandbox → A1 PR Final",
   lite:      "A1 (Plan) → Auto-aprobado / STOP ⛔ → A4 Backend → A5 Frontend → A6 Refactor → A7 QA ↺ → A8 SecOps ↺ → A10 Code Writer → A9 Sandbox → A1 PR Final",
   lightning: "⚡ A1 (Plan) → ✅ Auto-aprobado → A4 Backend → A5 Frontend → A10 Code Writer → Listo",
 };
-
 const costs = {
-  completo:  "Completo ~$0.08–0.25 USD",
-  lite:      "Lite ~$0.02–0.08 USD",
-  lightning: "⚡ Lightning ~$0.005–0.02 USD",
+  completo:  "~$0.08–0.25 USD",
+  lite:      "~$0.02–0.08 USD",
+  lightning: "⚡ ~$0.005–0.02 USD",
 };
 
-function updateUI() {
-  const mode = document.querySelector("input[name=mode]:checked")?.value || "completo";
+// ── Mode chips ───────────────────────────────────────────────────────────────
+const modeHidden = document.getElementById("modeHidden");
+
+function selectMode(mode) {
+  modeHidden.value = mode;
+  document.querySelectorAll(".mode-chip").forEach(btn => {
+    const isThis = btn.dataset.mode === mode;
+    btn.classList.toggle("selected", isThis);
+    if (btn.dataset.mode === "lightning") btn.classList.toggle("lightning", true);
+  });
   document.getElementById("pipelineDiagram").textContent = diagrams[mode] || diagrams.completo;
-  document.getElementById("costBadge").textContent = costs[mode] || costs.completo;
-  // Highlight lightning border
-  document.querySelectorAll("label[for^='mode']").forEach(l => l.style.borderColor = "#2a2a3a");
-  if (mode === "lightning") {
-    document.querySelector("label[for='modeLightning']").style.borderColor = "#eab308";
-  }
+  document.getElementById("costLabel").textContent = costs[mode] || costs.completo;
 }
 
-document.querySelectorAll("input[name=mode]").forEach(r => r.addEventListener("change", updateUI));
-updateUI();
+document.querySelectorAll(".mode-chip").forEach(btn => {
+  btn.addEventListener("click", () => selectMode(btn.dataset.mode));
+});
 
-// Deshabilitar botón al enviar para evitar doble submit
-document.getElementById("newFeatureForm")?.addEventListener("submit", function() {
+// Initialise to Jinja-passed value or default
+selectMode("{{ mode or 'completo' }}");
+
+// ── Textarea auto-resize ─────────────────────────────────────────────────────
+const textarea = document.getElementById("featureName");
+textarea.addEventListener("input", function() {
+  this.style.height = "auto";
+  this.style.height = Math.min(this.scrollHeight, 280) + "px";
+});
+
+// ── Submit spinner ───────────────────────────────────────────────────────────
+document.getElementById("newFeatureForm").addEventListener("submit", function() {
   const btn = document.getElementById("submitBtn");
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status"></span>Iniciando…';
 });
 
-// Pre-chat: redirigir a la página de chat con los parámetros del formulario
+// ── Pre-chat redirect ────────────────────────────────────────────────────────
 function goToPreChat() {
   const featureName = document.getElementById("featureName").value.trim();
-  const repoName    = document.querySelector("select[name='repo_name']")?.value || "";
-  const mode        = document.querySelector("input[name='mode']:checked")?.value || "auto";
+  const repoName    = document.getElementById("repoName")?.value || "";
+  const mode        = modeHidden.value || "completo";
   const params = new URLSearchParams({ feature_name: featureName, repo: repoName, mode });
   window.location.href = "/prechat?" + params.toString();
 }

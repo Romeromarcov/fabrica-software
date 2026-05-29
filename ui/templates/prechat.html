@@ -3,147 +3,223 @@
 
 {% block head %}
 <style>
-  .chat-area {
-    height: 420px; overflow-y: auto;
-    background: #0a0a10; border-radius: 8px;
-    border: 1px solid #2a2a3a; padding: 1rem;
-    display: flex; flex-direction: column; gap: .75rem;
+  /* Make page-body fill available height without extra scroll */
+  .page-body { padding: 0 !important; height: 100%; overflow: hidden; }
+
+  /* Refined brief panel */
+  .refined-panel {
+    background: #16a34a0d;
+    border: 1px solid #16a34a55;
+    border-radius: 8px;
+    padding: .65rem .9rem;
+    font-size: .78rem;
+    color: #4ade80;
+    white-space: pre-wrap;
+    line-height: 1.6;
+    display: none;
+    max-height: 140px;
+    overflow-y: auto;
   }
-  .msg { max-width: 85%; border-radius: 10px; padding: .6rem .9rem; font-size: .85rem; line-height: 1.5; }
-  .msg.user     { background: #7c3aed33; border: 1px solid #7c3aed55; color: #c4b5fd; align-self: flex-end; }
-  .msg.assistant{ background: #1e1e28; border: 1px solid #2a2a3a; color: #ddd; align-self: flex-start; }
-  .msg.thinking { color: #555; font-style: italic; font-size: .78rem; align-self: flex-start; }
-  .input-area { display: flex; gap: .5rem; }
-  .input-area textarea {
-    flex: 1; background: #1e1e28; border: 1px solid #2a2a3a; color: #ddd;
-    border-radius: 8px; padding: .6rem .8rem; font-size: .85rem; resize: none;
+  .refined-panel.visible { display: block; }
+
+  /* Top control bar */
+  .prechat-topbar {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    flex-wrap: wrap;
+    padding: .65rem 1rem;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-2);
+    flex-shrink: 0;
   }
-  .input-area textarea:focus { border-color: var(--brand); outline: none; }
-  .refined-preview {
-    background: #16a34a0d; border: 1px solid #16a34a55;
-    border-radius: 8px; padding: .75rem; font-size: .78rem; color: #4ade80;
-    white-space: pre-wrap; display: none;
+  .prechat-topbar .feature-label {
+    font-weight: 600;
+    font-size: .88rem;
+    color: var(--text-1);
+    flex: 1;
+    min-width: 140px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
+  .prechat-topbar .composer-select {
+    max-width: 160px;
+  }
+
+  /* Launch overlay */
+  #launchOverlay {
+    position: fixed; inset: 0;
+    background: #000000cc;
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  #launchOverlay.d-none { display: none !important; }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="d-flex align-items-center mb-3">
-  <a href="/new" class="btn btn-sm btn-outline-secondary me-3">
+{% set active_page = "prechat" %}
+
+<!-- ── Top control bar ──────────────────────────────────────────────────── -->
+<div class="prechat-topbar">
+  <a href="/new" class="btn btn-ghost btn-sm" title="Volver">
     <i class="bi bi-arrow-left"></i>
   </a>
-  <div>
-    <h5 class="mb-0 fw-semibold">💬 Pre-planificación</h5>
-    <small class="text-muted">Refina el feature con el A0 antes de lanzar el pipeline</small>
-  </div>
+
+  <input id="featureName"
+         class="composer-select"
+         style="flex:1;min-width:140px;max-width:320px"
+         value="{{ feature_name }}"
+         placeholder="Nombre del feature">
+
+  <select id="repoName" class="composer-select">
+    {% for r in repos %}
+    <option value="{{ r.name }}" {% if r.name == repo %}selected{% endif %}>{{ r.name }}</option>
+    {% endfor %}
+  </select>
+
+  <select id="modeSelect" class="composer-select">
+    <option value="auto"      {% if mode == 'auto' %}selected{% endif %}>Auto</option>
+    <option value="completo"  {% if mode == 'completo' %}selected{% endif %}>Completo</option>
+    <option value="lite"      {% if mode == 'lite' %}selected{% endif %}>Lite</option>
+    <option value="lightning" {% if mode == 'lightning' %}selected{% endif %}>⚡ Lightning</option>
+  </select>
+
+  <button type="button" class="btn btn-ghost btn-sm ms-auto" onclick="skipChat()">
+    Saltar chat <i class="bi bi-arrow-right ms-1"></i>
+  </button>
+
+  <button type="button" class="btn btn-primary btn-sm" id="confirmBtn"
+          onclick="confirmAndLaunch()" disabled>
+    <i class="bi bi-rocket-takeoff me-1"></i>Lanzar pipeline
+  </button>
 </div>
 
-<div class="row g-3">
-  <!-- Panel izquierdo: formulario + chat -->
-  <div class="col-md-8">
-    <div class="card p-3 mb-3">
-      <div class="row g-2 align-items-end">
-        <div class="col-md-5">
-          <label class="form-label" style="font-size:.78rem;color:#888">Feature</label>
-          <input id="featureName" class="form-control form-control-sm"
-                 value="{{ feature_name }}" placeholder="Nombre del feature">
-        </div>
-        <div class="col-md-4">
-          <label class="form-label" style="font-size:.78rem;color:#888">Repositorio</label>
-          <select id="repoName" class="form-select form-select-sm">
-            {% for r in repos %}
-            <option value="{{ r.name }}" {% if r.name == repo %}selected{% endif %}>{{ r.name }}</option>
-            {% endfor %}
-          </select>
-        </div>
-        <div class="col-md-3">
-          <label class="form-label" style="font-size:.78rem;color:#888">Modo</label>
-          <select id="modeSelect" class="form-select form-select-sm">
-            <option value="auto"      {% if mode=='auto' %}selected{% endif %}>Auto</option>
-            <option value="completo"  {% if mode=='completo' %}selected{% endif %}>Completo</option>
-            <option value="lite"      {% if mode=='lite' %}selected{% endif %}>Lite</option>
-            <option value="lightning" {% if mode=='lightning' %}selected{% endif %}>⚡ Lightning</option>
-          </select>
-        </div>
+<!-- ── Chat layout ──────────────────────────────────────────────────────── -->
+<div class="chat-container"
+     style="height: calc(100vh - var(--topbar-h, 57px) - 57px - 2px)">
+
+  <!-- Messages -->
+  <div class="chat-messages" id="chatMessages">
+
+    <!-- Initial assistant greeting -->
+    <div class="chat-message">
+      <div class="chat-avatar assistant">🏭</div>
+      <div class="chat-bubble assistant">
+        Hola! Cuéntame sobre el feature que quieres implementar.
+        ¿Qué problema resuelve y qué debería hacer exactamente?
       </div>
     </div>
 
-    <div class="card p-3">
-      <div class="chat-area" id="chatArea">
-        <div class="msg assistant">
-          👋 Hola! Cuéntame sobre el feature que quieres implementar.
-          ¿Qué problema resuelve y qué debería hacer exactamente?
-        </div>
-      </div>
+  </div><!-- /.chat-messages -->
 
-      <div class="input-area mt-3">
-        <textarea id="chatInput" rows="2"
-                  placeholder="Describe el feature o responde las preguntas del A0…"
-                  onkeydown="handleKey(event)"></textarea>
-        <button class="btn btn-brand px-3" onclick="sendMessage()" id="sendBtn">
-          <i class="bi bi-send"></i>
-        </button>
-      </div>
+  <!-- Refined brief panel (shown above composer once ready) -->
+  <div id="refinedPanel" class="refined-panel mx-3 mb-2"></div>
 
-      <div class="d-flex gap-2 mt-2">
-        <button class="btn btn-sm btn-outline-secondary flex-grow-1" onclick="skipChat()">
-          <i class="bi bi-skip-forward me-1"></i> Saltar chat — lanzar directo
-        </button>
-        <button class="btn btn-sm btn-outline-success flex-grow-1" onclick="confirmAndLaunch()" id="confirmBtn" disabled>
-          <i class="bi bi-rocket-takeoff me-1"></i> Confirmar y lanzar pipeline
-        </button>
-      </div>
+  <!-- Composer -->
+  <div class="chat-composer">
+    <div class="chat-composer-inner">
+      <textarea
+        id="chatInput"
+        class="chat-composer-input"
+        rows="1"
+        placeholder="Describe el feature o responde las preguntas del A0…"
+        onkeydown="handleKey(event)"
+      ></textarea>
+      <button class="chat-send-btn" id="sendBtn" onclick="sendMessage()" title="Enviar">
+        <i class="bi bi-send-fill"></i>
+      </button>
     </div>
   </div>
 
-  <!-- Panel derecho: refined brief preview -->
-  <div class="col-md-4">
-    <div class="card p-3 h-100">
-      <div class="fw-semibold mb-2" style="font-size:.85rem">
-        <i class="bi bi-file-text me-1" style="color:var(--brand-light)"></i>
-        Brief Refinado
-      </div>
-      <div id="refinedEmpty" style="font-size:.78rem;color:#555;line-height:1.6">
-        El brief refinado aparecerá aquí cuando el A0 lo genere.
-        Di "confirmar" o "listo" para que el A0 lo estructure.
-      </div>
-      <div class="refined-preview" id="refinedPreview"></div>
+</div><!-- /.chat-container -->
 
-      <hr style="border-color:#2a2a3a">
-
-      <div style="font-size:.75rem;color:#666;line-height:1.6">
-        <div class="mb-1"><i class="bi bi-info-circle me-1"></i>Consejos:</div>
-        <ul class="mb-0 ps-3" style="color:#555">
-          <li>Di "sin tests" si es un prototipo</li>
-          <li>Menciona archivos que NO tocar</li>
-          <li>Di "confirmar" cuando estés listo</li>
-        </ul>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- Spinner de lanzamiento -->
-<div id="launchOverlay" class="d-none position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center"
-     style="background:#000000cc;z-index:9999">
+<!-- Launch overlay -->
+<div id="launchOverlay" class="d-none">
   <div class="text-center">
     <div class="spinner-border text-light mb-3" style="width:3rem;height:3rem"></div>
-    <div class="text-white">Lanzando pipeline…</div>
+    <div class="text-white fw-semibold">Lanzando pipeline…</div>
   </div>
 </div>
+
 {% endblock %}
 
 {% block scripts %}
 <script>
+// ── State ────────────────────────────────────────────────────────────────────
 const conversation = [
-  { role: "assistant", content: "👋 Hola! Cuéntame sobre el feature que quieres implementar. ¿Qué problema resuelve y qué debería hacer exactamente?" }
+  { role: "assistant", content: "Hola! Cuéntame sobre el feature que quieres implementar. ¿Qué problema resuelve y qué debería hacer exactamente?" }
 ];
 let refinedBrief = "";
 
+// ── Keyboard ─────────────────────────────────────────────────────────────────
 function handleKey(e) {
   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
 }
 
+// Input auto-resize
+const chatInput = document.getElementById("chatInput");
+chatInput.addEventListener("input", function() {
+  this.style.height = "auto";
+  this.style.height = Math.min(this.scrollHeight, 160) + "px";
+});
+
+// ── appendMsg ────────────────────────────────────────────────────────────────
+function appendMsg(type, text) {
+  const area = document.getElementById("chatMessages");
+
+  if (type === "thinking") {
+    const row = document.createElement("div");
+    row.className = "chat-message";
+    row.innerHTML = `
+      <div class="chat-avatar assistant">🏭</div>
+      <div class="chat-bubble thinking">
+        <span class="typing-dots"><span></span><span></span><span></span></span>
+      </div>`;
+    area.appendChild(row);
+    scrollChat();
+    return row;
+  }
+
+  const row = document.createElement("div");
+  row.className = "chat-message" + (type === "user" ? " user" : "");
+
+  if (type === "user") {
+    row.innerHTML = `
+      <div class="chat-bubble user">${_esc(text)}</div>
+      <div class="chat-avatar user"><i class="bi bi-person-fill"></i></div>`;
+  } else {
+    // assistant — return bubble element so caller can update text
+    row.innerHTML = `
+      <div class="chat-avatar assistant">🏭</div>
+      <div class="chat-bubble assistant"></div>`;
+  }
+
+  area.appendChild(row);
+  scrollChat();
+
+  // Return the bubble element for streaming updates
+  return type === "assistant"
+    ? row.querySelector(".chat-bubble")
+    : row;
+}
+
+function scrollChat() {
+  const area = document.getElementById("chatMessages");
+  area.scrollTop = area.scrollHeight;
+}
+
+function _esc(s) {
+  return String(s || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+// ── sendMessage ──────────────────────────────────────────────────────────────
 async function sendMessage() {
   const input = document.getElementById("chatInput");
   const text  = input.value.trim();
@@ -152,10 +228,11 @@ async function sendMessage() {
   appendMsg("user", text);
   conversation.push({ role: "user", content: text });
   input.value = "";
+  input.style.height = "auto";
   input.disabled = true;
   document.getElementById("sendBtn").disabled = true;
 
-  const thinkingEl = appendMsg("thinking", "A0 está pensando…");
+  const thinkingRow = appendMsg("thinking", "");
 
   try {
     const resp = await fetch("/api/prechat", {
@@ -164,12 +241,13 @@ async function sendMessage() {
       body: JSON.stringify({ messages: conversation }),
     });
 
-    const reader = resp.body.getReader();
+    const reader  = resp.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
     let fullResponse = "";
-    thinkingEl.remove();
-    const msgEl = appendMsg("assistant", "");
+
+    thinkingRow.remove();
+    const bubbleEl = appendMsg("assistant", "");
 
     while (true) {
       const { done, value } = await reader.read();
@@ -181,29 +259,31 @@ async function sendMessage() {
         if (!line.startsWith("data: ")) continue;
         try {
           const d = JSON.parse(line.slice(6));
-          if (d.token)  { fullResponse += d.token; msgEl.textContent = fullResponse; scrollChat(); }
-          if (d.error)  { msgEl.textContent = "[Error: " + d.error + "]"; }
-          if (d.done)   { break; }
+          if (d.token) {
+            fullResponse += d.token;
+            bubbleEl.textContent = fullResponse;
+            scrollChat();
+          }
+          if (d.error) { bubbleEl.textContent = "[Error: " + d.error + "]"; }
+          if (d.done)  { break; }
         } catch {}
       }
     }
 
     conversation.push({ role: "assistant", content: fullResponse });
 
-    // Detectar si hay REFINED_BRIEF en la respuesta
+    // Detect REFINED_BRIEF block
     if (fullResponse.includes("REFINED_BRIEF")) {
       refinedBrief = fullResponse.substring(fullResponse.indexOf("REFINED_BRIEF")).trim();
-      document.getElementById("refinedEmpty").style.display = "none";
-      const prev = document.getElementById("refinedPreview");
-      prev.style.display = "block";
-      prev.textContent = refinedBrief;
+      const panel = document.getElementById("refinedPanel");
+      panel.textContent = refinedBrief;
+      panel.classList.add("visible");
       document.getElementById("confirmBtn").disabled = false;
     }
 
-    // Detectar intención de confirmar
+    // Auto-trigger brief generation when user confirms
     const confirmWords = ["confirmar", "listo", "confirm", "launch", "lanzar", "proceder"];
     if (confirmWords.some(w => text.toLowerCase().includes(w)) && !refinedBrief) {
-      // Pedir al A0 que genere el brief
       conversation.push({
         role: "user",
         content: "Por favor genera el REFINED_BRIEF estructurado ahora."
@@ -212,8 +292,8 @@ async function sendMessage() {
       return;
     }
 
-  } catch(e) {
-    thinkingEl.remove();
+  } catch (e) {
+    thinkingRow.remove();
     appendMsg("assistant", "[Error de conexión: " + e.message + "]");
   } finally {
     input.disabled = false;
@@ -222,21 +302,7 @@ async function sendMessage() {
   }
 }
 
-function appendMsg(type, text) {
-  const area = document.getElementById("chatArea");
-  const div  = document.createElement("div");
-  div.className = "msg " + type;
-  div.textContent = text;
-  area.appendChild(div);
-  scrollChat();
-  return div;
-}
-
-function scrollChat() {
-  const area = document.getElementById("chatArea");
-  area.scrollTop = area.scrollHeight;
-}
-
+// ── confirmAndLaunch ─────────────────────────────────────────────────────────
 async function confirmAndLaunch() {
   const featureName = document.getElementById("featureName").value.trim();
   const repoName    = document.getElementById("repoName").value;
@@ -265,21 +331,22 @@ async function confirmAndLaunch() {
       alert("Error: " + (data.error || "desconocido"));
       document.getElementById("launchOverlay").classList.add("d-none");
     }
-  } catch(e) {
+  } catch (e) {
     alert("Error de conexión: " + e.message);
     document.getElementById("launchOverlay").classList.add("d-none");
   }
 }
 
+// ── skipChat ─────────────────────────────────────────────────────────────────
 function skipChat() {
   const featureName = document.getElementById("featureName").value.trim();
   const repoName    = document.getElementById("repoName").value;
   const mode        = document.getElementById("modeSelect").value;
   if (!featureName) { alert("Ingresa el nombre del feature"); return; }
-  // Lanzar sin refined_brief — igual que el formulario /new normal
   const form = document.createElement("form");
-  form.method = "POST"; form.action = "/new";
-  [["feature_name", featureName], ["repo_name", repoName], ["mode", mode]].forEach(([k,v]) => {
+  form.method = "POST";
+  form.action = "/new";
+  [["feature_name", featureName], ["repo_name", repoName], ["mode", mode]].forEach(([k, v]) => {
     const i = document.createElement("input");
     i.type = "hidden"; i.name = k; i.value = v;
     form.appendChild(i);

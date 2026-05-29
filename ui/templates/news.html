@@ -36,9 +36,9 @@
 
 {% block content %}
 <div class="mb-4 d-flex align-items-center justify-content-between">
-  <div>
-    <h4 class="mb-0 fw-semibold">Agente de Noticias</h4>
-    <small class="text-muted">Reporte diario por Telegram — motor de IA configurable</small>
+  <div class="page-header mb-0">
+    <h1 class="page-title">Agente de Noticias</h1>
+    <p class="page-subtitle">Reporte diario por Telegram — motor de IA configurable</p>
   </div>
   <div class="d-flex align-items-center gap-3">
     <span id="status-badge" class="badge px-3 py-2"
@@ -56,8 +56,7 @@
 </div>
 
 {% if saved %}
-<div class="alert border-0 mb-3 py-2 px-3 d-flex align-items-center gap-2"
-     style="background:#16a34a22;color:#4ade80;font-size:.85rem">
+<div class="alert alert-success mb-3 d-flex align-items-center gap-2">
   <i class="bi bi-check-circle-fill"></i> Configuración guardada y scheduler actualizado.
 </div>
 {% endif %}
@@ -111,11 +110,11 @@
 
       <!-- Programación -->
       <div class="card mb-3">
-        <div class="p-3 border-bottom d-flex align-items-center gap-2" style="border-color:#2a2a3a!important">
+        <div class="card-header">
           <i class="bi bi-clock" style="color:var(--brand-light)"></i>
-          <span class="fw-semibold" style="font-size:.9rem">Programación</span>
+          <span class="card-header-title">Programación</span>
         </div>
-        <div class="p-3">
+        <div class="card-body">
           <label class="news-section-title">Hora de envío diario</label>
           <div class="d-flex align-items-center gap-3">
             <input type="range" class="form-range flex-grow-1" name="news_hour"
@@ -132,11 +131,11 @@
 
       <!-- Modelo de IA -->
       <div class="card mb-3">
-        <div class="p-3 border-bottom d-flex align-items-center gap-2" style="border-color:#2a2a3a!important">
+        <div class="card-header">
           <i class="bi bi-cpu" style="color:var(--brand-light)"></i>
-          <span class="fw-semibold" style="font-size:.9rem">Modelo de IA</span>
+          <span class="card-header-title">Modelo de IA</span>
         </div>
-        <div class="p-3">
+        <div class="card-body">
           <div class="row g-3">
             <div class="col-md-6">
               <label class="news-section-title">Proveedor</label>
@@ -198,11 +197,11 @@
 
       <!-- Temas de noticias -->
       <div class="card mb-3">
-        <div class="p-3 border-bottom d-flex align-items-center gap-2" style="border-color:#2a2a3a!important">
+        <div class="card-header">
           <i class="bi bi-tags" style="color:var(--brand-light)"></i>
-          <span class="fw-semibold" style="font-size:.9rem">Temas Monitoreados</span>
+          <span class="card-header-title">Temas Monitoreados</span>
         </div>
-        <div class="p-3">
+        <div class="card-body">
           <div id="topicsContainer" class="d-flex flex-wrap gap-2 mb-3">
             {% for topic in nc.topics %}
             <span class="topic-chip" data-topic="{{ topic }}">
@@ -215,7 +214,7 @@
             <input type="text" id="newTopicInput" class="form-control"
                    placeholder="Ej: Tecnología blockchain en Venezuela" style="font-size:.85rem"
                    onkeydown="if(event.key==='Enter'){event.preventDefault();addTopic()}">
-            <button type="button" class="btn btn-outline-secondary px-3" onclick="addTopic()"
+            <button type="button" class="btn btn-secondary px-3" onclick="addTopic()"
                     style="font-size:.82rem;white-space:nowrap">
               <i class="bi bi-plus-lg"></i> Añadir
             </button>
@@ -233,11 +232,11 @@
 
       <!-- Telegram -->
       <div class="card mb-3">
-        <div class="p-3 border-bottom d-flex align-items-center gap-2" style="border-color:#2a2a3a!important">
+        <div class="card-header">
           <i class="bi bi-telegram" style="color:#38bdf8"></i>
-          <span class="fw-semibold" style="font-size:.9rem">Telegram</span>
+          <span class="card-header-title">Telegram</span>
         </div>
-        <div class="p-3">
+        <div class="card-body">
           <div class="d-flex align-items-center justify-content-between mb-3">
             <div style="font-size:.82rem;color:#ccc">Bot propio (separado de la Fábrica)</div>
             <div class="form-check form-switch mb-0">
@@ -269,8 +268,8 @@
 
       <!-- Guardar -->
       <div class="card mb-3">
-        <div class="p-3">
-          <button type="submit" class="btn btn-brand w-100 mb-2"
+        <div class="card-body">
+          <button type="submit" class="btn btn-primary w-100 mb-2"
                   onclick="prepareTopics()">
             <i class="bi bi-floppy me-1"></i> Guardar configuración
           </button>
@@ -282,11 +281,11 @@
 
       <!-- Envío manual -->
       <div class="card">
-        <div class="p-3 border-bottom d-flex align-items-center gap-2" style="border-color:#2a2a3a!important">
+        <div class="card-header">
           <i class="bi bi-send" style="color:var(--brand-light)"></i>
-          <span class="fw-semibold" style="font-size:.9rem">Envío Manual</span>
+          <span class="card-header-title">Envío Manual</span>
         </div>
-        <div class="p-3 d-flex flex-column gap-2">
+        <div class="card-body d-flex flex-column gap-2">
           <button type="button" class="report-btn" id="btnNews"
                   style="border-color:#16a34a44;color:#4ade80" onclick="triggerReport('news')">
             <i class="bi bi-newspaper"></i> Noticias ahora

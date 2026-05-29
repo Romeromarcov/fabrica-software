@@ -3,17 +3,16 @@
 {% block title %}Nuevo Proyecto{% endblock %}
 
 {% block content %}
-<div class="mb-4">
-  <h4 class="mb-0 fw-semibold">Nuevo Proyecto</h4>
-  <small class="text-muted">El Arquitecto (A0) genera el roadmap completo y la fábrica lo ejecuta de forma autónoma</small>
+<div class="page-header mb-4">
+  <h4 class="page-title">Nuevo Proyecto</h4>
+  <p class="page-subtitle">El Arquitecto (A0) genera el roadmap completo y la fábrica lo ejecuta de forma autónoma</p>
 </div>
 
 {% if not api_key_ok %}
-<div class="alert border-0 mb-4 py-2 px-3 d-flex align-items-center gap-2"
-     style="background:#dc262622;color:#f87171;font-size:.85rem">
+<div class="alert alert-danger d-flex align-items-center gap-2 mb-4">
   <i class="bi bi-exclamation-triangle-fill"></i>
   No hay una API Key válida configurada.
-  <a href="/config" class="ms-1" style="color:#f87171">Ir a Configuración →</a>
+  <a href="/config" class="ms-1 alert-link">Ir a Configuración →</a>
 </div>
 {% endif %}
 
@@ -37,7 +36,7 @@
             {% endfor %}
           </select>
           {% else %}
-          <div class="alert border-0 py-2 px-3" style="background:#dc262622;color:#f87171;font-size:.82rem">
+          <div class="alert alert-danger py-2 px-3" style="font-size:.82rem">
             No se detectaron repositorios. Verifica <code>WORKSPACES_ROOT</code>.
           </div>
           {% endif %}
@@ -64,7 +63,7 @@
                     class="form-control" rows="4"
                     placeholder="Describe qué quieres lograr, el problema que resuelve y el alcance esperado. Cuanto más detallado, mejor el roadmap que genera el Arquitecto."
                     required {% if not api_key_ok %}disabled{% endif %}></textarea>
-          <div class="form-text" style="font-size:.72rem;color:#555">
+          <div class="form-text" style="font-size:.72rem;color:var(--text-3)">
             Incluye contexto de negocio, usuarios objetivo y restricciones si las hay.
           </div>
         </div>
@@ -77,18 +76,18 @@
           </label>
 
           <div id="dropZone"
-               style="border:2px dashed #2a2a3a;border-radius:10px;padding:1.5rem;
+               style="border:2px dashed var(--border);border-radius:10px;padding:1.5rem;
                       text-align:center;cursor:pointer;transition:border-color .2s;
-                      background:#0a0a10"
+                      background:var(--surface-3)"
                ondragover="handleDragOver(event)"
                ondragleave="handleDragLeave(event)"
                ondrop="handleDrop(event)"
                onclick="document.getElementById('fileInput').click()">
-            <i class="bi bi-cloud-upload" style="font-size:1.6rem;color:#555"></i>
-            <p class="mb-1 mt-2" style="font-size:.82rem;color:#888">
-              Arrastra archivos aquí o <span style="color:var(--brand-light)">haz clic para seleccionar</span>
+            <i class="bi bi-cloud-upload" style="font-size:1.6rem;color:var(--text-3)"></i>
+            <p class="mb-1 mt-2" style="font-size:.82rem;color:var(--text-2)">
+              Arrastra archivos aquí o <span style="color:var(--brand)">haz clic para seleccionar</span>
             </p>
-            <p style="font-size:.7rem;color:#555;margin:0">
+            <p style="font-size:.7rem;color:var(--text-3);margin:0">
               .txt .md .pdf .docx .json .yaml .csv · Máx. 10 MB por archivo
             </p>
           </div>
@@ -101,16 +100,17 @@
           <!-- Lista de archivos seleccionados -->
           <div id="fileList" class="mt-2" style="display:none">
             <div class="d-flex align-items-center justify-content-between mb-1">
-              <span style="font-size:.75rem;color:#888">Archivos seleccionados:</span>
+              <span style="font-size:.75rem;color:var(--text-2)">Archivos seleccionados:</span>
               <button type="button" onclick="clearFiles()"
-                      style="font-size:.72rem;color:#f87171;background:none;border:none;cursor:pointer;padding:0">
+                      class="btn btn-ghost btn-sm"
+                      style="color:#f87171">
                 Limpiar todo
               </button>
             </div>
             <ul id="fileItems" style="list-style:none;margin:0;padding:0"></ul>
           </div>
 
-          <div class="form-text mt-1" style="font-size:.72rem;color:#555">
+          <div class="form-text mt-1" style="font-size:.72rem;color:var(--text-3)">
             Sube PRDs, wireframes en texto, diagramas, arquitecturas existentes, user stories — cualquier
             documento que le dé contexto al Arquitecto para generar un roadmap más preciso.
           </div>
@@ -124,12 +124,12 @@
             <div class="col-4">
               <input type="radio" class="btn-check" name="project_type" id="typePlan"
                      value="plan" checked {% if not api_key_ok %}disabled{% endif %}>
-              <label class="btn btn-outline-secondary w-100 text-start p-3" for="typePlan"
-                     style="border-color:#2a2a3a;height:auto">
+              <label class="btn btn-secondary w-100 text-start p-3" for="typePlan"
+                     style="height:auto">
                 <div class="fw-semibold mb-1" style="font-size:.82rem">
-                  <i class="bi bi-map me-1" style="color:var(--brand-light)"></i> Plan existente
+                  <i class="bi bi-map me-1" style="color:var(--brand)"></i> Plan existente
                 </div>
-                <div style="font-size:.7rem;color:#888;line-height:1.4">
+                <div style="font-size:.7rem;color:var(--text-3);line-height:1.4">
                   A0 lee el código + docs existentes y genera el roadmap de lo que falta.
                 </div>
               </label>
@@ -138,12 +138,12 @@
             <div class="col-4">
               <input type="radio" class="btn-check" name="project_type" id="typeAudit"
                      value="audit" {% if not api_key_ok %}disabled{% endif %}>
-              <label class="btn btn-outline-secondary w-100 text-start p-3" for="typeAudit"
-                     style="border-color:#2a2a3a;height:auto">
+              <label class="btn btn-secondary w-100 text-start p-3" for="typeAudit"
+                     style="height:auto">
                 <div class="fw-semibold mb-1" style="font-size:.82rem">
                   <i class="bi bi-search me-1" style="color:#22c55e"></i> Onboarding Auditado
                 </div>
-                <div style="font-size:.7rem;color:#888;line-height:1.4">
+                <div style="font-size:.7rem;color:var(--text-3);line-height:1.4">
                   Sin docs previos. A0 audita el código real y genera PROJECT_CONTEXT + backlog.
                 </div>
               </label>
@@ -152,12 +152,12 @@
             <div class="col-4">
               <input type="radio" class="btn-check" name="project_type" id="typeNew"
                      value="new" {% if not api_key_ok %}disabled{% endif %}>
-              <label class="btn btn-outline-secondary w-100 text-start p-3" for="typeNew"
-                     style="border-color:#2a2a3a;height:auto">
+              <label class="btn btn-secondary w-100 text-start p-3" for="typeNew"
+                     style="height:auto">
                 <div class="fw-semibold mb-1" style="font-size:.82rem">
                   <i class="bi bi-rocket me-1" style="color:#fb923c"></i> Desde cero
                 </div>
-                <div style="font-size:.7rem;color:#888;line-height:1.4">
+                <div style="font-size:.7rem;color:var(--text-3);line-height:1.4">
                   A0 propone stack + arquitectura + roadmap. Repo puede estar vacío.
                 </div>
               </label>
@@ -181,11 +181,11 @@
         </div>
 
         <!-- Info del loop autónomo -->
-        <div class="p-3 mb-4 rounded" style="background:#0a0a10;border:1px solid #2a2a3a">
-          <div class="fw-semibold mb-2" style="font-size:.78rem;color:#888">
-            <i class="bi bi-infinity me-1" style="color:var(--brand-light)"></i> Modo autónomo
+        <div class="p-3 mb-4 rounded" style="background:var(--surface-3);border:1px solid var(--border)">
+          <div class="fw-semibold mb-2" style="font-size:.78rem;color:var(--text-2)">
+            <i class="bi bi-infinity me-1" style="color:var(--brand)"></i> Modo autónomo
           </div>
-          <div style="font-size:.72rem;color:#555;line-height:1.6">
+          <div style="font-size:.72rem;color:var(--text-3);line-height:1.6">
             Una vez apruebas el roadmap, la fábrica ejecuta features de forma continua.<br>
             Solo te interrumpe ante <strong style="color:#f87171">bloqueantes duros</strong>
             (seguridad crítica, QA sin resolver) o cuando el backlog se vacía.<br>
@@ -194,11 +194,11 @@
         </div>
 
         <div class="d-flex gap-2">
-          <button type="submit" class="btn btn-brand px-4 flex-grow-1"
+          <button type="submit" class="btn btn-primary px-4 flex-grow-1"
                   id="submitBtn" {% if not api_key_ok %}disabled{% endif %}>
             <i class="bi bi-diagram-3 me-1"></i> Generar Roadmap y Lanzar
           </button>
-          <a href="/" class="btn btn-outline-secondary px-3">Cancelar</a>
+          <a href="/" class="btn btn-secondary px-3">Cancelar</a>
         </div>
 
       </form>
@@ -208,8 +208,8 @@
   <!-- Panel lateral informativo -->
   <div class="col-md-4">
     <div class="card p-3 mb-3">
-      <div class="fw-semibold mb-2" style="font-size:.82rem">Flujo del Project Loop</div>
-      <div style="font-size:.72rem;color:#666;line-height:2;font-family:monospace">
+      <div class="fw-semibold mb-2" style="font-size:.82rem;color:var(--text-1)">Flujo del Project Loop</div>
+      <div style="font-size:.72rem;color:var(--text-3);line-height:2;font-family:monospace">
         A0 (Arquitecto)<br>
         ↓<br>
         <span style="color:#a78bfa">⛔ Tú apruebas el roadmap</span><br>
@@ -230,8 +230,8 @@
     </div>
 
     <div class="card p-3">
-      <div class="fw-semibold mb-2" style="font-size:.82rem">Cuándo usar cada tipo</div>
-      <div style="font-size:.72rem;color:#666;line-height:1.6">
+      <div class="fw-semibold mb-2" style="font-size:.82rem;color:var(--text-1)">Cuándo usar cada tipo</div>
+      <div style="font-size:.72rem;color:var(--text-3);line-height:1.6">
         <strong style="color:#a78bfa">Plan para existente</strong><br>
         Repo con código pero sin roadmap claro, o que necesita evolución estructurada.<br><br>
         <strong style="color:#fb923c">Desde cero</strong><br>
@@ -276,13 +276,13 @@ function renderFileList() {
   Array.from(selectedFiles.files).forEach((f, i) => {
     const tooBig = f.size > MAX_MB * 1024 * 1024;
     const li = document.createElement('li');
-    li.style.cssText = 'display:flex;align-items:center;gap:.5rem;padding:.3rem .5rem;border-radius:6px;margin-bottom:.25rem;background:#1e1e28;font-size:.78rem;';
+    li.style.cssText = 'display:flex;align-items:center;gap:.5rem;padding:.3rem .5rem;border-radius:6px;margin-bottom:.25rem;background:var(--surface-3);font-size:.78rem;';
     li.innerHTML = `
       <span>${fileIcon(f.name)}</span>
-      <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:${tooBig?'#f87171':'#ccc'}">${f.name}</span>
-      <span style="color:#666;white-space:nowrap">${formatSize(f.size)}${tooBig?' ⚠️':''}</span>
+      <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:${tooBig?'#f87171':'var(--text-1)'}">${f.name}</span>
+      <span style="color:var(--text-3);white-space:nowrap">${formatSize(f.size)}${tooBig?' ⚠️':''}</span>
       <button type="button" onclick="removeFile(${i})"
-              style="background:none;border:none;color:#666;cursor:pointer;padding:0 .2rem;font-size:.9rem;line-height:1">×</button>
+              style="background:none;border:none;color:var(--text-3);cursor:pointer;padding:0 .2rem;font-size:.9rem;line-height:1">×</button>
     `;
     items.appendChild(li);
   });
@@ -321,16 +321,16 @@ function handleFileSelect(files) { addFiles(files); }
 
 function handleDragOver(e) {
   e.preventDefault();
-  document.getElementById('dropZone').style.borderColor = 'var(--brand-light)';
+  document.getElementById('dropZone').style.borderColor = 'var(--brand)';
 }
 
 function handleDragLeave(e) {
-  document.getElementById('dropZone').style.borderColor = '#2a2a3a';
+  document.getElementById('dropZone').style.borderColor = 'var(--border)';
 }
 
 function handleDrop(e) {
   e.preventDefault();
-  document.getElementById('dropZone').style.borderColor = '#2a2a3a';
+  document.getElementById('dropZone').style.borderColor = 'var(--border)';
   addFiles(e.dataTransfer.files);
 }
 
