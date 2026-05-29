@@ -17,7 +17,7 @@ import os
 
 from config import (
     MODEL_STANDARD,
-    ANTHROPIC_API_KEY, GOOGLE_API_KEY, ZHIPU_API_KEY, KIMI_API_KEY,
+    ANTHROPIC_API_KEY, GOOGLE_API_KEY, ZHIPU_API_KEY, KIMI_API_KEY, OPENAI_API_KEY,
     PROVIDER_URLS,
 )
 from state import CostEntry
@@ -108,10 +108,12 @@ def _provider(model: str) -> str:
     if m.startswith("gemini-"):                             return "google"          # OpenAI-compat
     if m.startswith("glm-") or m.startswith("chatglm"):    return "zhipu"
     if m.startswith("kimi-") or m.startswith("moonshot-"): return "kimi"
+    if m.startswith("gpt-") or m.startswith("o1") or m.startswith("o3"): return "openai"
     return "anthropic"
 
 
 _PROVIDER_KEY_NAMES = {
+    "openai": "OPENAI_API_KEY",
     "google": "GOOGLE_API_KEY",
     "zhipu":  "ZHIPU_API_KEY",
     "kimi":   "KIMI_API_KEY",

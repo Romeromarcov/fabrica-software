@@ -20,6 +20,7 @@ DEFAULTS = {
     "GOOGLE_API_KEY":    "",
     "ZHIPU_API_KEY":     "",
     "KIMI_API_KEY":      "",
+    "OPENAI_API_KEY":    "",
     "LANGCHAIN_API_KEY": "",
     "LANGCHAIN_TRACING_V2": "false",
     # Telegram — compartido por Fábrica y Agente de Noticias
@@ -33,8 +34,8 @@ DEFAULTS = {
     "MODEL_A4": "glm-5.1",                  # A4 Backend — Z.ai
     "MODEL_A5": "kimi-k2.6",               # A5 Frontend — Kimi
     "MODEL_A6": "claude-sonnet-4-6",        # A6 Revisor/Refactor — Anthropic
-    "MODEL_A7": "claude-sonnet-4-6",        # A7 QA Test — Anthropic
-    "MODEL_A8": "claude-sonnet-4-6",        # A8 SecOps — Anthropic
+    "MODEL_A7": "gpt-5.5",                   # A7 QA Test — OpenAI
+    "MODEL_A8": "gpt-5.5",                   # A8 SecOps — OpenAI
     # A9 y A10 no usan LLM
     "MODEL_A11": "claude-sonnet-4-6",       # A11 DevOps — Anthropic
     # Comportamiento del pipeline
@@ -75,16 +76,17 @@ DEFAULTS = {
 KNOWN_KEYS = set(DEFAULTS.keys())
 
 # Prefijos de proveedor que NO son válidos para cada agente.
-# Evita que un swap accidental en el formulario se persista en .env
+# Evita que un swap accidental en el formulario se persista en .env.
+# A7 y A8 admiten Anthropic (claude-) Y OpenAI (gpt-) — sin restricción.
 MODEL_FORBIDDEN_PREFIX: dict[str, tuple[str, ...]] = {
-    "MODEL_A2": ("glm-", "kimi-"),
-    "MODEL_A3": ("glm-", "kimi-"),
+    "MODEL_A2": ("glm-", "kimi-", "gpt-"),
+    "MODEL_A3": ("glm-", "kimi-", "gpt-"),
     "MODEL_A4": ("claude-",),
     "MODEL_A5": ("claude-",),
     "MODEL_A6":  ("glm-", "kimi-"),
-    "MODEL_A7":  ("glm-", "kimi-"),
-    "MODEL_A8":  ("glm-", "kimi-"),
-    "MODEL_A11": ("glm-", "kimi-"),   # A11 DevOps también debe ser Anthropic
+    "MODEL_A7":  ("glm-", "kimi-"),        # permite claude-* y gpt-*
+    "MODEL_A8":  ("glm-", "kimi-"),        # permite claude-* y gpt-*
+    "MODEL_A11": ("glm-", "kimi-", "gpt-"),
 }
 
 SENSITIVE = {
@@ -92,6 +94,7 @@ SENSITIVE = {
     "GOOGLE_API_KEY":     ("AIza",    "AIza****"),
     "ZHIPU_API_KEY":      ("",        "****"),
     "KIMI_API_KEY":       ("sk-",     "sk-****"),
+    "OPENAI_API_KEY":     ("sk-",     "sk-****"),
     "LANGCHAIN_API_KEY":  ("ls__",    "ls__****"),
     "TELEGRAM_BOT_TOKEN": ("",        "****"),
     "NEWS_AGENT_API_KEY": ("",        "****"),

@@ -45,6 +45,7 @@ ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 GOOGLE_API_KEY    = os.getenv("GOOGLE_API_KEY",    "")
 ZHIPU_API_KEY     = os.getenv("ZHIPU_API_KEY",     "")
 KIMI_API_KEY      = os.getenv("KIMI_API_KEY",      "")
+OPENAI_API_KEY    = os.getenv("OPENAI_API_KEY",    "")
 
 # ── Modelo por agente ─────────────────────────────────────────────────────────
 MODEL_A0 = os.getenv("MODEL_A0", "gemini-3.5-flash")   # A0 Arquitecto de Proyecto
@@ -54,8 +55,8 @@ MODEL_A3 = os.getenv("MODEL_A3", "claude-sonnet-4-6") # A3 MCP Toolsmith
 MODEL_A4 = os.getenv("MODEL_A4", "glm-5.1")           # A4 Backend Developer
 MODEL_A5 = os.getenv("MODEL_A5", "kimi-k2.6")         # A5 Frontend Developer
 MODEL_A6 = os.getenv("MODEL_A6", "claude-sonnet-4-6") # A6 Revisor / Refactor
-MODEL_A7 = os.getenv("MODEL_A7", "claude-sonnet-4-6") # A7 QA Test
-MODEL_A8 = os.getenv("MODEL_A8", "claude-sonnet-4-6") # A8 SecOps
+MODEL_A7 = os.getenv("MODEL_A7", "gpt-5.5")           # A7 QA Test — OpenAI
+MODEL_A8 = os.getenv("MODEL_A8", "gpt-5.5")           # A8 SecOps — OpenAI
 
 MODEL_A9  = "no-llm"                                         # A9 Sandbox — sin LLM
 MODEL_A10 = "no-llm"                                         # A10 Code Writer — sin LLM
@@ -134,21 +135,35 @@ NEWS_AGENT_MODEL   = os.getenv("NEWS_AGENT_MODEL",   "claude-haiku-4-5-20251001"
 
 # ── URLs OpenAI-compatibles por proveedor ─────────────────────────────────────
 PROVIDER_URLS = {
+    "openai": "https://api.openai.com/v1",
     "google": "https://generativelanguage.googleapis.com/v1beta/openai/",
     "zhipu":  "https://api.z.ai/api/paas/v4/",
     "kimi":   "https://api.moonshot.ai/v1",
 }
 
-# ── Precios ($/1M tokens) — claude-sonnet-4-6 aplica a agentes 2,3,6,7,8 ─────
+# ── Precios ($/1M tokens) ─────────────────────────────────────────────────────
 PRICES = {
+    # Anthropic
     "claude-opus-4-7":           {"input": 15.00, "output": 75.00, "cache_read": 1.50},
     "claude-sonnet-4-6":         {"input":  3.00, "output": 15.00, "cache_read": 0.30},
     "claude-haiku-4-5-20251001": {"input":  0.80, "output":  4.00, "cache_read": 0.08},
+    # Google
     "gemini-3.5-flash":          {"input":  0.30, "output":  2.50, "cache_read": 0.00},
     "gemini-3.1-pro-preview":    {"input":  2.50, "output": 15.00, "cache_read": 0.00},
     "gemini-2.5-pro":            {"input":  1.25, "output": 10.00, "cache_read": 0.00},
+    # OpenAI
+    "gpt-5.5":                   {"input":  5.00, "output": 30.00, "cache_read": 0.50},
+    "gpt-5.5-2026-04-23":        {"input":  5.00, "output": 30.00, "cache_read": 0.50},
+    "gpt-4o":                    {"input":  2.50, "output": 10.00, "cache_read": 0.00},
+    "gpt-4o-mini":               {"input":  0.15, "output":  0.60, "cache_read": 0.00},
+    "gpt-4-turbo":               {"input": 10.00, "output": 30.00, "cache_read": 0.00},
+    # Z.ai (ZhiPu)
     "glm-5.1":                   {"input":  0.50, "output":  1.50, "cache_read": 0.00},
+    "glm-4-plus":                {"input":  0.70, "output":  2.00, "cache_read": 0.00},
+    # Kimi (Moonshot)
     "kimi-k2.6":                 {"input":  1.00, "output":  3.00, "cache_read": 0.00},
+    "moonshot-v1-8k":            {"input":  0.12, "output":  0.12, "cache_read": 0.00},
+    "moonshot-v1-32k":           {"input":  0.24, "output":  0.24, "cache_read": 0.00},
 }
 
 _DEFAULT_PRICE = {"input": 3.00, "output": 15.00, "cache_read": 0.00}

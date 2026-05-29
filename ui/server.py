@@ -772,6 +772,7 @@ async def save_config(
     google_api_key:    str = Form(""),
     zhipu_api_key:     str = Form(""),
     kimi_api_key:      str = Form(""),
+    openai_api_key:    str = Form(""),
     langchain_api_key: str = Form(""),
     langchain_tracing: str = Form("false"),
     # Telegram
@@ -785,8 +786,8 @@ async def save_config(
     model_a4:  str = Form("glm-5.1"),
     model_a5:  str = Form("kimi-k2.6"),
     model_a6:  str = Form(MODEL_STANDARD),
-    model_a7:  str = Form(MODEL_STANDARD),
-    model_a8:  str = Form(MODEL_STANDARD),
+    model_a7:  str = Form("gpt-5.5"),
+    model_a8:  str = Form("gpt-5.5"),
     model_a11: str = Form(MODEL_STANDARD),
     # Comportamiento del pipeline
     write_to_repo:      str = Form("false"),   # checkbox: "on" cuando activo, ausente si no
@@ -816,6 +817,7 @@ async def save_config(
         "GOOGLE_API_KEY":     google_api_key,
         "ZHIPU_API_KEY":      zhipu_api_key,
         "KIMI_API_KEY":       kimi_api_key,
+        "OPENAI_API_KEY":     openai_api_key,
         "LANGCHAIN_API_KEY":  langchain_api_key,
         "LANGCHAIN_TRACING_V2": "true" if langchain_tracing == "on" else "false",
         "TELEGRAM_BOT_TOKEN": telegram_bot_token,

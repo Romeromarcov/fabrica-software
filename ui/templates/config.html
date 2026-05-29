@@ -11,8 +11,28 @@
   }
   .pb-anthropic { background: #7c3aed22; color: #a78bfa; border: 1px solid #7c3aed44; }
   .pb-google    { background: #0ea5e922; color: #38bdf8; border: 1px solid #0ea5e944; }
+  .pb-openai    { background: #10b98122; color: #34d399; border: 1px solid #10b98144; }
   .pb-zhipu     { background: #16a34a22; color: #4ade80; border: 1px solid #16a34a44; }
   .pb-kimi      { background: #d9770622; color: #fb923c; border: 1px solid #d9770644; }
+  .model-pick-btn {
+    background: #1a1a24; border: 1px solid #2a2a3a; color: #555;
+    border-radius: 0 6px 6px 0; padding: 0 .45rem; cursor: pointer;
+    transition: all .15s; flex-shrink: 0;
+  }
+  .model-pick-btn:hover { border-color: #7c3aed55; color: #a78bfa; background: #7c3aed15; }
+  .model-picker-menu { padding: .25rem 0 !important; }
+  .model-picker-menu .mp-group-label {
+    font-size: .62rem; color: #555; text-transform: uppercase;
+    letter-spacing: .06em; padding: .4rem .75rem .2rem; font-weight: 600;
+  }
+  .model-picker-menu .mp-item {
+    display: flex; align-items: center; gap: .5rem;
+    padding: .3rem .75rem; cursor: pointer; font-size: .78rem; color: #bbb;
+    transition: background .1s;
+  }
+  .model-picker-menu .mp-item:hover { background: #7c3aed18; color: #e0e0e0; }
+  .model-picker-menu .mp-item.active { color: #a78bfa; font-weight: 600; }
+  .model-picker-menu .mp-divider { height: 1px; background: #2a2a3a; margin: .25rem .5rem; }
   .agent-row td { vertical-align: middle; }
   .extra-provider-row {
     display: grid; grid-template-columns: 1fr 1fr auto;
@@ -105,6 +125,18 @@
 
         <div class="col-md-6">
           <label class="form-label d-flex align-items-center gap-2" style="font-size:.78rem;color:#888">
+            <span class="provider-badge pb-openai">OpenAI</span>
+            Agentes A7 · QA · A8 · SecOps (GPT-5.5)
+          </label>
+          <input type="password" name="openai_api_key" class="form-control key-input"
+                 value="{{ cfg.get('OPENAI_API_KEY', '') }}" placeholder="sk-…" autocomplete="off">
+          <div class="form-text" style="font-size:.68rem;color:#444">
+            Obtener en <span style="color:#666">platform.openai.com/api-keys</span>
+          </div>
+        </div>
+
+        <div class="col-md-6">
+          <label class="form-label d-flex align-items-center gap-2" style="font-size:.78rem;color:#888">
             <span class="provider-badge pb-anthropic" style="background:#ffffff0a;color:#666;border-color:#2a2a3a">LangSmith</span>
             Trazabilidad (opcional)
           </label>
@@ -181,6 +213,7 @@
       <span class="ms-auto" style="font-size:.72rem;color:#555">
         <span class="provider-badge pb-anthropic me-1">A</span>Anthropic &nbsp;
         <span class="provider-badge pb-google me-1">G</span>Google &nbsp;
+        <span class="provider-badge pb-openai me-1">O</span>OpenAI &nbsp;
         <span class="provider-badge pb-zhipu me-1">Z</span>Z.ai &nbsp;
         <span class="provider-badge pb-kimi me-1">K</span>Kimi
       </span>
@@ -236,10 +269,20 @@
                      value="{{ cfg.get('MODEL_A0', default) }}" style="font-size:.78rem;opacity:.55"
                      disabled title="Usa MODEL_A0 — configúralo en la fila A0">
               {% else %}
-              <input type="text" name="{{ field }}" class="form-control form-control-sm key-input agent-model-input"
-                     value="{{ cfg.get(field, default) }}" style="font-size:.78rem"
-                     data-badge="badge-{{ num }}"
-                     oninput="updateProviderBadge(this)">
+              <div class="input-group input-group-sm">
+                <input type="text" name="{{ field }}" class="form-control key-input agent-model-input"
+                       value="{{ cfg.get(field, default) }}" style="font-size:.78rem"
+                       data-badge="badge-{{ num }}"
+                       oninput="updateProviderBadge(this)">
+                <button type="button" class="model-pick-btn dropdown-toggle"
+                        data-bs-toggle="dropdown" aria-expanded="false"
+                        data-field="{{ field }}" data-badge="badge-{{ num }}"
+                        onclick="buildModelDropdown(this)">
+                  <i class="bi bi-collection" style="font-size:.6rem"></i>
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end model-picker-menu"
+                    style="min-width:270px;max-height:340px;overflow-y:auto;background:#16161d;border:1px solid #2a2a3a;border-radius:8px"></ul>
+              </div>
               {% endif %}
             </td>
           </tr>
@@ -280,10 +323,20 @@
             </td>
             <td><span class="provider-badge" id="badge-{{ num }}"></span></td>
             <td>
-              <input type="text" name="{{ field }}" class="form-control form-control-sm key-input agent-model-input"
-                     value="{{ cfg.get(field, default) }}" style="font-size:.78rem"
-                     data-badge="badge-{{ num }}"
-                     oninput="updateProviderBadge(this)">
+              <div class="input-group input-group-sm">
+                <input type="text" name="{{ field }}" class="form-control key-input agent-model-input"
+                       value="{{ cfg.get(field, default) }}" style="font-size:.78rem"
+                       data-badge="badge-{{ num }}"
+                       oninput="updateProviderBadge(this)">
+                <button type="button" class="model-pick-btn dropdown-toggle"
+                        data-bs-toggle="dropdown" aria-expanded="false"
+                        data-field="{{ field }}" data-badge="badge-{{ num }}"
+                        onclick="buildModelDropdown(this)">
+                  <i class="bi bi-collection" style="font-size:.6rem"></i>
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end model-picker-menu"
+                    style="min-width:270px;max-height:340px;overflow-y:auto;background:#16161d;border:1px solid #2a2a3a;border-radius:8px"></ul>
+              </div>
             </td>
           </tr>
           {% endfor %}
@@ -720,30 +773,120 @@
 
 {% block scripts %}
 <script>
+// ── Catálogo de modelos por proveedor ────────────────────────────────────────
+
+const MODEL_CATALOG = [
+  {
+    provider: 'Anthropic', cls: 'pb-anthropic', icon: 'A',
+    models: [
+      { id: 'claude-opus-4-7',           label: 'Claude Opus 4.7',          note: 'más capaz'         },
+      { id: 'claude-sonnet-4-6',         label: 'Claude Sonnet 4.6',        note: 'equilibrado'       },
+      { id: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5',         note: 'rápido / barato'   },
+    ],
+  },
+  {
+    provider: 'Google', cls: 'pb-google', icon: 'G',
+    models: [
+      { id: 'gemini-3.5-flash',         label: 'Gemini 3.5 Flash',         note: 'thinking nativo'   },
+      { id: 'gemini-2.5-pro',           label: 'Gemini 2.5 Pro',           note: ''                  },
+      { id: 'gemini-3.1-pro-preview',   label: 'Gemini 3.1 Pro Preview',   note: ''                  },
+    ],
+  },
+  {
+    provider: 'OpenAI', cls: 'pb-openai', icon: 'O',
+    models: [
+      { id: 'gpt-5.5',                  label: 'GPT-5.5',                  note: '1M ctx · coding'   },
+      { id: 'gpt-5.5-2026-04-23',       label: 'GPT-5.5 snapshot',         note: '2026-04-23'        },
+      { id: 'gpt-4o',                   label: 'GPT-4o',                   note: 'multimodal'        },
+      { id: 'gpt-4o-mini',              label: 'GPT-4o mini',              note: 'barato'            },
+    ],
+  },
+  {
+    provider: 'Z.ai (GLM)', cls: 'pb-zhipu', icon: 'Z',
+    models: [
+      { id: 'glm-5.1',                  label: 'GLM-5.1',                  note: 'backend'           },
+      { id: 'glm-4-plus',               label: 'GLM-4-Plus',               note: ''                  },
+    ],
+  },
+  {
+    provider: 'Kimi', cls: 'pb-kimi', icon: 'K',
+    models: [
+      { id: 'kimi-k2.6',                label: 'Kimi K2.6',                note: 'frontend'          },
+      { id: 'moonshot-v1-8k',           label: 'Moonshot v1 8k',           note: ''                  },
+      { id: 'moonshot-v1-32k',          label: 'Moonshot v1 32k',          note: ''                  },
+    ],
+  },
+];
+
 // ── Detección dinámica de proveedor por nombre de modelo ─────────────────────
 
 const PROVIDER_STYLES = {
-  anthropic:    { cls: 'pb-anthropic', label: 'anthropic' },
-  google:       { cls: 'pb-google',    label: 'google'    },
-  'google-native': { cls: 'pb-google', label: 'google ✦' }, // ✦ = thinking
-  zhipu:        { cls: 'pb-zhipu',     label: 'z.ai'      },
-  kimi:         { cls: 'pb-kimi',      label: 'kimi'      },
+  anthropic:       { cls: 'pb-anthropic', label: 'anthropic' },
+  google:          { cls: 'pb-google',    label: 'google'    },
+  'google-native': { cls: 'pb-google',    label: 'google ✦'  },
+  openai:          { cls: 'pb-openai',    label: 'openai'    },
+  zhipu:           { cls: 'pb-zhipu',     label: 'z.ai'      },
+  kimi:            { cls: 'pb-kimi',      label: 'kimi'      },
 };
-// badge extra para providers no listados arriba
 const PB_DEFAULT = { cls: '', label: '—' };
 
 function detectModelProvider(modelName) {
   const m = (modelName || '').toLowerCase().trim();
   if (!m) return PB_DEFAULT;
-  if (m.startsWith('claude-'))                                   return PROVIDER_STYLES.anthropic;
-  if (m.startsWith('gemini-3.5-'))                               return PROVIDER_STYLES['google-native'];
-  if (m.startsWith('gemini-'))                                   return PROVIDER_STYLES.google;
-  if (m.startsWith('glm-') || m.startsWith('chatglm'))          return PROVIDER_STYLES.zhipu;
-  if (m.startsWith('kimi-') || m.startsWith('moonshot-'))       return PROVIDER_STYLES.kimi;
-  // Detectar por substring (para modelos custom de proveedores conocidos)
-  if (m.includes('gpt'))                                         return { cls: 'pb-google',    label: 'openai'    };
-  if (m.includes('llama') || m.includes('mistral'))             return { cls: 'pb-zhipu',     label: 'custom'    };
+  if (m.startsWith('claude-'))                                      return PROVIDER_STYLES.anthropic;
+  if (m.startsWith('gemini-3.5-'))                                  return PROVIDER_STYLES['google-native'];
+  if (m.startsWith('gemini-'))                                      return PROVIDER_STYLES.google;
+  if (m.startsWith('gpt-') || m.startsWith('o1') || m.startsWith('o3')) return PROVIDER_STYLES.openai;
+  if (m.startsWith('glm-') || m.startsWith('chatglm'))             return PROVIDER_STYLES.zhipu;
+  if (m.startsWith('kimi-') || m.startsWith('moonshot-'))          return PROVIDER_STYLES.kimi;
+  if (m.includes('llama') || m.includes('mistral'))                return { cls: '', label: 'custom' };
   return PB_DEFAULT;
+}
+
+// ── Model picker dropdown ─────────────────────────────────────────────────────
+
+function buildModelDropdown(btn) {
+  const menu = btn.nextElementSibling;
+  if (!menu || !menu.classList.contains('model-picker-menu')) return;
+  if (menu.children.length > 0) return; // ya construido
+
+  const input = btn.previousElementSibling;
+  const currentVal = input ? input.value.trim() : '';
+
+  MODEL_CATALOG.forEach((group, gi) => {
+    if (gi > 0) {
+      const div = document.createElement('li');
+      div.className = 'mp-divider';
+      menu.appendChild(div);
+    }
+    const header = document.createElement('li');
+    header.innerHTML = `<span class="mp-group-label"><span class="provider-badge ${group.cls}" style="font-size:.6rem;padding:.1rem .4rem">${group.icon}</span> ${group.provider}</span>`;
+    menu.appendChild(header);
+
+    group.models.forEach(model => {
+      const li = document.createElement('li');
+      const isActive = currentVal === model.id;
+      li.className = 'mp-item' + (isActive ? ' active' : '');
+      li.innerHTML = `
+        <span style="font-family:monospace;font-size:.75rem;flex:1">${model.id}</span>
+        ${model.note ? `<span style="font-size:.65rem;color:#555">${model.note}</span>` : ''}
+        ${isActive ? '<i class="bi bi-check2" style="color:#a78bfa;font-size:.8rem"></i>' : ''}
+      `;
+      li.addEventListener('click', () => {
+        if (input) {
+          input.value = model.id;
+          updateProviderBadge(input);
+        }
+        // Cerrar dropdown
+        const dd = bootstrap.Dropdown.getInstance(btn);
+        if (dd) dd.hide();
+        // Marcar activo visualmente
+        menu.querySelectorAll('.mp-item').forEach(el => el.classList.remove('active'));
+        li.classList.add('active');
+      });
+      menu.appendChild(li);
+    });
+  });
 }
 
 function updateProviderBadge(input) {

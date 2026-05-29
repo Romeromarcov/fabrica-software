@@ -36,14 +36,15 @@ CORRECT = {
     "MODEL_A4": "glm-5.1",            # A4 Backend     → ZhiPu
     "MODEL_A5": "kimi-k2.6",          # A5 Frontend    → Kimi
     "MODEL_A6": "claude-sonnet-4-6",  # A6 Revisor     → Anthropic
-    "MODEL_A7": "claude-sonnet-4-6",  # A7 QA          → Anthropic
-    "MODEL_A8": "claude-sonnet-4-6",  # A8 SecOps      → Anthropic
+    "MODEL_A7": "gpt-5.5",            # A7 QA          → OpenAI
+    "MODEL_A8": "gpt-5.5",            # A8 SecOps      → OpenAI
 }
 
 # Prefijos de proveedor que NO deben aparecer en cada agente
+# A7/A8 admiten tanto claude-* (Anthropic) como gpt-* (OpenAI) — sin restricción de prefijo
 FORBIDDEN_PREFIX = {
-    "MODEL_A2": ("glm-", "kimi-"),
-    "MODEL_A3": ("glm-", "kimi-"),
+    "MODEL_A2": ("glm-", "kimi-", "gpt-"),
+    "MODEL_A3": ("glm-", "kimi-", "gpt-"),
     "MODEL_A4": ("claude-",),
     "MODEL_A5": ("claude-",),
     "MODEL_A6": ("glm-", "kimi-"),
