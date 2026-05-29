@@ -31,6 +31,26 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from config import RUNS_DIR, PRICES, MODEL_PM, MODEL_STANDARD, MODEL_FAST, DB_PATH, list_repos, FABRICA_DIR, RBAC_ENABLED
 from ui.config_store import ConfigStore
 
+# ── Proveedores IA personalizados ─────────────────────────────────────────────
+_CUSTOM_PROVIDERS_PATH = FABRICA_DIR / "data" / "custom_providers.json"
+
+
+def _load_custom_providers() -> list[dict]:
+    try:
+        if _CUSTOM_PROVIDERS_PATH.exists():
+            return json.loads(_CUSTOM_PROVIDERS_PATH.read_text(encoding="utf-8")) or []
+    except Exception:
+        pass
+    return []
+
+
+def _save_custom_providers(providers: list[dict]) -> None:
+    _CUSTOM_PROVIDERS_PATH.parent.mkdir(exist_ok=True)
+    _CUSTOM_PROVIDERS_PATH.write_text(
+        json.dumps(providers, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
@@ -728,14 +748,15 @@ async def dashboard(request: Request):
 @app.get("/config", response_class=HTMLResponse)
 async def config_page(request: Request, saved: str = ""):
     cfg = store.load()
-    extra_keys = store.load_extra_keys()   # claves definidas por el usuario
+    extra_keys = store.load_extra_keys()
     return templates.TemplateResponse(request, "config.html", {
-        "cfg":        cfg,
-        "prices":     PRICES,
-        "active_page":"config",
-        "saved":      saved == "1",
-        "extra_keys": extra_keys,           # dict {KEY: value}
-        "repos":      list_repos(),         # para el selector de repo del auditor
+        "cfg":              cfg,
+        "prices":           PRICES,
+        "active_page":      "config",
+        "saved":            saved == "1",
+        "extra_keys":       extra_keys,
+        "repos":            list_repos(),
+        "custom_providers": _load_custom_providers(),
     })
 
 
@@ -810,7 +831,8 @@ async def save_config(
     ui_password:       str = Form(""),
     github_token:      str = Form(""),
     github_actor:      str = Form(""),
-    extra_vars:        str = Form(""),    # KEY=VALUE por línea
+    extra_vars:           str = Form(""),    # KEY=VALUE por línea
+    custom_providers_json: str = Form("[]"), # JSON array de proveedores IA custom
 ):
     new_cfg = {
         "ANTHROPIC_API_KEY":  anthropic_api_key,
@@ -868,6 +890,15 @@ async def save_config(
             new_cfg[k] = v.strip()
 
     store.save(new_cfg)
+
+    # Guardar proveedores IA personalizados
+    try:
+        providers = json.loads(custom_providers_json or "[]")
+        if isinstance(providers, list):
+            _save_custom_providers(providers)
+    except Exception as e:
+        logger.warning("Error al guardar custom_providers.json: %s", e)
+
     return RedirectResponse("/config?saved=1", status_code=303)
 
 

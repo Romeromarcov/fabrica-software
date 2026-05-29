@@ -141,6 +141,27 @@ PROVIDER_URLS = {
     "kimi":   "https://api.moonshot.ai/v1",
 }
 
+# ── Proveedores IA personalizados (OpenAI-compatible) ─────────────────────────
+# Cargados desde data/custom_providers.json en tiempo de arranque.
+# Clave en PROVIDER_URLS: "cp_<API_KEY_VAR>"  (ej: "cp_OPENROUTER_API_KEY")
+_CUSTOM_PROVIDERS_PATH = FABRICA_DIR / "data" / "custom_providers.json"
+
+def _load_custom_providers() -> list[dict]:
+    try:
+        import json as _j
+        if _CUSTOM_PROVIDERS_PATH.exists():
+            return _j.loads(_CUSTOM_PROVIDERS_PATH.read_text(encoding="utf-8")) or []
+    except Exception:
+        pass
+    return []
+
+CUSTOM_PROVIDERS: list[dict] = _load_custom_providers()
+
+for _cp in CUSTOM_PROVIDERS:
+    _cp_key = "cp_" + (_cp.get("api_key_var") or "CUSTOM_API_KEY")
+    if _cp.get("base_url"):
+        PROVIDER_URLS[_cp_key] = _cp["base_url"]
+
 # ── Precios ($/1M tokens) ─────────────────────────────────────────────────────
 PRICES = {
     # Anthropic

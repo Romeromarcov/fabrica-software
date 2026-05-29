@@ -50,6 +50,28 @@
     cursor: pointer; transition: all .15s; flex-shrink: 0;
   }
   .btn-remove-row:hover { border-color: #dc262655; color: #f87171; background: #dc262615; }
+  .provider-select {
+    background: #1a1a24; border: 1px solid #2a2a3a; color: #888;
+    border-radius: 20px; font-size: .68rem; font-weight: 600;
+    padding: .12rem .5rem; cursor: pointer; max-width: 115px; width: 100%;
+    appearance: none; -webkit-appearance: none;
+  }
+  .provider-select:focus { outline: none; border-color: #7c3aed55; }
+  .custom-prov-card {
+    background: #1a1a24; border: 1px solid #2a2a3a;
+    border-radius: 8px; padding: .65rem .75rem;
+    margin-bottom: .5rem;
+  }
+  .custom-prov-card .cp-row1 {
+    display: grid; grid-template-columns: 1fr 2fr auto;
+    gap: .4rem; align-items: center; margin-bottom: .35rem;
+  }
+  .custom-prov-card .cp-row2 {
+    display: grid; grid-template-columns: 1.2fr 1fr 1fr;
+    gap: .4rem; align-items: center;
+  }
+  .custom-prov-card input { background: #16161d; border-color: #2a2a3a; color: #ddd; }
+  .custom-prov-card input:focus { background: #1e1e28; border-color: var(--brand); color: #fff; }
 </style>
 {% endblock %}
 
@@ -199,8 +221,61 @@
         </div>
       </div>
 
-      <!-- hidden textarea que se rellena por JS antes del submit -->
+      <!-- ── Proveedores IA personalizados (OpenAI-compatible) ───────────────── -->
+      <div class="mt-4 pt-3" style="border-top:1px solid #2a2a3a">
+        <div class="d-flex align-items-center justify-content-between mb-2">
+          <span style="font-size:.78rem;color:#888;text-transform:uppercase;letter-spacing:.05em">
+            <i class="bi bi-robot me-1"></i>Proveedores IA personalizados (OpenAI-compatible)
+          </span>
+          <button type="button" class="btn btn-sm px-2 py-1" id="btnAddCustomProv"
+                  style="background:#7c3aed22;color:#a78bfa;border:1px solid #7c3aed44;font-size:.75rem"
+                  onclick="addCustomProvRow()">
+            <i class="bi bi-plus-lg me-1"></i>Agregar proveedor IA
+          </button>
+        </div>
+
+        <div id="customProvidersContainer">
+          {% for cp in custom_providers %}
+          <div class="custom-prov-card">
+            <div class="cp-row1">
+              <input type="text" class="form-control form-control-sm cp-name"
+                     value="{{ cp.name }}" placeholder="OpenRouter"
+                     autocomplete="off" spellcheck="false">
+              <input type="text" class="form-control form-control-sm cp-url"
+                     value="{{ cp.base_url }}" placeholder="https://openrouter.ai/api/v1"
+                     autocomplete="off" spellcheck="false">
+              <button type="button" class="btn-remove-row"
+                      onclick="this.closest('.custom-prov-card').remove()" title="Eliminar">×</button>
+            </div>
+            <div class="cp-row2">
+              <input type="text" class="form-control form-control-sm cp-key-var"
+                     value="{{ cp.api_key_var }}" placeholder="OPENROUTER_API_KEY"
+                     autocomplete="off" spellcheck="false"
+                     oninput="this.value=this.value.toUpperCase().replace(/\s/g,'_')">
+              <input type="password" class="form-control form-control-sm cp-key-val"
+                     value="" placeholder="Clave API (opcional)"
+                     autocomplete="new-password">
+              <input type="text" class="form-control form-control-sm cp-models"
+                     value="{{ cp.models | join(', ') if cp.models else '' }}"
+                     placeholder="model-id-1, model-id-2"
+                     autocomplete="off" spellcheck="false">
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+
+        <div style="font-size:.7rem;color:#444;margin-top:.5rem">
+          <i class="bi bi-info-circle me-1"></i>
+          Cualquier API compatible con OpenAI: <code style="color:#666">OpenRouter</code>,
+          <code style="color:#666">Groq</code>, <code style="color:#666">Together.ai</code>,
+          <code style="color:#666">Mistral</code>, etc.
+          Los modelos listados aparecerán en el selector de cada agente.
+        </div>
+      </div>
+
+      <!-- hidden fields que se rellenan por JS antes del submit -->
       <textarea name="extra_vars" id="extraVarsHidden" style="display:none"></textarea>
+      <textarea name="custom_providers_json" id="customProvidersJson" style="display:none">{{ custom_providers | tojson }}</textarea>
 
     </div>
   </div>
@@ -260,7 +335,18 @@
               {% if num == "A0r" %}
               <span class="provider-badge pb-google">google</span>
               {% else %}
-              <span class="provider-badge" id="badge-{{ num }}"></span>
+              <select class="provider-select" id="psel-{{ num }}"
+                      data-field="{{ field }}" onchange="onProviderSelectChange(this)">
+                <option value="">— auto —</option>
+                <option value="anthropic">Anthropic</option>
+                <option value="google">Google</option>
+                <option value="openai">OpenAI</option>
+                <option value="zhipu">Z.ai</option>
+                <option value="kimi">Kimi</option>
+                {% for cp in custom_providers %}
+                <option value="cp-{{ loop.index0 }}">{{ cp.name }}</option>
+                {% endfor %}
+              </select>
               {% endif %}
             </td>
             <td>
@@ -272,11 +358,11 @@
               <div class="input-group input-group-sm">
                 <input type="text" name="{{ field }}" class="form-control key-input agent-model-input"
                        value="{{ cfg.get(field, default) }}" style="font-size:.78rem"
-                       data-badge="badge-{{ num }}"
+                       data-field="{{ field }}"
                        oninput="updateProviderBadge(this)">
                 <button type="button" class="model-pick-btn dropdown-toggle"
                         data-bs-toggle="dropdown" aria-expanded="false"
-                        data-field="{{ field }}" data-badge="badge-{{ num }}"
+                        data-field="{{ field }}"
                         onclick="buildModelDropdown(this)">
                   <i class="bi bi-collection" style="font-size:.6rem"></i>
                 </button>
@@ -304,8 +390,8 @@
             ("A4",  "MODEL_A4",  "Backend Developer",      "glm-5.1",           "skip_back?", ""),
             ("A5",  "MODEL_A5",  "Frontend Developer",     "kimi-k2.6",         "skip_front?",""),
             ("A6",  "MODEL_A6",  "Revisor / Refactor",     "claude-sonnet-4-6", "Siempre",    ""),
-            ("A7",  "MODEL_A7",  "QA Test",                "claude-sonnet-4-6", "Siempre",    ""),
-            ("A8",  "MODEL_A8",  "SecOps",                 "claude-sonnet-4-6", "Siempre",    ""),
+            ("A7",  "MODEL_A7",  "QA Test",                "gpt-5.5",           "Siempre",    ""),
+            ("A8",  "MODEL_A8",  "SecOps",                 "gpt-5.5",           "Siempre",    ""),
             ("A11", "MODEL_A11", "DevOps / Infrastructure","claude-sonnet-4-6", "needs_devops",""),
           ] %}
           {% for num, field, label, default, flujo, _ in feature_agents %}
@@ -321,16 +407,29 @@
                 {{ flujo }}
               </span>
             </td>
-            <td><span class="provider-badge" id="badge-{{ num }}"></span></td>
+            <td>
+              <select class="provider-select" id="psel-{{ num }}"
+                      data-field="{{ field }}" onchange="onProviderSelectChange(this)">
+                <option value="">— auto —</option>
+                <option value="anthropic">Anthropic</option>
+                <option value="google">Google</option>
+                <option value="openai">OpenAI</option>
+                <option value="zhipu">Z.ai</option>
+                <option value="kimi">Kimi</option>
+                {% for cp in custom_providers %}
+                <option value="cp-{{ loop.index0 }}">{{ cp.name }}</option>
+                {% endfor %}
+              </select>
+            </td>
             <td>
               <div class="input-group input-group-sm">
                 <input type="text" name="{{ field }}" class="form-control key-input agent-model-input"
                        value="{{ cfg.get(field, default) }}" style="font-size:.78rem"
-                       data-badge="badge-{{ num }}"
+                       data-field="{{ field }}"
                        oninput="updateProviderBadge(this)">
                 <button type="button" class="model-pick-btn dropdown-toggle"
                         data-bs-toggle="dropdown" aria-expanded="false"
-                        data-field="{{ field }}" data-badge="badge-{{ num }}"
+                        data-field="{{ field }}"
                         onclick="buildModelDropdown(this)">
                   <i class="bi bi-collection" style="font-size:.6rem"></i>
                 </button>
@@ -763,7 +862,7 @@
     </div>
   </div>
 
-  <button type="submit" class="btn btn-brand px-4" onclick="serializeExtraProviders()">
+  <button type="submit" class="btn btn-brand px-4" onclick="serializeExtraProviders(); serializeCustomProviders()">
     <i class="bi bi-floppy me-1"></i> Guardar configuración
   </button>
   <a href="/" class="btn btn-outline-secondary ms-2 px-4">Cancelar</a>
@@ -777,7 +876,7 @@
 
 const MODEL_CATALOG = [
   {
-    provider: 'Anthropic', cls: 'pb-anthropic', icon: 'A',
+    provider: 'Anthropic', cls: 'pb-anthropic', icon: 'A', key: 'anthropic',
     models: [
       { id: 'claude-opus-4-7',           label: 'Claude Opus 4.7',          note: 'más capaz'         },
       { id: 'claude-sonnet-4-6',         label: 'Claude Sonnet 4.6',        note: 'equilibrado'       },
@@ -785,7 +884,7 @@ const MODEL_CATALOG = [
     ],
   },
   {
-    provider: 'Google', cls: 'pb-google', icon: 'G',
+    provider: 'Google', cls: 'pb-google', icon: 'G', key: 'google',
     models: [
       { id: 'gemini-3.5-flash',         label: 'Gemini 3.5 Flash',         note: 'thinking nativo'   },
       { id: 'gemini-2.5-pro',           label: 'Gemini 2.5 Pro',           note: ''                  },
@@ -793,7 +892,7 @@ const MODEL_CATALOG = [
     ],
   },
   {
-    provider: 'OpenAI', cls: 'pb-openai', icon: 'O',
+    provider: 'OpenAI', cls: 'pb-openai', icon: 'O', key: 'openai',
     models: [
       { id: 'gpt-5.5',                  label: 'GPT-5.5',                  note: '1M ctx · coding'   },
       { id: 'gpt-5.5-2026-04-23',       label: 'GPT-5.5 snapshot',         note: '2026-04-23'        },
@@ -802,14 +901,14 @@ const MODEL_CATALOG = [
     ],
   },
   {
-    provider: 'Z.ai (GLM)', cls: 'pb-zhipu', icon: 'Z',
+    provider: 'Z.ai (GLM)', cls: 'pb-zhipu', icon: 'Z', key: 'zhipu',
     models: [
       { id: 'glm-5.1',                  label: 'GLM-5.1',                  note: 'backend'           },
       { id: 'glm-4-plus',               label: 'GLM-4-Plus',               note: ''                  },
     ],
   },
   {
-    provider: 'Kimi', cls: 'pb-kimi', icon: 'K',
+    provider: 'Kimi', cls: 'pb-kimi', icon: 'K', key: 'kimi',
     models: [
       { id: 'kimi-k2.6',                label: 'Kimi K2.6',                note: 'frontend'          },
       { id: 'moonshot-v1-8k',           label: 'Moonshot v1 8k',           note: ''                  },
@@ -818,29 +917,92 @@ const MODEL_CATALOG = [
   },
 ];
 
-// ── Detección dinámica de proveedor por nombre de modelo ─────────────────────
+// ── Proveedores personalizados inyectados desde servidor ─────────────────────
+const CUSTOM_PROVIDERS_CATALOG = {{ custom_providers | tojson }};
 
-const PROVIDER_STYLES = {
-  anthropic:       { cls: 'pb-anthropic', label: 'anthropic' },
-  google:          { cls: 'pb-google',    label: 'google'    },
-  'google-native': { cls: 'pb-google',    label: 'google ✦'  },
-  openai:          { cls: 'pb-openai',    label: 'openai'    },
-  zhipu:           { cls: 'pb-zhipu',     label: 'z.ai'      },
-  kimi:            { cls: 'pb-kimi',      label: 'kimi'      },
+// ── Estilos de proveedor ─────────────────────────────────────────────────────
+const PROVIDER_SELECT_COLORS = {
+  anthropic: { color: '#a78bfa', border: '#7c3aed55' },
+  google:    { color: '#38bdf8', border: '#0ea5e955' },
+  openai:    { color: '#34d399', border: '#10b98155' },
+  zhipu:     { color: '#4ade80', border: '#16a34a55' },
+  kimi:      { color: '#fb923c', border: '#d9770655' },
 };
-const PB_DEFAULT = { cls: '', label: '—' };
 
-function detectModelProvider(modelName) {
+function _applySelectColor(sel) {
+  const val = sel.value;
+  if (!val) { sel.style.color = '#888'; sel.style.borderColor = '#2a2a3a'; return; }
+  // Custom provider
+  if (val.startsWith('cp-')) {
+    sel.style.color = '#c084fc'; sel.style.borderColor = '#7c3aed55'; return;
+  }
+  const c = PROVIDER_SELECT_COLORS[val];
+  if (c) { sel.style.color = c.color; sel.style.borderColor = c.border; }
+  else   { sel.style.color = '#888';  sel.style.borderColor = '#2a2a3a'; }
+}
+
+// ── Detección de proveedor por modelo ────────────────────────────────────────
+
+function detectModelProviderKey(modelName) {
   const m = (modelName || '').toLowerCase().trim();
-  if (!m) return PB_DEFAULT;
-  if (m.startsWith('claude-'))                                      return PROVIDER_STYLES.anthropic;
-  if (m.startsWith('gemini-3.5-'))                                  return PROVIDER_STYLES['google-native'];
-  if (m.startsWith('gemini-'))                                      return PROVIDER_STYLES.google;
-  if (m.startsWith('gpt-') || m.startsWith('o1') || m.startsWith('o3')) return PROVIDER_STYLES.openai;
-  if (m.startsWith('glm-') || m.startsWith('chatglm'))             return PROVIDER_STYLES.zhipu;
-  if (m.startsWith('kimi-') || m.startsWith('moonshot-'))          return PROVIDER_STYLES.kimi;
-  if (m.includes('llama') || m.includes('mistral'))                return { cls: '', label: 'custom' };
-  return PB_DEFAULT;
+  if (!m) return '';
+  if (m.startsWith('claude-'))                                       return 'anthropic';
+  if (m.startsWith('gemini-'))                                       return 'google';
+  if (m.startsWith('gpt-') || m.startsWith('o1') || m.startsWith('o3')) return 'openai';
+  if (m.startsWith('glm-') || m.startsWith('chatglm'))              return 'zhipu';
+  if (m.startsWith('kimi-') || m.startsWith('moonshot-'))           return 'kimi';
+  for (let i = 0; i < CUSTOM_PROVIDERS_CATALOG.length; i++) {
+    const cp = CUSTOM_PROVIDERS_CATALOG[i];
+    if ((cp.models || []).includes(modelName)) return `cp-${i}`;
+  }
+  return '';
+}
+
+// ── Sync provider select → matches typed model ───────────────────────────────
+
+function updateProviderBadge(input) {
+  const field = input.getAttribute('data-field') || input.name;
+  if (!field) return;
+  const sel = document.querySelector(`.provider-select[data-field="${field}"]`);
+  if (!sel) return;
+  const key = detectModelProviderKey(input.value);
+  if (sel.querySelector(`option[value="${key}"]`)) sel.value = key;
+  else sel.value = '';
+  _applySelectColor(sel);
+  // Invalidate open dropdown so it rebuilds with correct active state
+  const btn = input.nextElementSibling;
+  if (btn && btn.classList.contains('model-pick-btn')) {
+    const menu = btn.nextElementSibling;
+    if (menu) menu.innerHTML = '';
+  }
+}
+
+// ── Sync provider select → model input ───────────────────────────────────────
+
+function onProviderSelectChange(sel) {
+  _applySelectColor(sel);
+  const field = sel.getAttribute('data-field');
+  const input = document.querySelector(`.agent-model-input[data-field="${field}"]`);
+  if (!input) return;
+  const val = sel.value;
+  if (!val) return;
+
+  let firstModel = '';
+  if (val.startsWith('cp-')) {
+    const idx = parseInt(val.slice(3));
+    const cp = CUSTOM_PROVIDERS_CATALOG[idx];
+    if (cp && cp.models && cp.models.length) firstModel = cp.models[0];
+  } else {
+    const group = MODEL_CATALOG.find(g => g.key === val);
+    if (group && group.models.length) firstModel = group.models[0].id;
+  }
+  if (firstModel) input.value = firstModel;
+  // Invalidate dropdown
+  const btn = input.nextElementSibling;
+  if (btn && btn.classList.contains('model-pick-btn')) {
+    const menu = btn.nextElementSibling;
+    if (menu) menu.innerHTML = '';
+  }
 }
 
 // ── Model picker dropdown ─────────────────────────────────────────────────────
@@ -848,19 +1010,35 @@ function detectModelProvider(modelName) {
 function buildModelDropdown(btn) {
   const menu = btn.nextElementSibling;
   if (!menu || !menu.classList.contains('model-picker-menu')) return;
-  if (menu.children.length > 0) return; // ya construido
+  menu.innerHTML = ''; // always rebuild to reflect current custom providers
 
   const input = btn.previousElementSibling;
   const currentVal = input ? input.value.trim() : '';
 
-  MODEL_CATALOG.forEach((group, gi) => {
-    if (gi > 0) {
+  // Filter by selected provider (if not "auto")
+  const field = btn.getAttribute('data-field');
+  const sel = field ? document.querySelector(`.provider-select[data-field="${field}"]`) : null;
+  const filterKey = sel ? sel.value : '';
+
+  // Build catalog = static + custom
+  const fullCatalog = [...MODEL_CATALOG];
+  CUSTOM_PROVIDERS_CATALOG.forEach((cp, i) => {
+    const mods = (cp.models || []).map(id => ({ id, label: id, note: '' }));
+    if (mods.length) fullCatalog.push({ provider: cp.name, cls: '', icon: '✦', key: `cp-${i}`, models: mods });
+  });
+
+  let shown = 0;
+  fullCatalog.forEach((group, gi) => {
+    if (filterKey && group.key !== filterKey) return;
+    if (shown > 0) {
       const div = document.createElement('li');
       div.className = 'mp-divider';
       menu.appendChild(div);
     }
+    shown++;
     const header = document.createElement('li');
-    header.innerHTML = `<span class="mp-group-label"><span class="provider-badge ${group.cls}" style="font-size:.6rem;padding:.1rem .4rem">${group.icon}</span> ${group.provider}</span>`;
+    const badgeCls = group.cls || '';
+    header.innerHTML = `<span class="mp-group-label">${badgeCls ? `<span class="provider-badge ${badgeCls}" style="font-size:.6rem;padding:.1rem .4rem">${group.icon}</span>` : `<span style="color:#888">${group.icon}</span>`} ${group.provider}</span>`;
     menu.appendChild(header);
 
     group.models.forEach(model => {
@@ -877,10 +1055,8 @@ function buildModelDropdown(btn) {
           input.value = model.id;
           updateProviderBadge(input);
         }
-        // Cerrar dropdown
         const dd = bootstrap.Dropdown.getInstance(btn);
         if (dd) dd.hide();
-        // Marcar activo visualmente
         menu.querySelectorAll('.mp-item').forEach(el => el.classList.remove('active'));
         li.classList.add('active');
       });
@@ -889,21 +1065,17 @@ function buildModelDropdown(btn) {
   });
 }
 
-function updateProviderBadge(input) {
-  const badgeId = input.getAttribute('data-badge');
-  if (!badgeId) return;
-  const badge = document.getElementById(badgeId);
-  if (!badge) return;
-  const { cls, label } = detectModelProvider(input.value);
-  // Quitar todas las clases pb-*
-  badge.className = 'provider-badge' + (cls ? ' ' + cls : '');
-  badge.textContent = label;
-}
-
 document.addEventListener('DOMContentLoaded', () => {
-  // Inicializar todos los badges con los valores actuales
-  document.querySelectorAll('.agent-model-input').forEach(updateProviderBadge);
-  // Cargar estado del bot
+  // Init provider selects & colors from current model values
+  document.querySelectorAll('.agent-model-input').forEach(input => {
+    const field = input.getAttribute('data-field') || input.name;
+    const sel = field ? document.querySelector(`.provider-select[data-field="${field}"]`) : null;
+    if (sel) {
+      const key = detectModelProviderKey(input.value);
+      if (sel.querySelector(`option[value="${key}"]`)) sel.value = key;
+      _applySelectColor(sel);
+    }
+  });
   fetchBotStatus();
 });
 
@@ -955,7 +1127,7 @@ async function testBotConnection() {
   }
 }
 
-// ── Proveedores adicionales ────────────────────────────────────────────────────
+// ── Proveedores adicionales (env vars simples) ────────────────────────────────
 
 function addProviderRow(name, value) {
   const row = document.createElement('div');
@@ -983,6 +1155,66 @@ function serializeExtraProviders() {
     if (k) lines.push(`${k}=${v}`);
   });
   document.getElementById('extraVarsHidden').value = lines.join('\n');
+}
+
+// ── Proveedores IA personalizados ────────────────────────────────────────────
+
+function addCustomProvRow(cp) {
+  cp = cp || {};
+  const card = document.createElement('div');
+  card.className = 'custom-prov-card';
+  card.innerHTML = `
+    <div class="cp-row1">
+      <input type="text" class="form-control form-control-sm cp-name"
+             value="${_esc(cp.name||'')}" placeholder="OpenRouter"
+             autocomplete="off" spellcheck="false">
+      <input type="text" class="form-control form-control-sm cp-url"
+             value="${_esc(cp.base_url||'')}" placeholder="https://openrouter.ai/api/v1"
+             autocomplete="off" spellcheck="false">
+      <button type="button" class="btn-remove-row"
+              onclick="this.closest('.custom-prov-card').remove()" title="Eliminar">×</button>
+    </div>
+    <div class="cp-row2">
+      <input type="text" class="form-control form-control-sm cp-key-var"
+             value="${_esc(cp.api_key_var||'')}" placeholder="OPENROUTER_API_KEY"
+             autocomplete="off" spellcheck="false"
+             oninput="this.value=this.value.toUpperCase().replace(/\\s/g,'_')">
+      <input type="password" class="form-control form-control-sm cp-key-val"
+             value="" placeholder="Clave API (opcional)" autocomplete="new-password">
+      <input type="text" class="form-control form-control-sm cp-models"
+             value="${_esc((cp.models||[]).join(', '))}"
+             placeholder="model-id-1, model-id-2"
+             autocomplete="off" spellcheck="false">
+    </div>
+  `;
+  document.getElementById('customProvidersContainer').appendChild(card);
+  card.querySelector('.cp-name').focus();
+}
+
+function _esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+}
+
+function serializeCustomProviders() {
+  const cards = document.querySelectorAll('.custom-prov-card');
+  const providers = [];
+  const extraLines = [];
+  cards.forEach(card => {
+    const name    = card.querySelector('.cp-name').value.trim();
+    const url     = card.querySelector('.cp-url').value.trim();
+    const keyVar  = card.querySelector('.cp-key-var').value.trim().toUpperCase().replace(/\s/g,'_');
+    const keyVal  = card.querySelector('.cp-key-val').value.trim();
+    const modRaw  = card.querySelector('.cp-models').value.trim();
+    const models  = modRaw ? modRaw.split(',').map(m=>m.trim()).filter(Boolean) : [];
+    if (!name && !url) return;
+    providers.push({ name, base_url: url, api_key_var: keyVar, models });
+    if (keyVar && keyVal) extraLines.push(`${keyVar}=${keyVal}`);
+  });
+  document.getElementById('customProvidersJson').value = JSON.stringify(providers);
+  // Merge API keys into the extra_vars hidden field
+  const existing = document.getElementById('extraVarsHidden').value;
+  const merged = [existing, ...extraLines].filter(Boolean).join('\n');
+  document.getElementById('extraVarsHidden').value = merged;
 }
 
 // ── Auditor de codebase ───────────────────────────────────────────────────────

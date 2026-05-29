@@ -18,7 +18,7 @@ import os
 from config import (
     MODEL_STANDARD,
     ANTHROPIC_API_KEY, GOOGLE_API_KEY, ZHIPU_API_KEY, KIMI_API_KEY, OPENAI_API_KEY,
-    PROVIDER_URLS,
+    PROVIDER_URLS, CUSTOM_PROVIDERS,
 )
 from state import CostEntry
 from tools.file_tools import read_static, read_system_prompt
@@ -109,6 +109,10 @@ def _provider(model: str) -> str:
     if m.startswith("glm-") or m.startswith("chatglm"):    return "zhipu"
     if m.startswith("kimi-") or m.startswith("moonshot-"): return "kimi"
     if m.startswith("gpt-") or m.startswith("o1") or m.startswith("o3"): return "openai"
+    # Custom providers: check if model is listed in any custom provider
+    for cp in CUSTOM_PROVIDERS:
+        if model in (cp.get("models") or []):
+            return "cp_" + (cp.get("api_key_var") or "CUSTOM_API_KEY")
     return "anthropic"
 
 
@@ -135,11 +139,15 @@ def _openai_client(provider: str):
     """A-07: sin lru_cache — lee la key fresca en cada llamada."""
     import os as _os
     from openai import OpenAI
-    key = _os.getenv(_PROVIDER_KEY_NAMES.get(provider, ""), "")
+    if provider.startswith("cp_"):
+        # Custom provider: api_key_var = provider[3:]
+        key = _os.getenv(provider[3:], "")
+    else:
+        key = _os.getenv(_PROVIDER_KEY_NAMES.get(provider, ""), "")
     return OpenAI(
-        base_url=PROVIDER_URLS[provider],
-        api_key=key,
-        timeout=300.0,   # A-10: 5 min máximo
+        base_url=PROVIDER_URLS.get(provider, "https://api.openai.com/v1"),
+        api_key=key or "no-key",
+        timeout=300.0,
     )
 
 
