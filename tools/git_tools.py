@@ -71,16 +71,24 @@ def create_branch(branch_name: str, repo_path: str) -> bool:
     return code == 0
 
 
-def create_feature_branch(feature_name: str, repo_path: str) -> str:
+def create_feature_branch(feature_name: str, repo_path: str, feature_id: str = "") -> str:
     """
-    G7: Crea una rama 'feature/YYYYMMDD-slug' desde la rama actual.
-    Devuelve el nombre de la rama creada, o cadena vacía si falla.
-    Si la rama ya existe (reanudación), hace checkout sin error.
+    G7: Crea/usa la rama de feature desde la rama actual.
+    Devuelve el nombre de la rama, o cadena vacía si falla.
+    Si la rama ya existe (reanudación / worktree), hace checkout sin error.
+
+    CTF-FABRICA-001: cuando hay `feature_id`, usa la nomenclatura COMPARTIDA con el
+    Merge Coordinator (`feature/<id8>-slug`) para que el merge paralelo encuentre la rama.
+    Sin `feature_id`, conserva el esquema histórico `feature/YYYYMMDD-slug`.
     """
-    from datetime import datetime
-    date_str = datetime.utcnow().strftime("%Y%m%d")
-    slug = re.sub(r"[^a-z0-9]+", "-", feature_name.lower()).strip("-")[:40]
-    branch_name = f"feature/{date_str}-{slug}"
+    if feature_id:
+        from tools.branch_naming import feature_branch_name
+        branch_name = feature_branch_name(feature_id, feature_name)
+    else:
+        from datetime import datetime
+        date_str = datetime.utcnow().strftime("%Y%m%d")
+        slug = re.sub(r"[^a-z0-9]+", "-", feature_name.lower()).strip("-")[:40]
+        branch_name = f"feature/{date_str}-{slug}"
 
     # Intentar crear; si ya existe, hacer checkout
     _, err, code = _run(["git", "checkout", "-b", branch_name], repo_path)

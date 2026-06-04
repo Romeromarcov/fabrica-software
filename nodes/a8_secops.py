@@ -17,7 +17,7 @@ import re
 import logging
 from state import FabricaState
 from nodes.base import call_agent
-from tools.file_tools import save_agent_output
+from tools.file_tools import save_agent_output, save_security_report, save_run_metadata
 from tools.learning_memory import extract_patterns, append_to_lessons
 from config import MODEL_A8, MAX_SECOPS_ITER
 
@@ -153,6 +153,17 @@ La última línea DEBE ser exactamente una de:
         bool(new_backend), bool(new_frontend),
     )
 
+    # ── F1.4: emitir artefacto estable de seguridad + veredicto en metadata ───
+    verdict = "CLEARANCE" if cleared else ("FIXED" if fixed else "UNFIXABLE")
+    report_path = save_security_report(state["feature_id"], verdict, output)
+    save_run_metadata(state["feature_id"], {
+        "security_verdict": verdict,
+        "security_report":  report_path,
+        "security_iter":    iteration,
+    })
+
+    # Nota: el veredicto se persiste en metadata (no en el state) para no ampliar
+    # el esquema TypedDict; a1_pr_final lo lee con read_run_metadata (F1.5).
     result: dict = {
         "security_clearance_2": cleared,
         "security_block_2":     block_msg,

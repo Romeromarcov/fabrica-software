@@ -21,7 +21,7 @@ from pathlib import Path
 
 from state import FabricaState
 from nodes.base import call_agent
-from tools.file_tools import save_agent_output, save_run_metadata
+from tools.file_tools import save_agent_output, save_run_metadata, read_run_metadata
 from tools.cost_tracker import format_cost_report, format_cost_report_extended
 from tools.git_tools import (
     current_branch,
@@ -131,6 +131,63 @@ def _build_extended_postmortem(state: FabricaState, total_cost: float) -> str:
         )
 
     return "\n".join(lines)
+
+
+def _build_verifiable_guarantees(state: FabricaState) -> tuple[str, bool]:
+    """F1.5: sección de garantías construida desde RESULTADOS DE GATES (no texto del LLM).
+
+    Devuelve (markdown, all_green). `all_green` es la verdad-máquina de si el cierre
+    cumple el gate (sandbox + seguridad), independiente de lo que afirme el PM.
+    """
+    sandbox_passed: bool = bool(state.get("sandbox_passed", False))
+    gate_failures: list[dict] = state.get("sandbox_gate_failures", []) or []
+    failed_gates = sorted({gf["gate"] for gf in gate_failures})
+    hard_failed  = sorted({gf["gate"] for gf in gate_failures if gf.get("hard")})
+
+    meta = read_run_metadata(state["feature_id"])
+    sec_verdict = meta.get("security_verdict") or (
+        "CLEARANCE" if state.get("security_clearance_2") else "PENDIENTE"
+    )
+    sec_report = meta.get("security_report", "")
+
+    def chk(ok: bool) -> str:
+        return "✅" if ok else "❌"
+
+    sec_ok = sec_verdict in ("CLEARANCE", "FIXED")
+    tenant_ok = "tenant-isolation" not in failed_gates
+    no_hard = len(hard_failed) == 0
+
+    # Fase 2 — veredicto del revisor adversarial (A8.5)
+    adv_verdict = meta.get("adversarial_verdict", "")
+    adv_ok = bool(state.get("adversarial_clear", True)) and "BLOCK" not in adv_verdict
+
+    all_green = sandbox_passed and sec_ok and no_hard and adv_ok
+
+    lines = [
+        "\n## ✔ Verificación de garantías (derivada de gates, no auto-declarada)\n",
+        "> F1.5 — esta tabla la rellena la máquina a partir de los resultados reales de "
+        "A8 (SecOps) y A9 (Sandbox). No depende del criterio del agente.\n",
+        "| Garantía | Estado | Evidencia |",
+        "|---|---|---|",
+        f"| Sandbox (tests/lint/build) | {chk(sandbox_passed)} | "
+        f"{'sin gates fallidos' if not failed_gates else 'fallaron: ' + ', '.join(failed_gates)} |",
+        f"| Gates duros | {chk(no_hard)} | "
+        f"{'ninguno fallido' if no_hard else 'DUROS fallidos: ' + ', '.join(hard_failed)} |",
+        f"| Aislamiento multi-tenant (R-CODE-1) | {chk(tenant_ok)} | "
+        f"{'sin Views sin filtro' if tenant_ok else 'gate tenant-isolation FALLÓ'} |",
+        f"| Revisión de seguridad (A8) | {chk(sec_ok)} | "
+        f"veredicto `{sec_verdict}`"
+        f"{' · ' + sec_report if sec_report else ''} |",
+        f"| Revisión adversarial repo (A8.5) | {chk(adv_ok)} | "
+        f"{'sin hallazgos' if adv_ok else 'veredicto ' + (adv_verdict or 'ADVERSARIAL BLOCK')} |",
+        f"\n**Veredicto de gate de cierre (máquina): {'✅ APTO' if all_green else '❌ NO APTO — requiere humano'}**",
+    ]
+    if not all_green:
+        lines.append(
+            "\n> ⚠️ El gate de cierre NO está verde. Este PR **no es auto-mergeable** y "
+            "**requiere revisión humana** independientemente del RISK_LEVEL."
+        )
+    return "\n".join(lines), all_green
 
 
 def _read_written_files(repo_path: str, files_written: list[str]) -> str:
@@ -337,6 +394,10 @@ Al final escribe: `✅ CICLO COMPLETADO`
         else f"{title_line}\n\n🤖 Fábrica de Software — repo: {repo_name}"
     )
 
+    # F1.5: sección de garantías verificable (derivada de gates) — autoritativa
+    guarantees_md, gate_all_green = _build_verifiable_guarantees(state)
+    pr_message = pr_message.rstrip() + "\n" + guarantees_md
+
     # IV-2: Generar sección post-mortem con datos del state (Bloque III + IV)
     extended_postmortem = _build_extended_postmortem(state, final_cost)
     if extended_postmortem:
@@ -350,7 +411,9 @@ Al final escribe: `✅ CICLO COMPLETADO`
 
     try:
         if not feature_branch:
-            feature_branch = create_feature_branch(state["feature_name"], repo_path)
+            feature_branch = create_feature_branch(
+                state["feature_name"], repo_path, feature_id=state.get("feature_id", "")
+            )
             if not feature_branch:
                 logger.warning("No se pudo crear feature branch — usando rama actual")
                 feature_branch = current_branch(repo_path)
@@ -381,8 +444,26 @@ Al final escribe: `✅ CICLO COMPLETADO`
     except Exception as exc:
         logger.exception("Error al crear commit/PR: %s", exc)
 
-    # ── Bloque III: auto-merge si risk=LOW y AUTO_MERGE_ENABLED ──────────────
-    if pr_url and AUTO_MERGE_ENABLED and state.get("risk_level") == "LOW":
+    # ── F3.3/F3.4: auto-merge gobernado por TIER recomputado desde el diff ────
+    # El riesgo se recalcula por las rutas REALES tocadas (no la auto-declaración del
+    # LLM; el LLM solo pudo subirlo). Un gate de cierre no verde —que incluye un BLOCK
+    # de A8.5 o de seguridad— fuerza HIGH. Solo tier LOW + gate verde es auto-mergeable.
+    from tools.risk_classifier import final_risk_for_merge
+    final_risk = final_risk_for_merge(files_written, state.get("risk_level", "MEDIUM"), gate_all_green)
+    save_run_metadata(state["feature_id"], {
+        "risk_level_final": final_risk,
+        "auto_mergeable":   bool(AUTO_MERGE_ENABLED and final_risk == "LOW" and gate_all_green),
+    })
+
+    if pr_url and AUTO_MERGE_ENABLED and not (final_risk == "LOW" and gate_all_green):
+        razon = "gate de cierre no verde" if not gate_all_green else f"tier de riesgo {final_risk} (no LOW)"
+        logger.warning("Auto-merge BLOQUEADO (%s) — revisión humana: %s", razon, pr_url)
+        send_message(
+            f"🛑 *Auto-merge bloqueado* — {razon}\n"
+            f"*Feature:* {state['feature_name']}\n*PR:* {pr_url}\n"
+            f"Requiere revisión humana."
+        )
+    elif pr_url and AUTO_MERGE_ENABLED and final_risk == "LOW" and gate_all_green:
         try:
             import subprocess as _sp
             result = _sp.run(

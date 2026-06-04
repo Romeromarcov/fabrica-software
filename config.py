@@ -119,6 +119,9 @@ VAPID_SUBJECT     = os.getenv("VAPID_SUBJECT",     "mailto:admin@fabrica.local")
 # independientes en paralelo (requiere pipeline estable, error rate < 10%).
 PARALLEL_FEATURES_ENABLED = os.getenv("PARALLEL_FEATURES_ENABLED", "false").lower() == "true"
 MAX_PARALLEL_FEATURES     = int(os.getenv("MAX_PARALLEL_FEATURES", "2"))
+# CTF-FABRICA-001: cada feature paralelo corre en su propio git worktree (checkout aislado)
+# para que dos A10 concurrentes no se pisen. Si falla la creación → fallback a repo compartido.
+PARALLEL_WORKTREE_ISOLATION = os.getenv("PARALLEL_WORKTREE_ISOLATION", "true").lower() == "true"
 
 # ── Bloque III: Reducción de Intervención Humana ──────────────────────────────
 # Ventana de veto: minutos que el Founder tiene para vetar un plan antes de que
@@ -126,7 +129,28 @@ MAX_PARALLEL_FEATURES     = int(os.getenv("MAX_PARALLEL_FEATURES", "2"))
 VETO_WINDOW_MINUTES = int(os.getenv("VETO_WINDOW_MINUTES", "30"))
 
 # Auto-merge: si True y risk_level=LOW, el PR se fusiona automáticamente tras crearse.
+# F1.5: además exige que el gate de cierre (sandbox + seguridad) esté verde; si no,
+# el auto-merge se bloquea aunque risk_level sea LOW.
 AUTO_MERGE_ENABLED = os.getenv("AUTO_MERGE_ENABLED", "false").lower() == "true"
+
+# ── Fase 1 (PLAN_HARDENING_FABRICA): endurecimiento de gates ──────────────────
+# STRICT_GATES: si True, una herramienta requerida-por-stack ausente cuenta como
+# FALLO del gate (no skip silencioso). Espejo leído también por tools/code_sandbox.py.
+STRICT_GATES = os.getenv("STRICT_GATES", "true").lower() == "true"
+# TENANT_ISOLATION_GATE: "auto" (activo si el repo destino es Django y usa id_empresa),
+# "true" (forzar), "false" (desactivar). Gate DURO de aislamiento multi-tenant (R-CODE-1).
+TENANT_ISOLATION_GATE = os.getenv("TENANT_ISOLATION_GATE", "auto").lower()
+
+# ── Fase 2 (PLAN_HARDENING): A8.5 revisión adversarial a nivel repo ───────────
+# Agente adversarial que revisa el REPO COMPLETO (no el snippet del state) buscando
+# fugas cross-tenant / endpoints duplicados inseguros (punto ciego de CRIT-1..3).
+ADVERSARIAL_REVIEW_ENABLED = os.getenv("ADVERSARIAL_REVIEW_ENABLED", "true").lower() == "true"
+# Iteraciones A8.5→A6 antes de escalar a humano.
+MAX_ADVERSARIAL_ITER = int(os.getenv("MAX_ADVERSARIAL_ITER", "2"))
+# Tier mínimo para correr el análisis LLM completo (el escaneo estático corre siempre).
+# Valores: LOW | MEDIUM | HIGH. Por defecto MEDIUM (LOW solo recibe el escaneo estático).
+ADVERSARIAL_MIN_TIER = os.getenv("ADVERSARIAL_MIN_TIER", "MEDIUM").upper()
+MODEL_A85 = os.getenv("MODEL_A85", MODEL_A8)   # mismo modelo que SecOps por defecto
 
 # ── Agente de Noticias (independiente de la Fábrica) ─────────────────────────
 NEWS_AGENT_ENABLED = os.getenv("NEWS_AGENT_ENABLED", "true").lower() == "true"

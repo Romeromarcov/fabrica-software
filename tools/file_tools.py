@@ -48,6 +48,25 @@ def save_agent_output(feature_id: str, agent_name: str, content: str) -> str:
     return str(path)
 
 
+def save_security_report(feature_id: str, verdict: str, content: str) -> str:
+    """F1.4: artefacto estable de la revisión de seguridad (no un checkbox).
+
+    El veredicto y la existencia de este archivo son la prueba verificable de que
+    SecOps corrió; el gate de cierre se valida contra esto, no contra texto libre.
+    """
+    run_dir = RUNS_DIR / feature_id
+    run_dir.mkdir(parents=True, exist_ok=True)
+    path = run_dir / "SECURITY_REPORT.md"
+    header = (
+        f"# Reporte de Seguridad — feature {feature_id}\n\n"
+        f"**Veredicto:** {verdict}\n\n"
+        f"_Generado por A8 SecOps. Este artefacto es la evidencia del paso 3 del "
+        f"Definition of Done (revisión de seguridad)._\n\n---\n\n"
+    )
+    path.write_text(header + content, encoding="utf-8")
+    return str(path)
+
+
 _meta_lock = __import__("threading").Lock()
 
 
