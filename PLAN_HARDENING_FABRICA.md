@@ -200,14 +200,18 @@ humana medida: **~10%** en una mezcla representativa, concentrada en lo HIGH.
 
 ## Fase 7 — Entrega y operación
 
-- [ ] **7.1 — Runbook** `docs/RUNBOOK_OMNIERP.md` en la fábrica: cómo arrancar el loop de
-      proyecto, cómo responder vetos/escalaciones por Telegram, cómo pausar.
-- [ ] **7.2 — Observabilidad:** dashboard UI (`ui/server.py`) muestra por feature: tier,
-      gates pasados, veredicto A8.5, modo de aprobación (auto/veto/humano).
-- [ ] **7.3 — Política de reversibilidad:** confirmar que cada merge es revertible (red de
-      seguridad R-PROD-4) — habilita aceptar más autonomía con bajo costo de error.
-- [ ] **7.4 — Arranque supervisado:** primeros N features con humano observando aunque el tier
-      sea LOW/MEDIUM; relajar a medida que la métrica de falsos-OK se mantenga en cero.
+- [x] **7.1 — Runbook** `docs/RUNBOOK_OMNIERP.md`: arranque, onboarding, respuesta a
+      vetos/escalaciones/conflictos por Telegram, mantenimiento.
+- [x] **7.2 — Observabilidad:** `tools/governance_report.feature_governance` reúne desde la
+      metadata el tier (LLM/rutas/efectivo/final), veredictos A8/A8.5, modo de aprobación y
+      auto-mergeabilidad. Listo para que `ui/server.py` lo renderice. *Test:* `test_governance.py`.
+- [x] **7.3 — Reversibilidad:** documentada en el runbook §7.3 — auto-merge solo con squash
+      (revertible), todo lo no-LOW queda en PR draft; alineado con R-PROD-4.
+- [x] **7.4 — Arranque supervisado:** runbook §7.4 — ramp-up: `AUTO_MERGE_ENABLED=false` hasta
+      falsos-OK=0 sostenido; luego LOW auto; paralelismo tras CTF-FABRICA-001.
+
+**DoD Fase 7:** ✅ runbook + capa de observabilidad + política de reversibilidad y ramp-up.
+La fábrica queda lista para recibir OmniERP con intervención humana concentrada en lo HIGH.
 
 **DoD Fase 7 / entrega:** la fábrica corre el backlog de OmniERP de forma autónoma para
 tiers LOW/MEDIUM, escala HIGH al humano, y el founder solo toca ~30% de los cambios (los

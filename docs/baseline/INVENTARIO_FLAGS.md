@@ -23,6 +23,14 @@ implementa en la Fase 3; aquí se fija el punto de partida seguro.
 |---|---|---|---|
 | `STRICT_GATES` | 1.1 | `true` | Si `true`, herramienta requerida-por-stack ausente = FAIL (no skip). |
 | `TENANT_ISOLATION_GATE` | 1.2 | `auto` | `auto` = activo si el repo destino es Django y usa `id_empresa`; `true`/`false` fuerzan. |
+| `ADVERSARIAL_REVIEW_ENABLED` | 2 | `true` | Activa A8.5 (revisión adversarial a nivel repo). |
+| `MAX_ADVERSARIAL_ITER` | 2 | `2` | Iteraciones A8.5→A6 antes de escalar a humano. |
+| `ADVERSARIAL_MIN_TIER` | 2 | `MEDIUM` | Tier mínimo para el análisis LLM de A8.5 (el estático corre siempre). |
+| `MODEL_A85` | 2 | `=MODEL_A8` | Modelo del revisor adversarial. |
+
+**Fase 3 (gobierno por riesgo):** no añade flags — el riesgo se deriva de las rutas
+(`tools/risk_classifier.py`) y el LLM solo puede subir el tier. El auto-merge usa
+`AUTO_MERGE_ENABLED` + tier `final` LOW + gate verde.
 
 ## Principio
 
