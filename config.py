@@ -138,6 +138,17 @@ STRICT_GATES = os.getenv("STRICT_GATES", "true").lower() == "true"
 # "true" (forzar), "false" (desactivar). Gate DURO de aislamiento multi-tenant (R-CODE-1).
 TENANT_ISOLATION_GATE = os.getenv("TENANT_ISOLATION_GATE", "auto").lower()
 
+# ── Fase 2 (PLAN_HARDENING): A8.5 revisión adversarial a nivel repo ───────────
+# Agente adversarial que revisa el REPO COMPLETO (no el snippet del state) buscando
+# fugas cross-tenant / endpoints duplicados inseguros (punto ciego de CRIT-1..3).
+ADVERSARIAL_REVIEW_ENABLED = os.getenv("ADVERSARIAL_REVIEW_ENABLED", "true").lower() == "true"
+# Iteraciones A8.5→A6 antes de escalar a humano.
+MAX_ADVERSARIAL_ITER = int(os.getenv("MAX_ADVERSARIAL_ITER", "2"))
+# Tier mínimo para correr el análisis LLM completo (el escaneo estático corre siempre).
+# Valores: LOW | MEDIUM | HIGH. Por defecto MEDIUM (LOW solo recibe el escaneo estático).
+ADVERSARIAL_MIN_TIER = os.getenv("ADVERSARIAL_MIN_TIER", "MEDIUM").upper()
+MODEL_A85 = os.getenv("MODEL_A85", MODEL_A8)   # mismo modelo que SecOps por defecto
+
 # ── Agente de Noticias (independiente de la Fábrica) ─────────────────────────
 NEWS_AGENT_ENABLED = os.getenv("NEWS_AGENT_ENABLED", "true").lower() == "true"
 NEWS_AGENT_HOUR    = int(os.getenv("NEWS_AGENT_HOUR", "8"))

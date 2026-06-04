@@ -102,6 +102,11 @@ class FabricaState(TypedDict):
     debate_done: bool              # True tras ejecutar el panel de debate
     debate_summary: Optional[str]  # Resumen de objeciones y resolución del árbitro
 
+    # ── Fase 2 (PLAN_HARDENING): A8.5 revisión adversarial a nivel repo ──────────
+    adversarial_clear: bool            # True = sin hallazgos adversariales (apto)
+    adversarial_report: Optional[str]  # Resumen de hallazgos adversariales
+    adversarial_iterations: int        # Iteraciones del ciclo A8.5→A6 (máx MAX_ADVERSARIAL_ITER)
+
     # ── Control interno ───────────────────────────────────────────────────────
     current_agent: str
     # operator.add permite que múltiples nodos appendeen a esta lista sin conflictos
@@ -167,6 +172,9 @@ def initial_state(
         sandbox_gate_failures=[],
         debate_done=False,
         debate_summary=None,
+        adversarial_clear=True,
+        adversarial_report=None,
+        adversarial_iterations=0,
         current_agent="inicio",
         errors=[],
         cost_entries=[],

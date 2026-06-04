@@ -41,7 +41,7 @@ from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.sqlite import SqliteSaver
 
 from state import FabricaState
-from config import DB_PATH, MAX_QA_ITER_COMPLETO, MAX_QA_ITER_LITE, MAX_SECOPS_ITER, MAX_SANDBOX_ITER, VETO_WINDOW_MINUTES
+from config import DB_PATH, MAX_QA_ITER_COMPLETO, MAX_QA_ITER_LITE, MAX_SECOPS_ITER, MAX_SANDBOX_ITER, MAX_ADVERSARIAL_ITER, VETO_WINDOW_MINUTES
 
 # ── Nodos de agentes ──────────────────────────────────────────────────────────
 from nodes.debate_panel    import run_debate
@@ -55,6 +55,7 @@ from nodes.a6_refactor     import a6_refactor
 from nodes.a7_qa           import a7_qa
 from nodes.a8_secops       import a8_secops
 from nodes.a9_sandbox      import a9_sandbox
+from nodes.a85_adversarial import a85_adversarial
 from nodes.a10_code_writer import a10_code_writer
 from nodes.a11_devops      import a11_devops
 
@@ -217,8 +218,22 @@ def _route_after_sandbox(state: FabricaState) -> str:
       agotó iteraciones → escala humano
     """
     if state["sandbox_passed"]:
-        return "devops" if state.get("needs_devops") else "pr_final"
+        return "adversarial"             # → A8.5 revisión adversarial a nivel repo (Fase 2)
     if state.get("sandbox_iterations", 0) >= MAX_SANDBOX_ITER:
+        return "escalar"
+    return "reintentar"
+
+
+def _route_after_adversarial(state: FabricaState) -> str:
+    """
+    A8.5 Revisión adversarial (corre DESPUÉS de A9 — repo real en disco):
+      clear → A11 DevOps [condicional] | PR Final
+      block y hay margen → A6 Refactor (con el hallazgo en sandbox_gate_failures)
+      block y agotó iteraciones → escala humano (R-PROC-3)
+    """
+    if state.get("adversarial_clear", True):
+        return "devops" if state.get("needs_devops") else "pr_final"
+    if state.get("adversarial_iterations", 0) >= MAX_ADVERSARIAL_ITER:
         return "escalar"
     return "reintentar"
 
@@ -330,6 +345,7 @@ def build_graph() -> StateGraph:
     g.add_node("a8_secops",         a8_secops)           # post-QA: auditoría + corrección
     g.add_node("a10_code_writer",   a10_code_writer)     # escribe archivos al repo real (ANTES de A9)
     g.add_node("a9_sandbox",        a9_sandbox)          # post-A10: tests sobre archivos reales
+    g.add_node("a85_adversarial",   a85_adversarial)     # Fase 2: revisión adversarial a nivel repo
     g.add_node("a11_devops",          a11_devops)          # actualiza deps/infra [condicional]
     g.add_node("a1_pr_final",         a1_pr_final)         # PM cierre: cumplimiento+docs+PR
     g.add_node("pipeline_detenido",   pipeline_detenido)
@@ -465,14 +481,25 @@ def build_graph() -> StateGraph:
         },
     )
 
-    # 10. Sandbox: passed → DevOps/PR | fallos → A6 Refactor | agotó → escala
+    # 10. Sandbox: passed → A8.5 adversarial | fallos → A6 Refactor | agotó → escala
     g.add_conditional_edges(
         "a9_sandbox",
         _route_after_sandbox,
         {
-            "devops":     "a11_devops",    # needs_devops → actualiza deps/infra
-            "pr_final":   "a1_pr_final",   # directo al PR
-            "reintentar": "a6_refactor",   # A6 corrige → A7 → A8 → A10 reescribe → A9 retest
+            "adversarial": "a85_adversarial",  # Fase 2: revisión adversarial a nivel repo
+            "reintentar":  "a6_refactor",      # A6 corrige → A7 → A8 → A10 reescribe → A9 retest
+            "escalar":     "qa_escalation",
+        },
+    )
+
+    # 10.5 A8.5 Adversarial: clear → DevOps/PR | block → A6 Refactor | agotó → escala humano
+    g.add_conditional_edges(
+        "a85_adversarial",
+        _route_after_adversarial,
+        {
+            "devops":     "a11_devops",
+            "pr_final":   "a1_pr_final",
+            "reintentar": "a6_refactor",   # hallazgo adversarial inyectado en sandbox_gate_failures
             "escalar":    "qa_escalation",
         },
     )

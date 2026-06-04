@@ -157,7 +157,11 @@ def _build_verifiable_guarantees(state: FabricaState) -> tuple[str, bool]:
     tenant_ok = "tenant-isolation" not in failed_gates
     no_hard = len(hard_failed) == 0
 
-    all_green = sandbox_passed and sec_ok and no_hard
+    # Fase 2 — veredicto del revisor adversarial (A8.5)
+    adv_verdict = meta.get("adversarial_verdict", "")
+    adv_ok = bool(state.get("adversarial_clear", True)) and "BLOCK" not in adv_verdict
+
+    all_green = sandbox_passed and sec_ok and no_hard and adv_ok
 
     lines = [
         "\n## ✔ Verificación de garantías (derivada de gates, no auto-declarada)\n",
@@ -174,6 +178,8 @@ def _build_verifiable_guarantees(state: FabricaState) -> tuple[str, bool]:
         f"| Revisión de seguridad (A8) | {chk(sec_ok)} | "
         f"veredicto `{sec_verdict}`"
         f"{' · ' + sec_report if sec_report else ''} |",
+        f"| Revisión adversarial repo (A8.5) | {chk(adv_ok)} | "
+        f"{'sin hallazgos' if adv_ok else 'veredicto ' + (adv_verdict or 'ADVERSARIAL BLOCK')} |",
         f"\n**Veredicto de gate de cierre (máquina): {'✅ APTO' if all_green else '❌ NO APTO — requiere humano'}**",
     ]
     if not all_green:

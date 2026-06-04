@@ -82,21 +82,22 @@ se salte en silencio.
 **Meta:** cubrir el punto ciego que produjo CRIT-1..3 (vistas paralelas que filtran datos):
 revisión que ve **el repo completo**, no el snippet generado.
 
-- [ ] **2.1 — Nuevo nodo `nodes/a85_adversarial.py`.** Misión única, adversarial:
-      *"Asume que este cambio rompe el aislamiento multi-tenant o duplica un endpoint
-      inseguro. Pruébalo o refútalo. Por defecto: culpable hasta probar inocencia."*
-      Recibe el **árbol de archivos relevante del repo** (no `backend_code` del estado):
-      todas las views/urls/serializers tocadas **y sus vecinas** (DetailViews paralelas,
-      routers, permisos).
-- [ ] **2.2 — Posición en el grafo.** Insertar A8.5 **después de A8** y **antes de PR Final**,
-      en `graph.py`. Veredicto `ADVERSARIAL CLEAR` / `ADVERSARIAL BLOCK`. Block → vuelve a A6/A8.
-- [ ] **2.3 — Alcance configurable.** A8.5 solo se ejecuta a fondo en tier MEDIUM/HIGH
-      (ver Fase 3) para no encarecer cambios triviales.
-- [ ] **2.4 — Aprendizaje.** Los hallazgos de A8.5 alimentan `learning_memory` para que la
-      lección entre al few-shot de A4/A8 (no repetir la clase de bug).
+- [x] **2.1 — Nodo `nodes/a85_adversarial.py`.** Misión adversarial ("culpable hasta probar
+      inocencia"). Recibe **contexto del repo en disco** (`_gather_repo_context`: archivos
+      tocados + vecinos `views/urls/serializers/permissions`), no `backend_code`. Escaneo
+      estático AST siempre + LLM en tier alto. Veredicto `ADVERSARIAL CLEAR`/`BLOCK`.
+- [x] **2.2 — Posición en el grafo.** Insertado **después de A9** (cuando los archivos ya
+      están en disco) y **antes de PR Final** — refinamiento sobre el plan, que decía "tras A8"
+      cuando aún no hay archivos escritos. `_route_after_adversarial`: clear→devops/pr_final,
+      block→A6 (con hallazgo en `sandbox_gate_failures`), agota `MAX_ADVERSARIAL_ITER`→humano.
+- [x] **2.3 — Alcance por tier.** LLM solo en tier ≥ `ADVERSARIAL_MIN_TIER` (default MEDIUM);
+      el escaneo estático a nivel repo corre **siempre** (red de seguridad incluso en LOW).
+- [x] **2.4 — Aprendizaje.** Hallazgos de A8.5 → `extract_patterns`/`append_to_lessons`.
+      Además, el veredicto adversarial entra en la tabla de garantías de F1.5 y en `all_green`.
 
-**DoD Fase 2:** sembrar deliberadamente una `DetailView` paralela sin filtro tenant en un repo
-de prueba → **A8.5 la bloquea** aunque el snippet generado sea correcto.
+**DoD Fase 2:** ✅ `DetailView` paralela sin filtro tenant sembrada en repo de prueba →
+**A8.5 la bloquea** (test `test_adversarial_blocks_unfiltered_neighbor`) aunque el snippet sea
+correcto; el hallazgo se inyecta a A6 y, si persiste, escala a humano.
 
 ---
 
