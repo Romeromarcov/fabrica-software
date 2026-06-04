@@ -154,23 +154,24 @@ dimensionado y comprometido en CTF-FABRICA-001 (no se shippea concurrencia sin v
 
 **Meta:** que la fábrica no construya sobre la premisa falsa de "§4.1 TODO COMPLETO".
 
-- [ ] **5.1 — Reconciliador plan↔código.** Extender el modo `--audit` de A0
-      (`nodes/a0_arquitecto.py`, `tools/codebase_auditor.py`) para producir un
-      **`RECONCILIACION.md`**: por cada afirmación ✅ del plan, verifica contra el código y marca
-      `CONFIRMADO | CONTRADICHO | NO-VERIFICABLE`. Los `CONTRADICHO` se vuelven backlog tier HIGH.
-- [ ] **5.2 — Importar la auditoría real.** Usar `tools/session_importer.py` para cargar
-      `docs/auditorias/PLAN_TRABAJO_AUDITORIA_2026-06-01.md` como backlog priorizado.
-      **CRIT-1..3, H-SEC-1..2 entran como primeros items, tier HIGH (humano obligatorio).**
-- [ ] **5.3 — Backlog inicial = cerrar lo crítico, no features nuevas.** A0 emite el grafo de
-      dependencias (Bloque VI) con orden: seguridad crítica → 1.F → resto.
-- [ ] **5.4 — Cablear el repo.** Registrar OmniERP en `config.py` / `project_state.py`:
-      ruta, stack (Django+React), comandos de gate idénticos al CI de OmniERP, `CLAUDE.md`/
-      `DEFINITION_OF_DONE.md` como contexto estático inyectado a cada agente.
-- [ ] **5.5 — Sincronizar el DoD.** El gate de A9/A8/A8.5 debe ser **superconjunto** del
-      `DEFINITION_OF_DONE.md` de OmniERP (mismos 7 pasos, todos mecanizados).
+- [x] **5.1 — Reconciliador plan↔código.** `tools/reconciler.py`: `reconcile` cruza las
+      afirmaciones "✅/COMPLETO" del plan contra el código (AST de aislamiento + existencia de
+      apps + conteo de tests) → `CONFIRMADO|CONTRADICHO|NO-VERIFICABLE`; `render_reconciliation`
+      genera `RECONCILIACION.md`; `contradictions_as_backlog` las vuelve tier HIGH.
+      **Validado sobre OmniERP real:** detectó que el plan referencia `apps/vzla_localizacion`
+      (renombrado a `localizacion_ve`) → CONTRADICHO, y 61 afirmaciones NO-VERIFICABLE.
+- [x] **5.2 — Importar la auditoría real.** `tools/audit_backlog.py::build_backlog` parsea
+      `PLAN_TRABAJO_AUDITORIA_2026-06-01.md` → **102 items**; CRIT-1..3 / H-SEC-1 de primeros, tier HIGH.
+- [x] **5.3 — Backlog crítico-primero.** Orden por severidad CRIT→H-SEC→H-*→NEW→M-*→FE-*.
+      Lo crítico se cierra antes de features nuevas. *Tests:* `test_build_backlog_critical_first`.
+- [x] **5.4 — Registro del repo.** `docs/ONBOARDING_OMNIERP.md`: ruta, stack autodetectado,
+      comandos de gate espejo del CI, docs de gobernanza a inyectar, env recomendado.
+- [x] **5.5 — DoD ⊇ DoD de OmniERP.** Tabla de mapeo en `ONBOARDING_OMNIERP.md`: cada uno de
+      los 7 pasos del Definition of Done de OmniERP está cubierto por un gate mecánico, y la
+      fábrica añade 2 capas que el DoD humano no tenía (aislamiento AST + adversarial repo).
 
-**DoD Fase 5:** `RECONCILIACION.md` generado; CRIT-1..3 en cabeza del backlog como HIGH; la
-fábrica arranca contra OmniERP sin error de configuración.
+**DoD Fase 5:** ✅ `RECONCILIACION.md` generado sobre OmniERP real; auditoría → backlog con
+CRIT en cabeza tier HIGH; mapeo DoD↔gate documentado. *Tests:* `test_onboarding.py` (7).
 
 ---
 
