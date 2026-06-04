@@ -691,6 +691,36 @@ async def github_status(request: Request):
     })
 
 
+@app.get("/api/github/repos")
+async def api_github_repos(request: Request):
+    """Descubrimiento dinámico: lista los repos de GitHub accesibles por el token."""
+    from config import GITHUB_TOKEN
+    from tools.github_repos import list_user_repos
+    token = request.session.get("github_token") or GITHUB_TOKEN or ""
+    return JSONResponse({"connected": bool(token), "repos": list_user_repos(token)})
+
+
+@app.post("/api/repos/clone")
+async def api_repos_clone(request: Request):
+    """Clona (o actualiza) un repo elegido en WORKSPACES_ROOT para usarlo en el pipeline."""
+    import os as _os
+    from pathlib import Path as _Path
+    from config import GITHUB_TOKEN, WORKSPACES_ROOT
+    from tools.git_tools import clone_or_update_repo
+    body = await request.json()
+    clone_url = (body.get("clone_url") or "").strip()
+    if not clone_url:
+        return JSONResponse({"ok": False, "error": "clone_url requerido"}, status_code=400)
+    name = (body.get("name") or "").strip() or clone_url.rstrip("/").split("/")[-1]
+    if name.endswith(".git"):
+        name = name[:-4]
+    token = request.session.get("github_token") or GITHUB_TOKEN or ""
+    actor = _os.getenv("GITHUB_ACTOR", "")
+    dest = str(_Path(WORKSPACES_ROOT) / name)
+    ok = clone_or_update_repo(clone_url, dest, token=token, actor=actor)
+    return JSONResponse({"ok": ok, "name": name})
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _all_runs() -> list[dict]:

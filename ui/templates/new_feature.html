@@ -53,9 +53,15 @@
           </select>
           {% else %}
           <span style="font-size:.78rem;color:#f87171;display:flex;align-items:center;gap:.35rem">
-            <i class="bi bi-exclamation-triangle-fill"></i> Sin repos — verifica <code>WORKSPACES_ROOT</code>
+            <i class="bi bi-exclamation-triangle-fill"></i> Sin repos — importa uno de GitHub →
           </span>
           {% endif %}
+
+          <!-- Importar repo de GitHub al vuelo (descubrimiento dinámico) -->
+          <button type="button" class="composer-select" id="ghImportBtn"
+                  title="Importar un repo de tu cuenta de GitHub" style="cursor:pointer">
+            <i class="bi bi-github"></i> + GitHub
+          </button>
 
           <!-- Mode chips -->
           <div class="d-flex align-items-center gap-1" id="modeChips">
@@ -171,5 +177,31 @@ function goToPreChat() {
   const params = new URLSearchParams({ feature_name: featureName, repo: repoName, mode });
   window.location.href = "/prechat?" + params.toString();
 }
+
+// ── Importar repo de GitHub al vuelo (descubrimiento dinámico) ───────────────
+document.getElementById("ghImportBtn")?.addEventListener("click", async function() {
+  const btn = this, orig = btn.innerHTML;
+  btn.disabled = true; btn.innerHTML = "Cargando…";
+  try {
+    const data = await (await fetch("/api/github/repos")).json();
+    if (!data.connected) { alert("GitHub no conectado (falta GITHUB_TOKEN)."); return; }
+    const repos = data.repos || [];
+    if (!repos.length) { alert("El token no da acceso a ningún repo."); return; }
+    const list = repos.map((r,i)=> `${i+1}. ${r.full_name}`).join("\n");
+    const pick = prompt("Tus repos de GitHub — escribe el número a importar:\n\n" + list);
+    const idx = parseInt(pick, 10) - 1;
+    if (isNaN(idx) || idx < 0 || idx >= repos.length) return;
+    const repo = repos[idx];
+    btn.innerHTML = "Clonando " + repo.name + "…";
+    const r = await fetch("/api/repos/clone", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ clone_url: repo.clone_url, name: repo.name }),
+    });
+    const res = await r.json();
+    if (res.ok) location.reload();
+    else alert("Falló el clonado: " + (res.error || "revisa el token"));
+  } catch (e) { alert("Error: " + e); }
+  finally { btn.disabled = false; btn.innerHTML = orig; }
+});
 </script>
 {% endblock %}
