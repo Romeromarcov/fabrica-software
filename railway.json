@@ -5,7 +5,7 @@
     "dockerfilePath": "Dockerfile"
   },
   "deploy": {
-    "startCommand": "sh -c 'uvicorn ui.server:app --host 0.0.0.0 --port ${PORT:-7860}'",
+    "startCommand": "/entrypoint.sh sh -c 'uvicorn ui.server:app --host 0.0.0.0 --port ${PORT:-7860}'",
     "healthcheckPath": "/health",
     "healthcheckTimeout": 120,
     "restartPolicyType": "ON_FAILURE",
