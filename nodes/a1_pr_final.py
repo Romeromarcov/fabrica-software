@@ -446,10 +446,8 @@ Al final escribe: `✅ CICLO COMPLETADO`
     # El riesgo se recalcula por las rutas REALES tocadas (no la auto-declaración del
     # LLM; el LLM solo pudo subirlo). Un gate de cierre no verde —que incluye un BLOCK
     # de A8.5 o de seguridad— fuerza HIGH. Solo tier LOW + gate verde es auto-mergeable.
-    from tools.risk_classifier import classify_change_risk, max_tier
-    final_risk = max_tier(state.get("risk_level", "MEDIUM"), classify_change_risk(files_written))
-    if not gate_all_green:
-        final_risk = "HIGH"
+    from tools.risk_classifier import final_risk_for_merge
+    final_risk = final_risk_for_merge(files_written, state.get("risk_level", "MEDIUM"), gate_all_green)
     save_run_metadata(state["feature_id"], {
         "risk_level_final": final_risk,
         "auto_mergeable":   bool(AUTO_MERGE_ENABLED and final_risk == "LOW" and gate_all_green),

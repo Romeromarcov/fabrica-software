@@ -140,3 +140,35 @@ def batch_tier(texts: list[str]) -> str:
     if not texts:
         return "LOW"
     return max_tier(*[classify_text_risk(t) for t in texts])
+
+
+def approval_action(tier: str, confidence: int, mode: str, project_mode: bool) -> str:
+    """Decisión del gate de aprobación de arranque (única fuente de verdad).
+
+    Devuelve: "auto" (auto-aprueba) · "veto" (ventana de veto) · "human" (stop manual).
+    El tier (ya con piso de rutas, Fase 3) gobierna; la confianza solo afina dentro de LOW.
+    """
+    if mode == "lightning":
+        return "auto"
+    if not project_mode:
+        return "human"                      # standalone: siempre aprobación manual
+    t = (tier or "MEDIUM").upper()
+    if confidence >= 85 and t == "LOW":
+        return "auto"
+    if confidence >= 60 and t != "HIGH":
+        return "veto"
+    return "human"                          # HIGH (o baja confianza) → humano obligatorio
+
+
+def final_risk_for_merge(files_written: list[str], base_risk: str, gate_all_green: bool) -> str:
+    """Tier final para la decisión de auto-merge: máx(base, rutas del diff); gate no
+    verde fuerza HIGH (F3.4). Única fuente de verdad usada por a1_pr_final."""
+    fr = max_tier(base_risk, classify_change_risk(files_written))
+    return "HIGH" if not gate_all_green else fr
+
+
+def is_auto_mergeable(files_written: list[str], base_risk: str,
+                      gate_all_green: bool, auto_merge_enabled: bool) -> bool:
+    """Solo tier LOW + gate verde + flag activo es auto-mergeable."""
+    fr = final_risk_for_merge(files_written, base_risk, gate_all_green)
+    return bool(auto_merge_enabled and fr == "LOW" and gate_all_green)

@@ -78,17 +78,18 @@ def _route_after_plan(state: FabricaState) -> str:
     confidence >= 60 + risk≠HIGH  → veto_window (aprobación automática tras N min)
     demás casos                   → stop_protocol (aprobación manual)
     """
-    if state.get("mode") == "lightning":
-        return "confidence_auto_approve"  # ⚡ lightning: nunca espera aprobación manual
-    if not state.get("project_mode"):
-        return "stop_protocol"
-    conf = state.get("confidence_score", 70)
-    risk = state.get("risk_level", "MEDIUM")
-    if conf >= 85 and risk == "LOW":
-        return "confidence_auto_approve"
-    if conf >= 60 and risk != "HIGH":
-        return "veto_window"
-    return "stop_protocol"
+    from tools.risk_classifier import approval_action
+    action = approval_action(
+        tier=state.get("risk_level", "MEDIUM"),
+        confidence=state.get("confidence_score", 70),
+        mode=state.get("mode", "completo"),
+        project_mode=bool(state.get("project_mode")),
+    )
+    return {
+        "auto":  "confidence_auto_approve",
+        "veto":  "veto_window",
+        "human": "stop_protocol",
+    }[action]
 
 
 def _route_after_plan_or_debate(state: FabricaState) -> str:
