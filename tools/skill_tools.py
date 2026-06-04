@@ -85,6 +85,62 @@ def list_skills(repo_path: str) -> list[dict]:
     return skills
 
 
+# ── Skills GLOBALES de la fábrica (sirven para TODOS los proyectos) ───────────
+
+def _global_skills_dir() -> Path:
+    """Directorio de skills globales. En la nube: /data/skills (volumen persistente)."""
+    import os
+    override = os.environ.get("GLOBAL_SKILLS_DIR")
+    if override:
+        return Path(override)
+    vol = Path("/data")
+    return (vol / "skills") if vol.is_dir() else (Path(__file__).parent.parent / "skills")
+
+
+def list_global_skills() -> list[dict]:
+    """Skills globales (no atadas a un repo) — se inyectan en todos los proyectos."""
+    skills: list[dict] = []
+    root = _global_skills_dir()
+    if not root.exists():
+        return skills
+    for skill_file in sorted(root.glob("*/SKILL.md")):
+        try:
+            text = skill_file.read_text(encoding="utf-8")
+            meta, body = _parse_frontmatter(text)
+            skills.append({
+                "name":        meta.get("name", skill_file.parent.name),
+                "description": meta.get("description", ""),
+                "path":        str(skill_file),
+                "content":     body,
+                "scope":       "global",
+            })
+        except Exception:  # noqa: BLE001
+            continue
+    return skills
+
+
+def create_global_skill(name: str, description: str, content: str) -> str:
+    """Crea una skill GLOBAL en {GLOBAL_SKILLS_DIR}/<name>/SKILL.md."""
+    safe_name = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+    d = _global_skills_dir() / safe_name
+    d.mkdir(parents=True, exist_ok=True)
+    p = d / "SKILL.md"
+    p.write_text(
+        f"---\nname: {safe_name}\ndescription: {description}\nscope: global\n---\n\n{content}",
+        encoding="utf-8",
+    )
+    logger.info("Skill GLOBAL creada: %s", p)
+    return str(p)
+
+
+def all_skills_for(repo_path: str | None) -> list[dict]:
+    """Skills globales + las del repo (las globales primero)."""
+    out = list_global_skills()
+    if repo_path:
+        out += list_skills(repo_path)
+    return out
+
+
 def _score_skill(skill: dict, task_text: str) -> float:
     """
     Puntúa la relevancia de una skill para el texto de la tarea.

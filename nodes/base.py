@@ -314,22 +314,21 @@ def call_agent(
     if extra_context:
         resolved_extra.update(extra_context)
 
-    # ── Inyectar skills del proyecto ──────────────────────────────────────────
-    if repo_path:
-        try:
-            from tools.skill_tools import list_skills, select_skills_for_task, build_skills_context
-            skills = list_skills(repo_path)
-            if skills:
-                relevant = select_skills_for_task(skills, task_content)
-                if relevant:
-                    skills_block = build_skills_context(relevant)
-                    resolved_extra["SKILLS DEL PROYECTO"] = skills_block
-                    logger.debug(
-                        "%s: inyectando %d skills: %s",
-                        agent_label, len(relevant), [s["name"] for s in relevant],
-                    )
-        except Exception as _skill_exc:
-            logger.warning("Error al cargar skills del proyecto: %s", _skill_exc)
+    # ── Inyectar skills (globales de la fábrica + del proyecto) ────────────────
+    try:
+        from tools.skill_tools import all_skills_for, select_skills_for_task, build_skills_context
+        skills = all_skills_for(repo_path)
+        if skills:
+            relevant = select_skills_for_task(skills, task_content)
+            if relevant:
+                skills_block = build_skills_context(relevant)
+                resolved_extra["SKILLS DEL PROYECTO"] = skills_block
+                logger.debug(
+                    "%s: inyectando %d skills (global+repo): %s",
+                    agent_label, len(relevant), [s["name"] for s in relevant],
+                )
+    except Exception as _skill_exc:
+        logger.warning("Error al cargar skills: %s", _skill_exc)
 
     # VII-2: señal de inicio al event bus (best-effort, nunca bloquea el pipeline)
     # feature_id puede venir como parámetro o del env var que el CLI inyecta

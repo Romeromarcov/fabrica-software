@@ -107,6 +107,10 @@
     <button class="btn btn-primary btn-sm px-3" data-bs-toggle="modal" data-bs-target="#modalNewSkill">
       <i class="bi bi-plus-circle me-1"></i> Nueva Skill
     </button>
+    <button class="btn btn-secondary btn-sm px-3" id="genSkillBtn" onclick="generateSkillAI()"
+            title="Generar una skill con IA (global o de este proyecto)">
+      <i class="bi bi-stars me-1"></i> Generar con IA
+    </button>
   </div>
 </div>
 
@@ -264,6 +268,26 @@
 <script>
 const REPO = "{{ selected_repo }}";
 let currentSkillName = null;
+
+// ── Skill-Smith: generar una skill con IA ────────────────────────────────────
+async function generateSkillAI() {
+  const desc = prompt("¿Qué debe hacer la skill? Descríbela (el agente Skill-Smith la redacta):");
+  if (!desc) return;
+  const isGlobal = confirm("¿Skill GLOBAL (sirve para TODOS los proyectos)?\n\nAceptar = Global · Cancelar = solo este proyecto (" + REPO + ")");
+  const scope = isGlobal ? "global" : "project";
+  const btn = document.getElementById("genSkillBtn");
+  const orig = btn.innerHTML; btn.disabled = true; btn.innerHTML = "Generando…";
+  try {
+    const r = await fetch("/api/skills/generate", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ description: desc, scope, repo: REPO }),
+    });
+    const d = await r.json();
+    if (d.ok) { alert("✅ Skill creada: " + d.name + " (" + d.scope + ")"); location.reload(); }
+    else alert("Error: " + (d.error || "no se pudo generar"));
+  } catch (e) { alert("Error: " + e); }
+  finally { btn.disabled = false; btn.innerHTML = orig; }
+}
 
 // ── Datos de skills desde el servidor ────────────────────────────────────────
 const SKILLS_DATA = {

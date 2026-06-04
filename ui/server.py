@@ -1596,14 +1596,20 @@ async def api_list_skills(repo: str = ""):
             return {"skills": [], "repo": "", "skills_dir": ""}
         repo = repos[0]["name"]
 
+    from tools.skill_tools import list_global_skills
     repo_path = resolve_repo_path(repo)
     skills = list_skills(repo_path)
+    globals_ = list_global_skills()
     return {
         "repo": repo,
         "skills_dir": f"{repo}/docs/skills/",
         "skills": [
-            {"name": s["name"], "description": s["description"], "path": s["path"]}
+            {"name": s["name"], "description": s["description"], "path": s["path"], "scope": "project"}
             for s in skills
+        ],
+        "global_skills": [
+            {"name": s["name"], "description": s["description"], "path": s["path"], "scope": "global"}
+            for s in globals_
         ],
     }
 
@@ -1644,6 +1650,39 @@ async def api_create_skill(request: Request):
 
     path = create_skill(resolve_repo_path(repo), name, desc, content)
     return {"ok": True, "path": path, "name": name}
+
+
+@app.post("/api/skills/generate")
+async def api_generate_skill(request: Request):
+    """Skill-Smith: genera una skill con IA. Body: {description, scope, repo}.
+
+    scope='global' → skill para todos los proyectos; scope='project' → en el repo.
+    """
+    from starlette.concurrency import run_in_threadpool
+    data = await request.json()
+    description = (data.get("description") or "").strip()
+    scope       = data.get("scope", "project")
+    repo        = data.get("repo", "")
+    if not description:
+        return JSONResponse({"ok": False, "error": "description requerida"}, status_code=400)
+    try:
+        from tools.skill_smith import generate_skill
+        from tools.skill_tools import create_skill, create_global_skill
+        from config import resolve_repo_path
+        repo_path = resolve_repo_path(repo) if repo else None
+        # call_agent es síncrono y hace I/O de red → fuera del event loop.
+        gen = await run_in_threadpool(generate_skill, description, scope, repo_path)
+        if scope == "global":
+            path = create_global_skill(gen["name"], gen["description"], gen["content"])
+        else:
+            if not repo:
+                return JSONResponse({"ok": False, "error": "repo requerido para skill de proyecto"}, status_code=400)
+            path = create_skill(repo_path, gen["name"], gen["description"], gen["content"])
+        return JSONResponse({"ok": True, "name": gen["name"], "scope": scope,
+                             "description": gen["description"], "path": path})
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("skill generate error: %s", exc)
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=200)
 
 
 @app.put("/api/skills/{skill_name}")
