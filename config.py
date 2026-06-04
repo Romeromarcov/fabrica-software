@@ -40,6 +40,36 @@ def resolve_repo_path(repo_name: str) -> str:
     return str(WORKSPACES_ROOT / repo_name)
 
 
+# ── Clone-on-startup: repos destino a clonar/actualizar al arrancar ───────────
+# Formato de TARGET_REPOS (separados por coma):
+#   "omni-erp=https://github.com/org/omni-erp.git#main, otro=https://github.com/org/otro.git"
+# Cada item: [nombre=]url[#rama]. Si no hay nombre, se deriva de la URL.
+# El token (GITHUB_TOKEN) se inyecta en runtime; NUNCA va aquí.
+TARGET_REPOS = os.getenv("TARGET_REPOS", "")
+
+
+def parse_target_repos() -> list[dict]:
+    """Parsea TARGET_REPOS → [{name, url, branch}]."""
+    out: list[dict] = []
+    for item in (TARGET_REPOS or "").split(","):
+        item = item.strip()
+        if not item:
+            continue
+        name, url, branch = "", item, ""
+        # name=url  (evitar partir el '://' de la URL)
+        if "=" in item.split("://", 1)[0]:
+            name, url = item.split("=", 1)
+        # url#branch
+        if "#" in url:
+            url, branch = url.split("#", 1)
+        if not name:
+            name = url.rstrip("/").split("/")[-1]
+            if name.endswith(".git"):
+                name = name[:-4]
+        out.append({"name": name.strip(), "url": url.strip(), "branch": branch.strip()})
+    return out
+
+
 # ── API Keys ──────────────────────────────────────────────────────────────────
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 GOOGLE_API_KEY    = os.getenv("GOOGLE_API_KEY",    "")

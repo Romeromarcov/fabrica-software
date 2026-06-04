@@ -19,6 +19,13 @@ fi
 RUNS="${RUNS_DIR:-/data/runs}"
 mkdir -p "$RUNS"
 
+# ── Clone-on-startup: clonar/actualizar repos destino (TARGET_REPOS) ──────────
+# Filesystem efímero en Railway → el repo (omni-erp) se trae en cada arranque.
+if [ -n "$TARGET_REPOS" ]; then
+  echo "[entrypoint] Clonando/actualizando TARGET_REPOS…"
+  python3 /app/scripts/clone_targets.py || echo "[entrypoint] clone_targets terminó con advertencias"
+fi
+
 # ── Guardia de modelos: detecta y corrige asignaciones invertidas ─────────────
 # Ejecutar antes de arrancar el servidor para que NUNCA queden modelos mal
 # asignados, aunque el .env se haya corrompido desde la UI.

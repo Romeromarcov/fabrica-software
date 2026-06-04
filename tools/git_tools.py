@@ -59,6 +59,66 @@ def _configure_remote_auth(repo_path: str) -> None:
         logger.debug("git_tools: remote 'origin' reescrito con credenciales")
 
 
+def _auth_url(url: str, token: str, actor: str = "") -> str:
+    """Inyecta el token en una URL https de GitHub para clonar/actualizar sin prompt."""
+    if token and url.startswith("https://") and "@" not in url:
+        creds = f"{actor}:{token}@" if actor else f"x-access-token:{token}@"
+        return url.replace("https://", f"https://{creds}", 1)
+    return url
+
+
+def _default_branch(repo_path: str) -> str:
+    out, _, _ = _run(["git", "symbolic-ref", "--short", "refs/remotes/origin/HEAD"], repo_path)
+    if out:
+        return out.split("/")[-1]
+    return "main"
+
+
+def clone_or_update_repo(
+    repo_url: str,
+    dest_path: str,
+    token: str = "",
+    branch: str = "",
+    actor: str = "",
+) -> bool:
+    """Clone-on-startup: clona el repo si no existe; si ya está, hace fetch + reset
+    duro a `origin/<branch>` (estado limpio y reproducible para el pipeline).
+
+    Devuelve True si el repo quedó disponible/actualizado.
+    """
+    dest = Path(dest_path)
+    auth = _auth_url(repo_url, token, actor)
+
+    if (dest / ".git").exists():
+        # Actualizar repo existente (idempotente entre reinicios del contenedor).
+        _run(["git", "remote", "set-url", "origin", auth], dest)
+        _, ferr, fcode = _run(["git", "fetch", "origin", "--prune"], dest)
+        if fcode != 0:
+            logger.warning("clone_or_update: fetch falló en %s: %s", dest, ferr)
+            return False
+        br = branch or _default_branch(str(dest))
+        _run(["git", "checkout", br], dest)
+        _, rerr, rcode = _run(["git", "reset", "--hard", f"origin/{br}"], dest)
+        if rcode != 0:
+            logger.warning("clone_or_update: reset --hard falló en %s: %s", dest, rerr)
+            return False
+        logger.info("clone_or_update: %s actualizado a origin/%s", dest.name, br)
+        return True
+
+    # Clonar nuevo.
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    args = ["git", "clone"]
+    if branch:
+        args += ["--branch", branch]
+    args += [auth, str(dest)]
+    _, cerr, ccode = _run(args, str(dest.parent))
+    if ccode != 0:
+        logger.error("clone_or_update: clone de %s falló: %s", repo_url, cerr)
+        return False
+    logger.info("clone_or_update: %s clonado en %s", repo_url, dest)
+    return True
+
+
 def current_branch(repo_path: str) -> str:
     out, _, _ = _run(["git", "rev-parse", "--abbrev-ref", "HEAD"], repo_path)
     return out

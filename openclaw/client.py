@@ -15,17 +15,30 @@ logger = logging.getLogger(__name__)
 OPENCLAW_TOKEN = os.getenv("OPENCLAW_GATEWAY_TOKEN", "")
 OPENCLAW_URL   = os.getenv("OPENCLAW_URL", "http://openclaw:18789")
 
+# Mapeo agent_key (el que pasa call_agent) → perfil OpenClaw.
+# DEBE coincidir con los agent_key reales del pipeline (= claves de
+# SYSTEM_PROMPT_PATHS en config.py). El mapa anterior usaba una taxonomía vieja
+# (a2_backend/a3_frontend/a4_qa/a6_db/a7_secops/a8_mcp) que NO existe hoy y hacía
+# fallar el modo OpenClaw para casi todos los agentes.
 AGENT_PROFILE_MAP = {
-    "a1_pm":      "a1-pm",
-    "a2_backend": "a2-backend",
-    "a3_frontend": "a3-frontend",
-    "a4_qa":      "a4-qa",
-    "a5_refactor": "a5-refactor",
-    "a6_db":      "a6-db",
-    "a7_secops":  "a7-secops",
-    "a8_mcp":     "a8-mcp",
-    "meta_agent": "meta-agent",
+    "a0":          "a0-arquitecto",
+    "a0_revisor":  "a0-revisor",
+    "a1_pm":       "a1-pm",
+    "a2_db":       "a2-db",
+    "a3_mcp":      "a3-mcp",
+    "a4_backend":  "a4-backend",
+    "a5_frontend": "a5-frontend",
+    "a6_refactor": "a6-refactor",
+    "a7_qa":       "a7-qa",
+    "a8_secops":   "a8-secops",
+    "meta_agent":  "meta-agent",
 }
+
+
+def profile_for(agent_key: str) -> str:
+    """Perfil OpenClaw para un agent_key. Fallback determinista (`_`→`-`) para
+    claves no mapeadas, de modo que un agente nuevo nunca rompa el modo OpenClaw."""
+    return AGENT_PROFILE_MAP.get(agent_key) or agent_key.replace("_", "-")
 
 
 async def health_check() -> bool:
@@ -50,9 +63,7 @@ async def run_agent(
     Usa `openclaw agent --agent <profile> --message <task> --json --url <url>`
     con OPENCLAW_GATEWAY_TOKEN en el entorno del subprocess.
     """
-    profile_id = AGENT_PROFILE_MAP.get(agent_key)
-    if not profile_id:
-        raise ValueError(f"Perfil OpenClaw no encontrado para agent_key='{agent_key}'")
+    profile_id = profile_for(agent_key)
 
     env = {**os.environ, "OPENCLAW_GATEWAY_TOKEN": OPENCLAW_TOKEN}
 
