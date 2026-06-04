@@ -113,3 +113,30 @@ def max_tier(*tiers: str) -> str:
 
 def tier_at_least(tier: str, minimum: str) -> bool:
     return _ORDER.get((tier or "LOW").upper(), 0) >= _ORDER.get(minimum.upper(), 0)
+
+
+# ── Fase 4: utilidades de paralelismo seguro ──────────────────────────────────
+
+def select_parallel_safe(indices, tier_of) -> list:
+    """Filtra los índices candidatos para que NINGÚN feature HIGH corra en paralelo.
+
+    - Si el primer candidato es HIGH → se devuelve solo ese (HIGH corre en serie).
+    - Si no → se devuelven los candidatos no-HIGH (los HIGH se difieren a la
+      siguiente ronda, donde quedarán de primeros y correrán solos).
+
+    `tier_of(idx) -> "LOW"|"MEDIUM"|"HIGH"`. Función pura (sin langgraph) para tests.
+    """
+    indices = list(indices)
+    if not indices:
+        return []
+    if (tier_of(indices[0]) or "MEDIUM").upper() == "HIGH":
+        return [indices[0]]
+    safe = [i for i in indices if (tier_of(i) or "MEDIUM").upper() != "HIGH"]
+    return safe or [indices[0]]
+
+
+def batch_tier(texts: list[str]) -> str:
+    """Tier agregado de un lote de features (máximo de sus textos)."""
+    if not texts:
+        return "LOW"
+    return max_tier(*[classify_text_risk(t) for t in texts])

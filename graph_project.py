@@ -366,6 +366,7 @@ def pick_ready_features(state: ProjectState) -> dict:
     """
     from config import MAX_PARALLEL_FEATURES
     from tools.branch_manager import get_ready_indices
+    from tools.risk_classifier import select_parallel_safe, classify_text_risk
 
     backlog    = state.get("backlog", [])
     dep_graph  = state.get("dependency_graph", {})
@@ -374,6 +375,21 @@ def pick_ready_features(state: ProjectState) -> dict:
     if not indices:
         logger.info("pick_ready_features: sin features listos (dependencias pendientes)")
         return {"parallel_batch": [], "current_feature_index": len(backlog)}
+
+    # F4.1: ningún feature tier HIGH corre en paralelo. Se calcula el tier por el
+    # texto del feature (mismo clasificador de la Fase 3) y se serializan los HIGH.
+    def _tier_of(i: int) -> str:
+        f = backlog[i]
+        return classify_text_risk(
+            f"{f.get('name','')} {f.get('description','')} {f.get('acceptance_criteria','')}"
+        )
+
+    safe_indices = select_parallel_safe(indices, _tier_of)
+    if safe_indices != indices:
+        deferred = [backlog[i]["name"] for i in indices if i not in safe_indices]
+        logger.info("F4.1: HIGH serializado — lote=%s · diferidos=%s",
+                    [backlog[i]["name"] for i in safe_indices], deferred)
+    indices = safe_indices
 
     updated = list(backlog)
     for i in indices:
@@ -405,6 +421,16 @@ def run_parallel_batch(state: ProjectState) -> dict:
     indices = state.get("parallel_batch", [])
     if not indices:
         return {}
+
+    # F4.3: los hilos comparten el mismo working tree del repo destino. Mientras el
+    # aislamiento por worktree no esté cableado (ver docs/ctf/CTF-FABRICA-001.md), dos A10
+    # concurrentes podrían pisarse. tools/worktree.py provee el primitivo; aquí avisamos.
+    if len(indices) > 1:
+        logger.warning(
+            "F4.3: %d features en paralelo comparten working tree (riesgo de carrera en A10). "
+            "Aislamiento por worktree pendiente (CTF-FABRICA-001). Mantener MAX_PARALLEL_FEATURES bajo.",
+            len(indices),
+        )
 
     backlog = list(state["backlog"])
 

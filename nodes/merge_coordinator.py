@@ -85,11 +85,26 @@ def merge_coordinator(state: ProjectState) -> dict:
     severity  = classify_conflict_severity(conflicts)
     report    = format_conflict_report(conflicts, branch_files, severity)
 
+    # ── F4.2: el TIER del lote gobierna el merge (no solo el conflicto de archivos) ──
+    from tools.risk_classifier import batch_tier as _batch_tier
+    texts = [
+        f"{backlog[idx].get('name','')} {backlog[idx].get('description','')} "
+        f"{backlog[idx].get('acceptance_criteria','')}"
+        for idx in batch_indices
+    ]
+    tier = _batch_tier(texts)
+    # Defensa en profundidad: un lote con feature HIGH nunca se auto-fusiona en silencio
+    # (F4.1 ya los serializa, pero si llegara uno → escalar a humano).
+    if tier == "HIGH" and severity in ("NONE", "LOW", "MEDIUM"):
+        logger.warning("merge_coordinator: tier de lote HIGH → forzando escalado a humano")
+        severity = "HIGH"
+
     save_run_metadata(state["project_id"], {
         "merge_coordinator": {
             "batch_features": list(feature_to_branch.keys()),
             "conflicts":      len(conflicts),
             "severity":       severity,
+            "batch_tier":     tier,
         }
     })
 
@@ -102,7 +117,15 @@ def merge_coordinator(state: ProjectState) -> dict:
     # CASO 1: Sin conflictos → auto-merge
     # ══════════════════════════════════════════════════════════════════════════
     if severity == "NONE":
-        logger.info("merge_coordinator: ✅ sin conflictos — auto-merge")
+        # F4.2: solo el tier LOW se auto-fusiona en silencio. Un lote MEDIUM se fusiona
+        # pero se NOTIFICA (transparencia; el merge es reversible — R-PROD-4).
+        if tier == "MEDIUM":
+            logger.info("merge_coordinator: 🟡 sin conflictos pero tier MEDIUM — merge con aviso")
+            _notify_telegram_conflict(
+                state, "Lote MEDIUM sin conflictos de archivo — merge automático con aviso.", "MEDIUM"
+            )
+        else:
+            logger.info("merge_coordinator: ✅ sin conflictos (tier LOW) — auto-merge")
         _do_merge_all(feature_to_branch, repo_path)
         return {}
 

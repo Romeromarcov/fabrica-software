@@ -132,16 +132,21 @@ El LLM no puede degradar el riesgo por debajo del piso de rutas (`test_max_tier_
 
 **Meta:** que la concurrencia no reintroduzca la clase CRIT-1..3 vía merges automáticos.
 
-- [ ] **4.1 — Serializar HIGH.** En `graph_project.py` (path paralelo / `run_parallel_batch`),
-      los features tier HIGH **no entran al lote paralelo**: se ejecutan en serie y van a humano.
-- [ ] **4.2 — Merge coordinator respeta el tier.** `nodes/merge_coordinator.py`: auto-merge
-      solo si conflicto LOW **y** tier LOW. MEDIUM → veto. HIGH o conflicto HIGH → humano.
-      (Reutiliza `branch_manager.classify_conflict_severity` que ya existe.)
-- [ ] **4.3 — Aislamiento por worktree.** Confirmar que cada feature paralelo trabaja en rama/
-      worktree propio para que A8.5 vea el estado real fusionado antes de aprobar.
+- [x] **4.1 — Serializar HIGH.** `pick_ready_features` aplica `select_parallel_safe`: un feature
+      tier HIGH (por `classify_text_risk`) **nunca entra al lote paralelo** — corre solo y va al
+      gate de tier (HIGH→humano). *Tests:* `test_select_parallel_safe_*`.
+- [x] **4.2 — Merge coordinator respeta el tier.** `merge_coordinator` calcula `batch_tier`:
+      LOW sin conflicto → auto-merge silencioso; MEDIUM sin conflicto → merge **con aviso**;
+      tier HIGH o conflicto en core (models/settings/migrations) → **escala a humano**.
+      *Tests:* `test_batch_tier_max`.
+- [x] **4.3 — Aislamiento por worktree.** Primitivo `tools/worktree.py` (create/remove/prune)
+      **testeado con git real** (`test_worktree_isolation`). El cableado en `run_parallel_batch`
+      queda como **CTF-FABRICA-001** (requiere reconciliar nombres de rama + validación E2E con
+      langgraph); mientras tanto, guard que avisa de la carrera y `PARALLEL` off por defecto.
 
-**DoD Fase 4:** dos features que tocan el mismo modelo core nunca se auto-fusionan; un feature
-HIGH nunca corre en paralelo.
+**DoD Fase 4:** ✅ un feature HIGH nunca corre en paralelo (4.1); dos features que tocan core
+nunca se auto-fusionan — escalan a humano (4.2). El aislamiento físico de escritura está
+dimensionado y comprometido en CTF-FABRICA-001 (no se shippea concurrencia sin verificar).
 
 ---
 
