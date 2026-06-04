@@ -15,8 +15,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get update && apt-get install -y gh \
     && rm -rf /var/lib/apt/lists/*
 
-# ── OpenClaw CLI (necesario para invocar agentes como subprocess) ─────────────
-RUN npm install -g openclaw@latest
+# ── OpenClaw CLI (OPCIONAL) ───────────────────────────────────────────────────
+# Solo se instala si se construye con --build-arg INSTALL_OPENCLAW=true.
+# Por defecto NO se instala: la fábrica corre en modo directo (APIs de proveedores).
+# Re-habilitar: build con INSTALL_OPENCLAW=true y poner USE_OPENCLAW=true en el .env.
+ARG INSTALL_OPENCLAW=false
+RUN if [ "$INSTALL_OPENCLAW" = "true" ]; then npm install -g openclaw@latest; fi
 
 # ── Herramientas de calidad de código (Sandbox A9) ───────────────────────────
 # TypeScript compiler — para tsc --noEmit en proyectos TS del cliente
