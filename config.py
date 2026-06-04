@@ -138,6 +138,10 @@ GITHUB_OAUTH_CALLBACK = os.getenv(
 )
 GITHUB_OAUTH_ENABLED = bool(GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET)
 
+# PAT para git push + gh pr create + descubrimiento de repos (modo directo, sin OAuth).
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "")
+GITHUB_ACTOR = os.getenv("GITHUB_ACTOR", "")
+
 # ── IX-1: Multi-usuario RBAC ─────────────────────────────────────────────────
 # Si True, todas las rutas web requieren login.
 # El primer arranque con RBAC_ENABLED=true migra el usuario de BasicAuth como owner.
