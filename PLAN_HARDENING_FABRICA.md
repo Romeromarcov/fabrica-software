@@ -1,0 +1,242 @@
+# Plan de Trabajo — Endurecer la Fábrica para entregarle OmniERP
+
+**Objetivo:** dejar la fábrica de agentes en un estado donde se le pueda **entregar OmniERP y
+que lo termine de construir con intervención humana mínima, sin comprometer las garantías**
+(seguridad, cero retrabajo, cero deuda técnica) que exige `PLAN_MAESTRO_UNICO.md`.
+
+**Principio rector:** la intervención humana no se reduce bajando la barra de "terminado",
+sino **subiendo el piso de lo que las máquinas garantizan sin un humano**. El humano pasa de
+*"revisar todos los diffs, tarde"* a *"aprobar planes + revisar solo lo de alto riesgo"*.
+
+**Estado de partida (verificado en código):**
+- Pipeline A0–A11 maduro; A9 corre gates reales (pytest/coverage/tsc/build/eslint).
+- `a1_planificador.py:220` toma `RISK_LEVEL` del **texto del LLM** (auto-declarado) ← a reemplazar.
+- `human_nodes.py:16` `confidence_auto_approve` aprueba con `confidence ≥ 85` auto-evaluado ← a reemplazar.
+- `branch_manager.py:122` `classify_conflict_severity` **ya clasifica riesgo por rutas** ← a reutilizar.
+- `code_sandbox.py` soft-fail: "si no hay herramientas → passed=True" ← a endurecer.
+- A8 SecOps revisa `backend_code`/`frontend_code` del estado (snippet), no el repo ← punto ciego CRIT-1..3.
+
+---
+
+## Mapa de fases
+
+| Fase | Nombre | Cierra qué garantía | Depende de |
+|---|---|---|---|
+| 0 | Preparación y línea base | reproducibilidad | — |
+| 1 | Gates mecánicos duros | "CI verde" deja de ser falsa confianza | 0 |
+| 2 | Capa adversarial a nivel repo (A8.5) | punto ciego CRIT-1..3 | 1 |
+| 3 | Gobierno por riesgo (risk_tier_gate) | review humano solo donde importa | 1 |
+| 4 | Paralelismo seguro | merges de alto riesgo no auto | 3 |
+| 5 | Onboarding OmniERP + reconciliación plan↔código | premisa falsa del plan | 1–4 |
+| 6 | Prueba de aceptación (la fábrica se valida) | que todo lo anterior funciona | 5 |
+| 7 | Entrega y operación | runbook + observabilidad | 6 |
+
+---
+
+## Fase 0 — Preparación y línea base
+
+**Meta:** poder medir y reproducir antes de cambiar nada.
+
+- [x] **0.1** Rama `feature/hardening-garantias` en `fabrica-software`. Todo el trabajo aquí.
+- [x] **0.2** Snapshot de comportamiento actual. `--audit` requiere claves de API (offline aquí);
+      en su lugar se capturó la línea base **reproducible de los gates** (lo que la Fase 1
+      cambia) en `docs/baseline/BASELINE_FASE0.md`.
+- [x] **0.3** Inventario de banderas en `docs/baseline/INVENTARIO_FLAGS.md` (incluye valores
+      objetivo por entorno y las banderas nuevas `STRICT_GATES` / `TENANT_ISOLATION_GATE`).
+- [x] **0.4** Suite `tests/` creada y verde (`conftest.py`, `test_code_sandbox.py`,
+      `test_code_sandbox_hardening.py`, `test_pr_guarantees.py`).
+
+**DoD Fase 0:** ✅ rama creada; línea base guardada; `pytest tests/` corre (15 tests verdes).
+
+---
+
+## Fase 1 — Gates mecánicos duros (capa 2 de la escalera)
+
+**Meta:** que pasar los gates sea **prueba verificable**, no honor system, y que ningún gate
+se salte en silencio.
+
+- [x] **1.1 — Soft-fail → hard-fail.** `run_all_checks` ya no hace `passed=True` sin gates.
+      Se distingue skip `n/a` de skip `tool_missing`; un gate **requerido por stack**
+      (`_required_gates`) cuya herramienta falta cuenta como **FAIL** bajo `STRICT_GATES`.
+      *Archivo:* `tools/code_sandbox.py`. *Test:* `test_strict_gates_converts_missing_required_to_fail`.
+- [x] **1.2 — Gate de aislamiento multi-tenant (R-CODE-1).** `_check_tenant_isolation`:
+      (a) escaneo **AST** que detecta Views con `queryset = Model.objects.all()` sin
+      `get_queryset` ni base tenant-aware, y (b) corre tests `*isolation*` si existen.
+      Gate **duro** (`HARD_GATES`). *Tests:* `scan_*` + e2e smoke (la fuga bloquea el gate).
+- [x] **1.3 — Gate de drift de migraciones.** `_check_makemigrations`
+      (`makemigrations --check --dry-run`) añadido como gate **duro**.
+- [x] **1.4 — `/security-review` como artefacto.** A8 emite `SECURITY_REPORT.md` (con veredicto)
+      vía `save_security_report` y persiste `security_verdict` en metadata.
+      *Archivos:* `nodes/a8_secops.py`, `tools/file_tools.py`.
+- [x] **1.5 — Prohibir auto-atestiguación.** `a1_pr_final._build_verifiable_guarantees` rellena
+      la tabla de garantías desde resultados de gates + veredicto de seguridad (no texto del LLM),
+      y el **auto-merge se bloquea si el gate de cierre no está verde** aunque RISK=LOW.
+
+**DoD Fase 1:** ✅ un feature con `get_queryset` sin filtro tenant **falla el sandbox** sin humano
+(e2e verificado); herramienta requerida ausente = FAIL; reporte de seguridad existe como archivo.
+
+---
+
+## Fase 2 — Capa adversarial a nivel repo (A8.5)
+
+**Meta:** cubrir el punto ciego que produjo CRIT-1..3 (vistas paralelas que filtran datos):
+revisión que ve **el repo completo**, no el snippet generado.
+
+- [ ] **2.1 — Nuevo nodo `nodes/a85_adversarial.py`.** Misión única, adversarial:
+      *"Asume que este cambio rompe el aislamiento multi-tenant o duplica un endpoint
+      inseguro. Pruébalo o refútalo. Por defecto: culpable hasta probar inocencia."*
+      Recibe el **árbol de archivos relevante del repo** (no `backend_code` del estado):
+      todas las views/urls/serializers tocadas **y sus vecinas** (DetailViews paralelas,
+      routers, permisos).
+- [ ] **2.2 — Posición en el grafo.** Insertar A8.5 **después de A8** y **antes de PR Final**,
+      en `graph.py`. Veredicto `ADVERSARIAL CLEAR` / `ADVERSARIAL BLOCK`. Block → vuelve a A6/A8.
+- [ ] **2.3 — Alcance configurable.** A8.5 solo se ejecuta a fondo en tier MEDIUM/HIGH
+      (ver Fase 3) para no encarecer cambios triviales.
+- [ ] **2.4 — Aprendizaje.** Los hallazgos de A8.5 alimentan `learning_memory` para que la
+      lección entre al few-shot de A4/A8 (no repetir la clase de bug).
+
+**DoD Fase 2:** sembrar deliberadamente una `DetailView` paralela sin filtro tenant en un repo
+de prueba → **A8.5 la bloquea** aunque el snippet generado sea correcto.
+
+---
+
+## Fase 3 — Gobierno por riesgo (risk_tier_gate)
+
+**Meta:** sustituir la auto-aprobación por confianza-de-LLM por un **gate determinista por
+radio de impacto**. Es lo que reduce la intervención humana al mínimo *sin* perder garantías.
+
+- [ ] **3.1 — Clasificador por rutas.** Nuevo `tools/risk_classifier.py::classify_change_risk(
+      modified_files) -> "LOW"|"MEDIUM"|"HIGH"`, **reutilizando el patrón de
+      `branch_manager.classify_conflict_severity`**. Reglas:
+      - 🔴 HIGH: `apps/core/`, auth/JWT, `*/migrations/`, dinero/`Decimal`, `contabilidad`,
+        `localizacion*`, cualquier `get_queryset`, settings.
+      - 🟡 MEDIUM: serializers, CRUD de módulo no-core, services compartidos.
+      - 🟢 LOW: tests, docs, i18n, UI copy, funciones puras.
+- [ ] **3.2 — Riesgo desde el diff, no desde el LLM.** En `a1_planificador.py`, el `risk_level`
+      definitivo = **máximo(** riesgo declarado por LLM, `classify_change_risk(git diff
+      --name-only)` **)**. El LLM puede subir el riesgo, nunca bajarlo por debajo del de rutas.
+      *Archivo:* `nodes/a1_planificador.py:217-222`.
+- [ ] **3.3 — Reemplazar `confidence_auto_approve` por `risk_tier_gate`.** En `human_nodes.py`
+      y el router de `graph_project.py`:
+      | Tier | Condición | Acción |
+      |---|---|---|
+      | 🟢 LOW | pasó Fases 1+2 | **auto-merge** (si `AUTO_MERGE_ENABLED`) |
+      | 🟡 MEDIUM | pasó Fases 1+2 | auto + **ventana de veto** (la actual) |
+      | 🔴 HIGH | — | **review humano obligatorio, nunca auto** |
+      La "confianza" deja de ser un número del LLM: se **gana** pasando capas 1–2.
+      *Archivos:* `nodes/human_nodes.py`, `graph_project.py` (conditional edges ~líneas 678/695).
+- [ ] **3.4 — Override de seguridad.** Si A8.5 (Fase 2) reporta cualquier hallazgo de
+      aislamiento/authz → el tier sube a HIGH automáticamente, sin importar las rutas.
+
+**DoD Fase 3:** un cambio que toca `apps/core` + `get_queryset` → **siempre** ruta a humano.
+Un cambio de docs/tests que pasa gates → auto-merge sin humano. Verificado con tests unitarios
+del clasificador en `tests/test_risk_classifier.py`.
+
+---
+
+## Fase 4 — Paralelismo seguro
+
+**Meta:** que la concurrencia no reintroduzca la clase CRIT-1..3 vía merges automáticos.
+
+- [ ] **4.1 — Serializar HIGH.** En `graph_project.py` (path paralelo / `run_parallel_batch`),
+      los features tier HIGH **no entran al lote paralelo**: se ejecutan en serie y van a humano.
+- [ ] **4.2 — Merge coordinator respeta el tier.** `nodes/merge_coordinator.py`: auto-merge
+      solo si conflicto LOW **y** tier LOW. MEDIUM → veto. HIGH o conflicto HIGH → humano.
+      (Reutiliza `branch_manager.classify_conflict_severity` que ya existe.)
+- [ ] **4.3 — Aislamiento por worktree.** Confirmar que cada feature paralelo trabaja en rama/
+      worktree propio para que A8.5 vea el estado real fusionado antes de aprobar.
+
+**DoD Fase 4:** dos features que tocan el mismo modelo core nunca se auto-fusionan; un feature
+HIGH nunca corre en paralelo.
+
+---
+
+## Fase 5 — Onboarding de OmniERP + reconciliación plan↔código
+
+**Meta:** que la fábrica no construya sobre la premisa falsa de "§4.1 TODO COMPLETO".
+
+- [ ] **5.1 — Reconciliador plan↔código.** Extender el modo `--audit` de A0
+      (`nodes/a0_arquitecto.py`, `tools/codebase_auditor.py`) para producir un
+      **`RECONCILIACION.md`**: por cada afirmación ✅ del plan, verifica contra el código y marca
+      `CONFIRMADO | CONTRADICHO | NO-VERIFICABLE`. Los `CONTRADICHO` se vuelven backlog tier HIGH.
+- [ ] **5.2 — Importar la auditoría real.** Usar `tools/session_importer.py` para cargar
+      `docs/auditorias/PLAN_TRABAJO_AUDITORIA_2026-06-01.md` como backlog priorizado.
+      **CRIT-1..3, H-SEC-1..2 entran como primeros items, tier HIGH (humano obligatorio).**
+- [ ] **5.3 — Backlog inicial = cerrar lo crítico, no features nuevas.** A0 emite el grafo de
+      dependencias (Bloque VI) con orden: seguridad crítica → 1.F → resto.
+- [ ] **5.4 — Cablear el repo.** Registrar OmniERP en `config.py` / `project_state.py`:
+      ruta, stack (Django+React), comandos de gate idénticos al CI de OmniERP, `CLAUDE.md`/
+      `DEFINITION_OF_DONE.md` como contexto estático inyectado a cada agente.
+- [ ] **5.5 — Sincronizar el DoD.** El gate de A9/A8/A8.5 debe ser **superconjunto** del
+      `DEFINITION_OF_DONE.md` de OmniERP (mismos 7 pasos, todos mecanizados).
+
+**DoD Fase 5:** `RECONCILIACION.md` generado; CRIT-1..3 en cabeza del backlog como HIGH; la
+fábrica arranca contra OmniERP sin error de configuración.
+
+---
+
+## Fase 6 — Prueba de aceptación (la fábrica se valida a sí misma)
+
+**Meta:** demostrar, no asumir, que la fábrica cumple las garantías antes de soltarla.
+
+- [ ] **6.1 — Caso rojo (debe BLOQUEAR sin humano explícito):** entregar a la fábrica una
+      tarea que reintroduzca el patrón CRIT-1 (DetailView de core sin filtro tenant).
+      **Esperado:** A8.5 bloquea + tier HIGH + ruta a humano. No llega a merge.
+- [ ] **6.2 — Caso verde (debe AUTO-FLUIR):** una tarea LOW (texto i18n / test) que pasa todos
+      los gates. **Esperado:** auto-merge sin intervención.
+- [ ] **6.3 — Caso amarillo:** un CRUD MEDIUM. **Esperado:** ventana de veto, continúa si no hay veto.
+- [ ] **6.4 — Caso de gate ausente:** entorno sin pytest. **Esperado:** FAIL (no skip silencioso).
+- [ ] **6.5 — Cerrar 1 item real HIGH end-to-end** (p. ej. CRIT-1) con humano en el lazo, y
+      **1 item LOW** en auto, midiendo: % de cambios que tocaron a un humano (objetivo ≤ ~30%).
+
+**DoD Fase 6:** los 5 casos pasan como se espera. Métrica de intervención humana medida y
+documentada. Si un caso falla, **se arregla antes de entregar** (no se difiere).
+
+---
+
+## Fase 7 — Entrega y operación
+
+- [ ] **7.1 — Runbook** `docs/RUNBOOK_OMNIERP.md` en la fábrica: cómo arrancar el loop de
+      proyecto, cómo responder vetos/escalaciones por Telegram, cómo pausar.
+- [ ] **7.2 — Observabilidad:** dashboard UI (`ui/server.py`) muestra por feature: tier,
+      gates pasados, veredicto A8.5, modo de aprobación (auto/veto/humano).
+- [ ] **7.3 — Política de reversibilidad:** confirmar que cada merge es revertible (red de
+      seguridad R-PROD-4) — habilita aceptar más autonomía con bajo costo de error.
+- [ ] **7.4 — Arranque supervisado:** primeros N features con humano observando aunque el tier
+      sea LOW/MEDIUM; relajar a medida que la métrica de falsos-OK se mantenga en cero.
+
+**DoD Fase 7 / entrega:** la fábrica corre el backlog de OmniERP de forma autónoma para
+tiers LOW/MEDIUM, escala HIGH al humano, y el founder solo toca ~30% de los cambios (los
+peligrosos) + aprueba planes. Cada avance pasa el DoD mecanizado. Entregada.
+
+---
+
+## Resumen de artefactos a crear/modificar en la fábrica
+
+| Acción | Archivo |
+|---|---|
+| Crear | `tools/risk_classifier.py` |
+| Crear | `nodes/a85_adversarial.py` |
+| Crear | `tests/` (suite de la fábrica) + `tests/test_risk_classifier.py` |
+| Crear | `docs/RUNBOOK_OMNIERP.md` |
+| Modificar | `tools/code_sandbox.py` (hard-fail + gate aislamiento) |
+| Modificar | `nodes/a1_planificador.py` (riesgo desde diff, no LLM) |
+| Modificar | `nodes/human_nodes.py` (`risk_tier_gate` ← `confidence_auto_approve`) |
+| Modificar | `graph.py` + `graph_project.py` (insertar A8.5; routing por tier; serializar HIGH) |
+| Modificar | `nodes/a8_secops.py` (artefacto de reporte) |
+| Modificar | `nodes/merge_coordinator.py` (respetar tier) |
+| Modificar | `nodes/a0_arquitecto.py` + `tools/codebase_auditor.py` (reconciliación) |
+| Modificar | `config.py` (registrar OmniERP + banderas por tier) |
+
+## Lo que NO cambia (se preserva)
+
+- El pipeline A0–A11 y su lógica de aprendizaje/contexto/few-shot.
+- Los gates reales de A9 (se endurecen, no se reemplazan).
+- La ventana de veto y la escalación por Telegram (siguen, ahora gobernadas por tier).
+- `AUTO_MERGE_ENABLED=false` por defecto; auto-merge solo se habilita para tier LOW probado.
+
+---
+
+*Orden de ejecución recomendado: Fase 0 → 1 → 2 → 3 en serie (cada una habilita la siguiente);
+4 y 5 pueden solaparse; 6 es bloqueante de la entrega; 7 cierra. Cada fase pasa su propio DoD
+antes de avanzar — la fábrica debe construirse con la misma disciplina que le vamos a exigir.*

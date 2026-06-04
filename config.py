@@ -126,7 +126,17 @@ MAX_PARALLEL_FEATURES     = int(os.getenv("MAX_PARALLEL_FEATURES", "2"))
 VETO_WINDOW_MINUTES = int(os.getenv("VETO_WINDOW_MINUTES", "30"))
 
 # Auto-merge: si True y risk_level=LOW, el PR se fusiona automáticamente tras crearse.
+# F1.5: además exige que el gate de cierre (sandbox + seguridad) esté verde; si no,
+# el auto-merge se bloquea aunque risk_level sea LOW.
 AUTO_MERGE_ENABLED = os.getenv("AUTO_MERGE_ENABLED", "false").lower() == "true"
+
+# ── Fase 1 (PLAN_HARDENING_FABRICA): endurecimiento de gates ──────────────────
+# STRICT_GATES: si True, una herramienta requerida-por-stack ausente cuenta como
+# FALLO del gate (no skip silencioso). Espejo leído también por tools/code_sandbox.py.
+STRICT_GATES = os.getenv("STRICT_GATES", "true").lower() == "true"
+# TENANT_ISOLATION_GATE: "auto" (activo si el repo destino es Django y usa id_empresa),
+# "true" (forzar), "false" (desactivar). Gate DURO de aislamiento multi-tenant (R-CODE-1).
+TENANT_ISOLATION_GATE = os.getenv("TENANT_ISOLATION_GATE", "auto").lower()
 
 # ── Agente de Noticias (independiente de la Fábrica) ─────────────────────────
 NEWS_AGENT_ENABLED = os.getenv("NEWS_AGENT_ENABLED", "true").lower() == "true"
