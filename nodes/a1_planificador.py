@@ -219,7 +219,18 @@ IMPORTANTE: NO generes código de implementación. Solo el plan.
     _risk_m = re.search(r"RISK_LEVEL:\s*(LOW|MEDIUM|HIGH)", output, re.IGNORECASE)
     confidence_score = int(_conf_m.group(1)) if _conf_m else 70
     confidence_score = max(0, min(100, confidence_score))  # clamp 0-100
-    risk_level = _risk_m.group(1).upper() if _risk_m else "MEDIUM"
+    llm_risk = _risk_m.group(1).upper() if _risk_m else "MEDIUM"
+
+    # F3.2: el riesgo NO lo decide solo el LLM. Se aplica un PISO por rutas/dominios
+    # detectados en el MASTER_PLAN; el LLM puede subir el tier, nunca bajarlo.
+    from tools.risk_classifier import classify_text_risk, max_tier
+    path_risk  = classify_text_risk(output)
+    risk_level = max_tier(llm_risk, path_risk)
+    if risk_level != llm_risk:
+        import logging as _l
+        _l.getLogger(__name__).info(
+            "A1: RISK elevado de %s (LLM) a %s por piso de rutas/dominios", llm_risk, risk_level
+        )
 
     path = save_master_plan(state["feature_id"], output)
     save_run_metadata(state["feature_id"], {
@@ -232,6 +243,8 @@ IMPORTANTE: NO generes código de implementación. Solo el plan.
         "skip_frontend":   skip_frontend,
         "confidence_score": confidence_score,
         "risk_level":      risk_level,
+        "risk_level_llm":  llm_risk,
+        "risk_level_path": path_risk,
         "started_at":      datetime.utcnow().isoformat(),
         "master_plan_path": path,
     })

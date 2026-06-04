@@ -442,20 +442,28 @@ Al final escribe: `✅ CICLO COMPLETADO`
     except Exception as exc:
         logger.exception("Error al crear commit/PR: %s", exc)
 
-    # ── Bloque III: auto-merge si risk=LOW y AUTO_MERGE_ENABLED ──────────────
-    # F1.5: nunca auto-mergear si el gate de cierre (máquina) NO está verde,
-    # aunque RISK_LEVEL sea LOW. La verdad-máquina manda sobre la auto-declaración.
-    if pr_url and AUTO_MERGE_ENABLED and state.get("risk_level") == "LOW" and not gate_all_green:
-        logger.warning(
-            "Auto-merge BLOQUEADO: gate de cierre no verde (sandbox/seguridad). "
-            "PR queda para revisión humana: %s", pr_url
-        )
+    # ── F3.3/F3.4: auto-merge gobernado por TIER recomputado desde el diff ────
+    # El riesgo se recalcula por las rutas REALES tocadas (no la auto-declaración del
+    # LLM; el LLM solo pudo subirlo). Un gate de cierre no verde —que incluye un BLOCK
+    # de A8.5 o de seguridad— fuerza HIGH. Solo tier LOW + gate verde es auto-mergeable.
+    from tools.risk_classifier import classify_change_risk, max_tier
+    final_risk = max_tier(state.get("risk_level", "MEDIUM"), classify_change_risk(files_written))
+    if not gate_all_green:
+        final_risk = "HIGH"
+    save_run_metadata(state["feature_id"], {
+        "risk_level_final": final_risk,
+        "auto_mergeable":   bool(AUTO_MERGE_ENABLED and final_risk == "LOW" and gate_all_green),
+    })
+
+    if pr_url and AUTO_MERGE_ENABLED and not (final_risk == "LOW" and gate_all_green):
+        razon = "gate de cierre no verde" if not gate_all_green else f"tier de riesgo {final_risk} (no LOW)"
+        logger.warning("Auto-merge BLOQUEADO (%s) — revisión humana: %s", razon, pr_url)
         send_message(
-            f"🛑 *Auto-merge bloqueado* — gate de cierre no verde\n"
+            f"🛑 *Auto-merge bloqueado* — {razon}\n"
             f"*Feature:* {state['feature_name']}\n*PR:* {pr_url}\n"
-            f"Requiere revisión humana (sandbox o seguridad fallaron)."
+            f"Requiere revisión humana."
         )
-    elif pr_url and AUTO_MERGE_ENABLED and state.get("risk_level") == "LOW" and gate_all_green:
+    elif pr_url and AUTO_MERGE_ENABLED and final_risk == "LOW" and gate_all_green:
         try:
             import subprocess as _sp
             result = _sp.run(

@@ -106,32 +106,25 @@ correcto; el hallazgo se inyecta a A6 y, si persiste, escala a humano.
 **Meta:** sustituir la auto-aprobación por confianza-de-LLM por un **gate determinista por
 radio de impacto**. Es lo que reduce la intervención humana al mínimo *sin* perder garantías.
 
-- [ ] **3.1 — Clasificador por rutas.** Nuevo `tools/risk_classifier.py::classify_change_risk(
-      modified_files) -> "LOW"|"MEDIUM"|"HIGH"`, **reutilizando el patrón de
-      `branch_manager.classify_conflict_severity`**. Reglas:
-      - 🔴 HIGH: `apps/core/`, auth/JWT, `*/migrations/`, dinero/`Decimal`, `contabilidad`,
-        `localizacion*`, cualquier `get_queryset`, settings.
-      - 🟡 MEDIUM: serializers, CRUD de módulo no-core, services compartidos.
-      - 🟢 LOW: tests, docs, i18n, UI copy, funciones puras.
-- [ ] **3.2 — Riesgo desde el diff, no desde el LLM.** En `a1_planificador.py`, el `risk_level`
-      definitivo = **máximo(** riesgo declarado por LLM, `classify_change_risk(git diff
-      --name-only)` **)**. El LLM puede subir el riesgo, nunca bajarlo por debajo del de rutas.
-      *Archivo:* `nodes/a1_planificador.py:217-222`.
-- [ ] **3.3 — Reemplazar `confidence_auto_approve` por `risk_tier_gate`.** En `human_nodes.py`
-      y el router de `graph_project.py`:
-      | Tier | Condición | Acción |
-      |---|---|---|
-      | 🟢 LOW | pasó Fases 1+2 | **auto-merge** (si `AUTO_MERGE_ENABLED`) |
-      | 🟡 MEDIUM | pasó Fases 1+2 | auto + **ventana de veto** (la actual) |
-      | 🔴 HIGH | — | **review humano obligatorio, nunca auto** |
-      La "confianza" deja de ser un número del LLM: se **gana** pasando capas 1–2.
-      *Archivos:* `nodes/human_nodes.py`, `graph_project.py` (conditional edges ~líneas 678/695).
-- [ ] **3.4 — Override de seguridad.** Si A8.5 (Fase 2) reporta cualquier hallazgo de
-      aislamiento/authz → el tier sube a HIGH automáticamente, sin importar las rutas.
+- [x] **3.1 — Clasificador por rutas.** `tools/risk_classifier.py`:
+      `classify_path`/`classify_change_risk`/`classify_text_risk`/`max_tier`/`tier_at_least`.
+      🔴 HIGH: `apps/core/`, auth/JWT, `*/migrations/`, `models.py`/`settings.py`, `contabilidad`,
+      `localizacion*`. 🟡 MEDIUM: serializers/services/views/api + código sin clasificar.
+      🟢 LOW: tests/docs/i18n/no-código. *Test:* `test_risk_classifier.py` (9).
+- [x] **3.2 — Riesgo desde el diff, no del LLM.** `a1_planificador`:
+      `risk_level = max_tier(LLM, classify_text_risk(master_plan))` — piso por dominios del plan;
+      el LLM solo sube. `a1_pr_final`: recomputa `final_risk` desde `files_written` (diff real).
+      Ambos riesgos quedan en metadata (`risk_level_llm`/`risk_level_path`/`risk_level_final`).
+- [x] **3.3 — Gate por tier.** Gate de arranque (`_route_after_plan`) ya gobernado por el riesgo
+      path-floored (LOW+conf≥85→auto · conf≥60 & ≠HIGH→veto · HIGH→humano). **Auto-merge** (la
+      decisión de autonomía real): solo `final_risk==LOW` **y** `gate_all_green` (capas 1–3
+      superadas). La "confianza" se gana pasando gates, no se declara.
+- [x] **3.4 — Override de seguridad.** En `a1_pr_final`, `gate_all_green=False` (incluye BLOCK de
+      A8.5 o de seguridad) **fuerza `final_risk=HIGH`** → nunca auto-merge, va a humano.
 
-**DoD Fase 3:** un cambio que toca `apps/core` + `get_queryset` → **siempre** ruta a humano.
-Un cambio de docs/tests que pasa gates → auto-merge sin humano. Verificado con tests unitarios
-del clasificador en `tests/test_risk_classifier.py`.
+**DoD Fase 3:** ✅ un cambio que toca `apps/core` → tier **HIGH** (test `test_crit_1_to_3_path_is_high`)
+→ ruta a humano y nunca auto-merge. Un cambio de docs/tests con gates verdes → LOW → auto.
+El LLM no puede degradar el riesgo por debajo del piso de rutas (`test_max_tier_llm_can_only_raise`).
 
 ---
 
