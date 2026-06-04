@@ -1,7 +1,20 @@
-"""Lee y escribe la configuración en el archivo .env del orquestador."""
+"""Lee y escribe la configuración del orquestador.
+
+En la nube (Railway) las variables vienen del entorno inyectado y el archivo de
+config se persiste en el volumen (/data/.env). Precedencia en load():
+  DEFAULTS  <  os.environ (Railway)  <  archivo .env (ediciones guardadas por la UI)
+Así, recién desplegado toma las keys de Railway; si el usuario edita en la UI, eso
+persiste en el volumen y gana.
+"""
+import os
 from pathlib import Path
 
-ENV_PATH = Path(__file__).parent.parent / ".env"
+# /data/.env si existe el volumen (Railway); si no, el .env del repo (local).
+_REPO_ENV = Path(__file__).parent.parent / ".env"
+_VOL = Path("/data")
+ENV_PATH = Path(os.environ.get("CONFIG_ENV_PATH") or (
+    str(_VOL / ".env") if _VOL.is_dir() else str(_REPO_ENV)
+))
 
 DEFAULT_TOPICS = (
     "Inteligencia Artificial,"
@@ -116,6 +129,12 @@ def _mask(key: str, value: str) -> str:
 class ConfigStore:
     def load(self, masked: bool = True) -> dict:
         cfg = dict(DEFAULTS)
+        # Overlay 1: variables de entorno (Railway) para las keys conocidas.
+        for k in DEFAULTS:
+            env_v = os.environ.get(k)
+            if env_v not in (None, ""):
+                cfg[k] = env_v
+        # Overlay 2: archivo .env (ediciones guardadas por la UI) — gana sobre el entorno.
         if ENV_PATH.exists():
             for line in ENV_PATH.read_text(encoding="utf-8").splitlines():
                 line = line.strip()

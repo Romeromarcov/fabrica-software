@@ -4,6 +4,11 @@ import os
 from dotenv import load_dotenv
 
 load_dotenv()
+# Config persistida en el volumen (Railway): si la UI guardó keys en /data/.env,
+# tiene prioridad sobre el .env del repo y sobre el entorno inyectado.
+_VOL_ENV = Path(os.environ.get("CONFIG_ENV_PATH", "/data/.env"))
+if _VOL_ENV.is_file():
+    load_dotenv(_VOL_ENV, override=True)
 
 # ── Rutas de la fábrica ───────────────────────────────────────────────────────
 FABRICA_DIR = Path(__file__).parent
