@@ -67,7 +67,7 @@
   <div class="p-4">
     <div class="d-flex gap-2 mb-3">
       <button class="btn btn-secondary btn-sm" onclick="loadServices()" id="loadServicesBtn">
-        <i class="bi bi-arrow-clockwise me-1"></i> Cargar servicios
+        <i class="bi bi-arrow-clockwise me-1"></i> Recargar proyectos
       </button>
       <div id="servicesSpinner" class="d-none">
         <span class="spinner-border spinner-border-sm text-secondary" role="status"></span>
@@ -131,52 +131,64 @@ let selectedServiceId  = null;
 let currentDeploymentId = null;
 let pollInterval       = null;
 
+// Mejora B — lista TODOS los proyectos de la cuenta Railway enlazada.
 async function loadServices() {
   document.getElementById("loadServicesBtn").disabled = true;
   document.getElementById("servicesSpinner").classList.remove("d-none");
+  const list = document.getElementById("servicesList");
 
   try {
-    const r = await fetch("/api/deploy/railway/services");
-    const d = await r.json();
-
+    const d = await (await fetch("/api/railway/projects")).json();
     if (d.error) {
-      document.getElementById("servicesList").innerHTML =
-        `<div class="col-12"><div class="alert alert-danger py-2" style="font-size:.82rem">${d.error}</div></div>`;
+      list.innerHTML = `<div class="col-12"><div class="alert alert-danger py-2" style="font-size:.82rem">${d.error}</div></div>`;
       return;
     }
-
-    const list = document.getElementById("servicesList");
+    const projects = d.projects || [];
+    if (!projects.length) {
+      list.innerHTML = `<div class="col-12" style="font-size:.8rem;color:var(--text-3)">No se encontraron proyectos en tu cuenta de Railway.</div>`;
+      return;
+    }
     list.innerHTML = "";
+    for (const proj of projects) {
+      const header = document.createElement("div");
+      header.className = "col-12";
+      header.innerHTML = `<div style="font-weight:600;color:var(--text-1);margin:.6rem 0 .3rem">
+        <i class="bi bi-folder2-open me-1" style="color:var(--brand)"></i>${proj.name}
+        <span style="font-size:.7rem;color:var(--text-3)">· ${proj.services.length} servicio(s)</span></div>`;
+      list.appendChild(header);
 
-    if (!d.services || d.services.length === 0) {
-      list.innerHTML = `<div class="col-12" style="font-size:.8rem;color:var(--text-3)">No se encontraron servicios en el proyecto.</div>`;
-      return;
-    }
-
-    for (const svc of d.services) {
-      const dep = svc.latest_deployment || {};
-      const statusClass = "status-" + (dep.status || "UNKNOWN");
-      const col = document.createElement("div");
-      col.className = "col-md-6";
-      col.innerHTML = `
-        <div class="service-card" onclick="selectService('${svc.id}', '${svc.name}', this)">
-          <div class="svc-name"><i class="bi bi-box me-1"></i>${svc.name}</div>
-          <div class="svc-meta">
-            ID: <code>${svc.id.slice(0, 8)}…</code>
-            ${dep.status ? `<span class="status-pill ${statusClass} ms-2">${dep.status}</span>` : ""}
-          </div>
-          ${dep.url ? `<div class="svc-meta mt-1"><a href="${dep.url}" target="_blank" style="color:#a78bfa;font-size:.72rem">${dep.url}</a></div>` : ""}
-        </div>`;
-      list.appendChild(col);
+      if (!proj.services.length) {
+        const empty = document.createElement("div");
+        empty.className = "col-12";
+        empty.innerHTML = `<div style="font-size:.75rem;color:var(--text-3);padding-left:.5rem">(sin servicios)</div>`;
+        list.appendChild(empty);
+        continue;
+      }
+      for (const svc of proj.services) {
+        const statusClass = "status-" + (svc.status || "UNKNOWN");
+        const col = document.createElement("div");
+        col.className = "col-md-6";
+        col.innerHTML = `
+          <div class="service-card" onclick="selectService('${svc.id}', '${svc.name}', this)">
+            <div class="svc-name"><i class="bi bi-box me-1"></i>${svc.name}</div>
+            <div class="svc-meta">
+              <span class="status-pill ${statusClass}">${svc.status || "—"}</span>
+            </div>
+            ${svc.url ? `<div class="svc-meta mt-1"><a href="${svc.url}" target="_blank" style="color:#a78bfa;font-size:.72rem">${svc.url}</a></div>` : ""}
+          </div>`;
+        list.appendChild(col);
+      }
     }
   } catch (e) {
-    document.getElementById("servicesList").innerHTML =
-      `<div class="col-12" style="color:#f87171;font-size:.8rem">Error: ${e.message}</div>`;
+    list.innerHTML = `<div class="col-12" style="color:#f87171;font-size:.8rem">Error: ${e.message}</div>`;
   } finally {
     document.getElementById("loadServicesBtn").disabled = false;
     document.getElementById("servicesSpinner").classList.add("d-none");
   }
 }
+
+// Auto-cargar los proyectos al abrir la página.
+{% if railway_configured %}document.addEventListener("DOMContentLoaded", loadServices);{% endif %}
 
 function selectService(id, name, el) {
   document.querySelectorAll(".service-card").forEach(c => c.classList.remove("selected"));

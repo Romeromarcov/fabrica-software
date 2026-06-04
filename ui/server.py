@@ -1951,7 +1951,8 @@ async def deploy_page(request: Request):
     railway_project_id = cfg.get("RAILWAY_PROJECT_ID", "") or os.getenv("RAILWAY_PROJECT_ID", "")
 
     return templates.TemplateResponse(request, "deploy.html", {
-        "railway_configured": bool(railway_token and railway_project_id),
+        # Con el account token basta para ver TODOS los proyectos (cuenta enlazada).
+        "railway_configured": bool(railway_token),
         "railway_project_id": railway_project_id,
         "repos":              list_repos(),
         "active_page":        "deploy",
@@ -1998,3 +1999,13 @@ async def api_railway_services():
         return JSONResponse(result)
     except Exception as exc:
         return JSONResponse({"error": str(exc)}, status_code=500)
+
+
+@app.get("/api/railway/projects")
+async def api_railway_projects():
+    """Mejora B: lista TODOS los proyectos de la cuenta Railway enlazada + estado."""
+    try:
+        from tools.railway_client import list_projects
+        return JSONResponse(await list_projects())
+    except Exception as exc:
+        return JSONResponse({"error": str(exc), "projects": []}, status_code=200)

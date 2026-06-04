@@ -103,6 +103,32 @@ query DeploymentStatus($deploymentId: String!) {
 }
 """
 
+# Lista TODOS los proyectos de la cuenta + sus servicios + último deploy.
+# Nota: se usa `projects` (no `me`, que está restringido para este tipo de token).
+_Q_ALL_PROJECTS = """
+query AllProjects {
+  projects {
+    edges {
+      node {
+        id
+        name
+        services {
+          edges {
+            node {
+              id
+              name
+              deployments(first: 1) {
+                edges { node { id status staticUrl url createdAt } }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+"""
+
 
 # ── Helpers HTTP ──────────────────────────────────────────────────────────────
 
@@ -145,6 +171,31 @@ async def list_services() -> dict:
         "project_name": project.get("name", ""),
         "services":     services,
     }
+
+
+async def list_projects() -> dict:
+    """Lista TODOS los proyectos de la cuenta con sus servicios y último estado.
+
+    No requiere RAILWAY_PROJECT_ID (la cuenta enlazada ve todo). Returns:
+    {"projects": [{"id","name","services":[{"id","name","status","url"}]}]}
+    """
+    data = await _gql(_Q_ALL_PROJECTS)
+    projects = []
+    for pedge in data.get("projects", {}).get("edges", []):
+        pnode = pedge["node"]
+        services = []
+        for sedge in pnode.get("services", {}).get("edges", []):
+            snode = sedge["node"]
+            deps = snode.get("deployments", {}).get("edges", [])
+            latest = deps[0]["node"] if deps else {}
+            services.append({
+                "id":     snode["id"],
+                "name":   snode["name"],
+                "status": latest.get("status", "—"),
+                "url":    latest.get("staticUrl") or latest.get("url") or "",
+            })
+        projects.append({"id": pnode["id"], "name": pnode["name"], "services": services})
+    return {"projects": projects}
 
 
 async def trigger_deploy(
