@@ -139,10 +139,11 @@ El LLM no puede degradar el riesgo por debajo del piso de rutas (`test_max_tier_
       LOW sin conflicto → auto-merge silencioso; MEDIUM sin conflicto → merge **con aviso**;
       tier HIGH o conflicto en core (models/settings/migrations) → **escala a humano**.
       *Tests:* `test_batch_tier_max`.
-- [x] **4.3 — Aislamiento por worktree.** Primitivo `tools/worktree.py` (create/remove/prune)
-      **testeado con git real** (`test_worktree_isolation`). El cableado en `run_parallel_batch`
-      queda como **CTF-FABRICA-001** (requiere reconciliar nombres de rama + validación E2E con
-      langgraph); mientras tanto, guard que avisa de la carrera y `PARALLEL` off por defecto.
+- [x] **4.3 — Aislamiento por worktree (CABLEADO).** `tools/worktree.py` + nomenclatura de rama
+      unificada (`tools/branch_naming.py`) + `run_parallel_batch._run_one` corre cada feature en
+      su worktree y `merge_coordinator` fusiona+limpia. **E2E git validado**
+      (`test_worktree_wiring.py`: 2 worktrees aislados → merge limpio). Solo resta el sign-off
+      E2E con langgraph antes de activar `PARALLEL` en prod (CTF-FABRICA-001).
 
 **DoD Fase 4:** ✅ un feature HIGH nunca corre en paralelo (4.1); dos features que tocan core
 nunca se auto-fusionan — escalan a humano (4.2). El aislamiento físico de escritura está

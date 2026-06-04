@@ -24,20 +24,28 @@ archivos. Hoy se mitiga con:
 El primitivo de solución ya existe y está testeado: **`tools/worktree.py`**
 (`create_worktree` / `remove_worktree` / `prune_worktrees`).
 
-## Qué falta para cerrar (deuda dimensionada)
+## Estado: WIRING COMPLETO — pendiente solo el sign-off E2E con langgraph
 
-1. **Reconciliar el nombre de rama** entre `a1_pr_final.create_feature_branch`
-   (`feature/YYYYMMDD-slug`) y `merge_coordinator._derive_branch_name`
-   (`feature/<id8>-slug`) — hoy divergen; el merge paralelo depende de que coincidan.
-2. Cablear `run_parallel_batch._run_one` para crear un worktree por feature, correr el
-   pipeline con `repo_path = worktree`, y que `merge_coordinator` fusione esas ramas.
-3. Validar **E2E** con `langgraph` + claves (no disponible en el entorno de desarrollo del
-   hardening), porque toca concurrencia real.
+Resuelto (commit de cierre del wiring):
+1. ✅ **Nombre de rama reconciliado.** `tools/branch_naming.feature_branch_name` es la
+   ÚNICA fuente de verdad; la usan `git_tools.create_feature_branch` (con `feature_id`),
+   `merge_coordinator._derive_branch_name` y el aislamiento por worktree. Ya no divergen.
+2. ✅ **`run_parallel_batch._run_one` cableado:** crea un worktree por feature, corre el
+   pipeline con `repo_path = worktree`, pre-setea `feature_branch` en el state (a1_pr_final
+   commitea ahí, no crea otra rama). Fallback a repo compartido si el worktree falla.
+   `merge_coordinator` fusiona esas ramas y limpia los worktrees (`_cleanup_worktrees`).
+   Bandera: `PARALLEL_WORKTREE_ISOLATION` (default true).
+3. ✅ **Validación E2E a nivel git** (`test_worktree_wiring.py::test_parallel_worktrees_merge_clean`):
+   dos worktrees aislados escriben archivos distintos sin pisarse y ambas ramas mergean
+   limpio a main. `.fabrica_worktrees/` se añade a `.gitignore` automáticamente.
 
-No se cableó en la Fase 4 para **no introducir concurrencia no verificada** (violaría el
-gate "cero deuda nueva sin compromiso fechado"): este CTF es ese compromiso.
+## Lo único que queda (no bloquea el wiring, sí el flag en prod)
+
+- **Sign-off E2E del pipeline completo** con `langgraph` + claves de IA (no disponible en el
+  entorno del hardening). Es una corrida real de 2 features en paralelo de punta a punta.
+  **Hasta ese sign-off, mantener `PARALLEL_FEATURES_ENABLED=false` en producción.**
 
 ## Criterio de cierre
 
-Dos features que escriben archivos distintos corren en paralelo en worktrees separados,
-sin pisarse, y `merge_coordinator` fusiona ambas ramas correctamente — verificado E2E.
+✅ Mecánica git verificada E2E. Cierre final del CTF: una corrida real con langgraph de 2
+features paralelos que terminan mergeados y sin colisión de archivos.

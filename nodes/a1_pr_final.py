@@ -411,7 +411,9 @@ Al final escribe: `✅ CICLO COMPLETADO`
 
     try:
         if not feature_branch:
-            feature_branch = create_feature_branch(state["feature_name"], repo_path)
+            feature_branch = create_feature_branch(
+                state["feature_name"], repo_path, feature_id=state.get("feature_id", "")
+            )
             if not feature_branch:
                 logger.warning("No se pudo crear feature branch — usando rama actual")
                 feature_branch = current_branch(repo_path)

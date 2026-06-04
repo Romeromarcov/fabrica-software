@@ -23,7 +23,7 @@ from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.types import interrupt
 
 from project_state import ProjectState, FeatureTask
-from config import DB_PATH
+from config import DB_PATH, PARALLEL_WORKTREE_ISOLATION
 from tools.file_tools import save_run_metadata, RUNS_DIR
 
 logger = logging.getLogger(__name__)
@@ -422,13 +422,12 @@ def run_parallel_batch(state: ProjectState) -> dict:
     if not indices:
         return {}
 
-    # F4.3: los hilos comparten el mismo working tree del repo destino. Mientras el
-    # aislamiento por worktree no esté cableado (ver docs/ctf/CTF-FABRICA-001.md), dos A10
-    # concurrentes podrían pisarse. tools/worktree.py provee el primitivo; aquí avisamos.
-    if len(indices) > 1:
+    # F4.3 / CTF-FABRICA-001: cada feature paralelo corre en su propio git worktree
+    # (ver _run_one). Si el aislamiento está desactivado, se avisa de la carrera.
+    if len(indices) > 1 and not PARALLEL_WORKTREE_ISOLATION:
         logger.warning(
-            "F4.3: %d features en paralelo comparten working tree (riesgo de carrera en A10). "
-            "Aislamiento por worktree pendiente (CTF-FABRICA-001). Mantener MAX_PARALLEL_FEATURES bajo.",
+            "F4.3: %d features en paralelo con aislamiento por worktree DESACTIVADO "
+            "(riesgo de carrera en A10). Activar PARALLEL_WORKTREE_ISOLATION.",
             len(indices),
         )
 
@@ -438,6 +437,26 @@ def run_parallel_batch(state: ProjectState) -> dict:
         feature    = backlog[idx]
         slug       = feature["name"][:20].replace(" ", "_").lower()
         feature_id = f"{_dt.now().strftime('%Y%m%d_%H%M%S')}_{slug}"
+
+        # CTF-FABRICA-001: aislar cada feature en su propio git worktree para que dos
+        # A10 concurrentes no se pisen los archivos. La rama usa la nomenclatura
+        # compartida con el Merge Coordinator y se pre-setea en el state para que
+        # a1_pr_final commitee en ella (y no cree otra). Fallback: repo compartido.
+        run_repo   = state["repo_path"]
+        pre_branch = ""
+        if PARALLEL_WORKTREE_ISOLATION and len(indices) > 1:
+            try:
+                from tools.worktree import create_worktree
+                from tools.branch_naming import feature_branch_name
+                branch = feature_branch_name(feature_id, feature["name"])
+                wt = create_worktree(state["repo_path"], branch, feature_id)
+                if wt:
+                    run_repo, pre_branch = wt, branch
+                    logger.info("worktree aislado para '%s' → %s", feature["name"], wt)
+                else:
+                    logger.warning("worktree no disponible para '%s' — repo compartido", feature["name"])
+            except Exception as _wt_exc:  # noqa: BLE001
+                logger.warning("worktree falló (%s) — repo compartido", _wt_exc)
 
         a0_spec = (
             f"Nombre: {feature['name']}\n"
@@ -451,7 +470,7 @@ def run_parallel_batch(state: ProjectState) -> dict:
             feature_name=feature["name"],
             mode=feature.get("suggested_mode", "auto"),
             repo_name=state["repo_name"],
-            repo_path=state["repo_path"],
+            repo_path=run_repo,
             project_mode=True,
             project_id=state["project_id"],
         )
@@ -459,6 +478,8 @@ def run_parallel_batch(state: ProjectState) -> dict:
             **feat_state,
             "feature_name":    feature["name"],
             "a0_feature_spec": a0_spec,
+            # rama pre-creada por el worktree → a1_pr_final commitea en ella
+            "feature_branch":  pre_branch,
         }
 
         # Cada hilo compila su propia instancia del grafo

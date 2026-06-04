@@ -119,6 +119,9 @@ VAPID_SUBJECT     = os.getenv("VAPID_SUBJECT",     "mailto:admin@fabrica.local")
 # independientes en paralelo (requiere pipeline estable, error rate < 10%).
 PARALLEL_FEATURES_ENABLED = os.getenv("PARALLEL_FEATURES_ENABLED", "false").lower() == "true"
 MAX_PARALLEL_FEATURES     = int(os.getenv("MAX_PARALLEL_FEATURES", "2"))
+# CTF-FABRICA-001: cada feature paralelo corre en su propio git worktree (checkout aislado)
+# para que dos A10 concurrentes no se pisen. Si falla la creación → fallback a repo compartido.
+PARALLEL_WORKTREE_ISOLATION = os.getenv("PARALLEL_WORKTREE_ISOLATION", "true").lower() == "true"
 
 # ── Bloque III: Reducción de Intervención Humana ──────────────────────────────
 # Ventana de veto: minutos que el Founder tiene para vetar un plan antes de que

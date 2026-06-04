@@ -31,6 +31,19 @@ def worktrees_root(repo_path: str) -> Path:
     return Path(repo_path) / ".fabrica_worktrees"
 
 
+def _ensure_ignored(repo_path: str) -> None:
+    """Garantiza que .fabrica_worktrees/ esté en .gitignore del repo destino."""
+    gi = Path(repo_path) / ".gitignore"
+    entry = ".fabrica_worktrees/"
+    try:
+        existing = gi.read_text(encoding="utf-8") if gi.exists() else ""
+        if entry not in existing:
+            with gi.open("a", encoding="utf-8") as f:
+                f.write(f"\n# Fábrica de Software — worktrees temporales\n{entry}\n")
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def create_worktree(repo_path: str, branch: str, feature_id: str) -> str | None:
     """Crea un worktree nuevo con una rama `branch` para el feature.
 
@@ -43,6 +56,7 @@ def create_worktree(repo_path: str, branch: str, feature_id: str) -> str | None:
     root = worktrees_root(repo_path)
     try:
         root.mkdir(parents=True, exist_ok=True)
+        _ensure_ignored(repo_path)
     except Exception as e:  # noqa: BLE001
         logger.warning("worktree: no se pudo crear %s: %s", root, e)
         return None

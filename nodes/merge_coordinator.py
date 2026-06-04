@@ -34,9 +34,9 @@ logger = logging.getLogger(__name__)
 
 
 def _derive_branch_name(feature_id: str, feature_name: str) -> str:
-    """Construye el nombre de rama con la misma convención que A11/git_tools."""
-    slug = feature_name[:20].replace(" ", "_").lower()
-    return f"feature/{feature_id[:8]}-{slug}"[:50]
+    """Nombre de rama — delega en la fuente de verdad compartida (CTF-FABRICA-001)."""
+    from tools.branch_naming import feature_branch_name
+    return feature_branch_name(feature_id, feature_name)
 
 
 def merge_coordinator(state: ProjectState) -> dict:
@@ -58,6 +58,7 @@ def merge_coordinator(state: ProjectState) -> dict:
 
     # ── Mapear feature → rama ─────────────────────────────────────────────────
     feature_to_branch: dict[str, str] = {}
+    batch_feature_ids: list[str] = []
     for idx in batch_indices:
         f = backlog[idx]
         fid = f.get("feature_id")
@@ -65,6 +66,7 @@ def merge_coordinator(state: ProjectState) -> dict:
             continue
         branch = _derive_branch_name(fid, f["name"])
         feature_to_branch[f["name"]] = branch
+        batch_feature_ids.append(fid)
 
     if not feature_to_branch:
         logger.info("merge_coordinator: sin ramas con feature_id — saltando")
@@ -127,6 +129,7 @@ def merge_coordinator(state: ProjectState) -> dict:
         else:
             logger.info("merge_coordinator: ✅ sin conflictos (tier LOW) — auto-merge")
         _do_merge_all(feature_to_branch, repo_path)
+        _cleanup_worktrees(repo_path, batch_feature_ids)
         return {}
 
     # ══════════════════════════════════════════════════════════════════════════
@@ -277,6 +280,8 @@ Al final escribe EXACTAMENTE una de:
         "merge_results":   merge_results,
     })
 
+    _cleanup_worktrees(repo_path, batch_feature_ids)
+
     return {
         "merge_conflict_resolved": True,
         "cost_entries":            [cost],
@@ -296,6 +301,20 @@ def _do_merge_all(feature_to_branch: dict[str, str], repo_path: str) -> None:
                 "merge_coordinator: ⚠️ auto-merge %s falló: %s",
                 branch, result["output"][:200],
             )
+
+
+def _cleanup_worktrees(repo_path: str, feature_ids: list[str]) -> None:
+    """CTF-FABRICA-001: elimina los worktrees del batch tras mergear (best-effort).
+    Las ramas quedan; solo se quita el checkout temporal."""
+    try:
+        from tools.worktree import worktrees_root, remove_worktree, prune_worktrees
+        for fid in feature_ids:
+            wt = worktrees_root(repo_path) / fid
+            if wt.exists():
+                remove_worktree(repo_path, str(wt))
+        prune_worktrees(repo_path)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("merge_coordinator: limpieza de worktrees falló: %s", exc)
 
 
 def _notify_telegram_conflict(state: ProjectState, report: str, severity: str) -> None:
