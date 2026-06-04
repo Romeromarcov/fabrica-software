@@ -34,6 +34,7 @@ DEFAULTS = {
     "ZHIPU_API_KEY":     "",
     "KIMI_API_KEY":      "",
     "OPENAI_API_KEY":    "",
+    "NVIDIA_API_KEY":    "",
     "LANGCHAIN_API_KEY": "",
     "LANGCHAIN_TRACING_V2": "false",
     # Telegram — compartido por Fábrica y Agente de Noticias
@@ -76,6 +77,8 @@ DEFAULTS = {
     "UI_PASSWORD":   "",          # Basic Auth contraseña
     "GITHUB_TOKEN":  "",          # PAT para git push + gh pr create
     "GITHUB_ACTOR":  "",          # Usuario/org GitHub (para autenticar push)
+    "RAILWAY_TOKEN":      "",     # Account token Railway (Deploy / listar proyectos)
+    "RAILWAY_PROJECT_ID": "",     # Project ID por defecto (opcional)
     # Auditor Periódico de Codebase
     "AUDITOR_ENABLED":    "true",
     "AUDITOR_WEEKDAY":    "0",                   # 0=lunes … 6=domingo
@@ -113,7 +116,9 @@ SENSITIVE = {
     "NEWS_AGENT_API_KEY": ("",        "****"),
     "NEWS_AGENT_TG_TOKEN":("",        "****"),
     "UI_PASSWORD":        ("",        "****"),
-    "GITHUB_TOKEN":       ("ghp_",    "ghp_****"),
+    "GITHUB_TOKEN":       ("",        "****"),
+    "NVIDIA_API_KEY":     ("nvapi-",  "nvapi-****"),
+    "RAILWAY_TOKEN":      ("",        "****"),
 }
 
 

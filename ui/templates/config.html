@@ -101,6 +101,19 @@
 
         <div class="col-md-6">
           <label class="form-label d-flex align-items-center gap-2" style="font-size:.78rem;color:#888">
+            <span class="provider-badge" style="background:#76b90022;color:#76b900;border-color:#76b90055">NVIDIA</span>
+            Nemotron (modelos <code>nvidia/…</code> · <code>nemotron…</code>)
+          </label>
+          <input type="password" name="nvidia_api_key" class="form-control key-input"
+                 value="{{ cfg.get('NVIDIA_API_KEY', '') }}" placeholder="nvapi-…" autocomplete="off">
+          <div class="form-text" style="font-size:.68rem;color:#444">
+            Obtener en <span style="color:#666">build.nvidia.com</span>. Úsalo poniendo un modelo
+            <code>nvidia/nemotron-3-super-120b-a12b</code> en cualquier agente.
+          </div>
+        </div>
+
+        <div class="col-md-6">
+          <label class="form-label d-flex align-items-center gap-2" style="font-size:.78rem;color:#888">
             <span class="provider-badge pb-anthropic" style="background:#ffffff0a;color:#666;border-color:#2a2a3a">LangSmith</span>
             Trazabilidad (opcional)
           </label>
@@ -798,6 +811,31 @@
           <input type="text" name="github_actor" class="form-control"
                  value="{{ cfg.get('GITHUB_ACTOR', '') }}" placeholder="tu-usuario-o-org">
           <div class="form-text" style="font-size:.68rem;color:#444">Para autenticar git push.</div>
+        </div>
+
+        <div class="col-12"><div style="height:1px;background:#2a2a3a;margin:.25rem 0"></div></div>
+
+        <!-- Railway -->
+        <div class="col-12">
+          <div class="mb-1" style="font-size:.73rem;text-transform:uppercase;letter-spacing:.08em;color:#555;font-weight:600">
+            Railway (despliegue / cuenta enlazada)
+          </div>
+        </div>
+        <div class="col-md-8">
+          <label class="form-label" style="font-size:.78rem;color:#888">API Token</label>
+          <input type="password" name="railway_token" class="form-control key-input"
+                 value="{{ cfg.get('RAILWAY_TOKEN', '') }}"
+                 placeholder="railway account token" autocomplete="off">
+          <div class="form-text" style="font-size:.68rem;color:#444">
+            Account token de <span style="color:#666">railway.com → Account Settings → Tokens</span>.
+            Habilita la página Deploy y lista todos tus proyectos.
+          </div>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label" style="font-size:.78rem;color:#888">Project ID (opcional)</label>
+          <input type="text" name="railway_project_id" class="form-control"
+                 value="{{ cfg.get('RAILWAY_PROJECT_ID', '') }}" placeholder="(opcional)">
+          <div class="form-text" style="font-size:.68rem;color:#444">Solo para fijar un proyecto por defecto.</div>
         </div>
 
       </div>

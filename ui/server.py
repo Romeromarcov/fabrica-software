@@ -842,6 +842,7 @@ async def save_config(
     zhipu_api_key:     str = Form(""),
     kimi_api_key:      str = Form(""),
     openai_api_key:    str = Form(""),
+    nvidia_api_key:    str = Form(""),
     langchain_api_key: str = Form(""),
     langchain_tracing: str = Form("false"),
     # Telegram
@@ -879,6 +880,8 @@ async def save_config(
     ui_password:       str = Form(""),
     github_token:      str = Form(""),
     github_actor:      str = Form(""),
+    railway_token:        str = Form(""),
+    railway_project_id:   str = Form(""),
     extra_vars:           str = Form(""),    # KEY=VALUE por línea
     custom_providers_json: str = Form("[]"), # JSON array de proveedores IA custom
 ):
@@ -888,6 +891,7 @@ async def save_config(
         "ZHIPU_API_KEY":      zhipu_api_key,
         "KIMI_API_KEY":       kimi_api_key,
         "OPENAI_API_KEY":     openai_api_key,
+        "NVIDIA_API_KEY":     nvidia_api_key,
         "LANGCHAIN_API_KEY":  langchain_api_key,
         "LANGCHAIN_TRACING_V2": "true" if langchain_tracing == "on" else "false",
         "TELEGRAM_BOT_TOKEN": telegram_bot_token,
@@ -920,6 +924,8 @@ async def save_config(
         "UI_PASSWORD":   ui_password,
         "GITHUB_TOKEN":  github_token,
         "GITHUB_ACTOR":  github_actor,
+        "RAILWAY_TOKEN":      railway_token,
+        "RAILWAY_PROJECT_ID": railway_project_id,
     }
     # Aplicar cambios al scheduler de auditoría si ya está corriendo
     _reschedule_auditor(

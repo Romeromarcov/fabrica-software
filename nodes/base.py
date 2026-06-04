@@ -109,6 +109,7 @@ def _provider(model: str) -> str:
     if m.startswith("glm-") or m.startswith("chatglm"):    return "zhipu"
     if m.startswith("kimi-") or m.startswith("moonshot-"): return "kimi"
     if m.startswith("gpt-") or m.startswith("o1") or m.startswith("o3"): return "openai"
+    if m.startswith("nvidia/") or "nemotron" in m:        return "nvidia"   # build.nvidia.com
     # Custom providers: check if model is listed in any custom provider
     for cp in CUSTOM_PROVIDERS:
         if model in (cp.get("models") or []):
@@ -121,6 +122,7 @@ _PROVIDER_KEY_NAMES = {
     "google": "GOOGLE_API_KEY",
     "zhipu":  "ZHIPU_API_KEY",
     "kimi":   "KIMI_API_KEY",
+    "nvidia": "NVIDIA_API_KEY",
 }
 
 

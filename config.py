@@ -81,6 +81,7 @@ GOOGLE_API_KEY    = os.getenv("GOOGLE_API_KEY",    "")
 ZHIPU_API_KEY     = os.getenv("ZHIPU_API_KEY",     "")
 KIMI_API_KEY      = os.getenv("KIMI_API_KEY",      "")
 OPENAI_API_KEY    = os.getenv("OPENAI_API_KEY",    "")
+NVIDIA_API_KEY    = os.getenv("NVIDIA_API_KEY",    "")   # build.nvidia.com (Nemotron)
 
 # ── Modelo por agente ─────────────────────────────────────────────────────────
 MODEL_A0 = os.getenv("MODEL_A0", "gemini-3.5-flash")   # A0 Arquitecto de Proyecto
@@ -202,6 +203,7 @@ PROVIDER_URLS = {
     "google": "https://generativelanguage.googleapis.com/v1beta/openai/",
     "zhipu":  "https://api.z.ai/api/paas/v4/",
     "kimi":   "https://api.moonshot.ai/v1",
+    "nvidia": "https://integrate.api.nvidia.com/v1",   # Nemotron — OpenAI-compatible
 }
 
 # ── Proveedores IA personalizados (OpenAI-compatible) ─────────────────────────
