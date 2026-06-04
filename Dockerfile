@@ -50,4 +50,5 @@ COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 ENTRYPOINT ["/entrypoint.sh"]
-CMD ["uvicorn", "ui.server:app", "--host", "0.0.0.0", "--port", "7860"]
+# sh -c para que ${PORT} (inyectado por Railway) se expanda; default 7860 local/compose.
+CMD ["sh", "-c", "uvicorn ui.server:app --host 0.0.0.0 --port ${PORT:-7860}"]
