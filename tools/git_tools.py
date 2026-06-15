@@ -5,7 +5,12 @@ import subprocess
 from pathlib import Path
 import logging
 
+from tools.log_sanitizer import install_redaction_filter, redact
+
 logger = logging.getLogger(__name__)
+# Defensa en profundidad: aunque envolvamos cada valor con redact() abajo,
+# instalamos el filtro en el logger del módulo para scrubbing de logs crudos.
+install_redaction_filter(logger)
 
 
 def _run(cmd: list[str], cwd: str | Path, env: dict | None = None) -> tuple[str, str, int]:
@@ -94,13 +99,13 @@ def clone_or_update_repo(
         _run(["git", "remote", "set-url", "origin", auth], dest)
         _, ferr, fcode = _run(["git", "fetch", "origin", "--prune"], dest)
         if fcode != 0:
-            logger.warning("clone_or_update: fetch falló en %s: %s", dest, ferr)
+            logger.warning("clone_or_update: fetch falló en %s: %s", dest, redact(ferr))
             return False
         br = branch or _default_branch(str(dest))
         _run(["git", "checkout", br], dest)
         _, rerr, rcode = _run(["git", "reset", "--hard", f"origin/{br}"], dest)
         if rcode != 0:
-            logger.warning("clone_or_update: reset --hard falló en %s: %s", dest, rerr)
+            logger.warning("clone_or_update: reset --hard falló en %s: %s", dest, redact(rerr))
             return False
         logger.info("clone_or_update: %s actualizado a origin/%s", dest.name, br)
         return True
@@ -113,9 +118,9 @@ def clone_or_update_repo(
     args += [auth, str(dest)]
     _, cerr, ccode = _run(args, str(dest.parent))
     if ccode != 0:
-        logger.error("clone_or_update: clone de %s falló: %s", repo_url, cerr)
+        logger.error("clone_or_update: clone de %s falló: %s", redact(repo_url), redact(cerr))
         return False
-    logger.info("clone_or_update: %s clonado en %s", repo_url, dest)
+    logger.info("clone_or_update: %s clonado en %s", redact(repo_url), dest)
     return True
 
 
@@ -127,7 +132,7 @@ def current_branch(repo_path: str) -> str:
 def create_branch(branch_name: str, repo_path: str) -> bool:
     _, err, code = _run(["git", "checkout", "-b", branch_name], repo_path)
     if code != 0:
-        logger.error("No se pudo crear la rama: %s", err)
+        logger.error("No se pudo crear la rama: %s", redact(err))
     return code == 0
 
 
@@ -158,7 +163,7 @@ def create_feature_branch(feature_name: str, repo_path: str, feature_id: str = "
             if code2 == 0:
                 logger.info("git_tools: checkout de rama existente '%s'", branch_name)
                 return branch_name
-        logger.error("git_tools: no se pudo crear/checkout rama '%s': %s", branch_name, err)
+        logger.error("git_tools: no se pudo crear/checkout rama '%s': %s", branch_name, redact(err))
         return ""
 
     logger.info("git_tools: rama feature creada '%s'", branch_name)
@@ -185,7 +190,7 @@ def stage_files(files: list[str], repo_path: str) -> bool:
 
     _, err, code = _run(["git", "add", "--"] + existing, repo_path)
     if code != 0:
-        logger.error("git add selectivo falló: %s", err)
+        logger.error("git add selectivo falló: %s", redact(err))
     return code == 0
 
 
@@ -197,7 +202,7 @@ def stage_all(repo_path: str) -> bool:
     _ensure_gitignore(repo_path)
     _, err, code = _run(["git", "add", "."], repo_path)
     if code != 0:
-        logger.error("git add falló: %s", err)
+        logger.error("git add falló: %s", redact(err))
     return code == 0
 
 
@@ -216,13 +221,13 @@ def _ensure_gitignore(repo_path: str) -> None:
                 f.write("\n".join(missing) + "\n")
             logger.info("git_tools: añadidos %d patrones sensibles a .gitignore", len(missing))
     except Exception as e:
-        logger.warning("git_tools: no se pudo actualizar .gitignore: %s", e)
+        logger.warning("git_tools: no se pudo actualizar .gitignore: %s", redact(str(e)))
 
 
 def commit(message: str, repo_path: str) -> bool:
     _, err, code = _run(["git", "commit", "-m", message], repo_path)
     if code != 0:
-        logger.error("git commit falló: %s", err)
+        logger.error("git commit falló: %s", redact(err))
     return code == 0
 
 
@@ -239,7 +244,7 @@ def push_branch(branch: str, repo_path: str) -> bool:
         env=gh_env,
     )
     if code != 0:
-        logger.error("git push falló: %s", err)
+        logger.error("git push falló: %s", redact(err))
     return code == 0
 
 
@@ -265,6 +270,6 @@ def create_pr(title: str, body: str, repo_path: str, base: str = "main") -> str:
         env=gh_env,
     )
     if code != 0:
-        logger.error("gh pr create falló: %s", err)
+        logger.error("gh pr create falló: %s", redact(err))
         return f"ERROR: {err}"
     return out  # URL del PR

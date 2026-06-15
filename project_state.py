@@ -16,6 +16,9 @@ class FeatureTask(TypedDict):
     feature_id: Optional[str]
     status: Literal["pending", "running", "completed", "failed", "skipped"]
     evaluation_notes: Optional[str]             # Veredicto del PM Evaluador
+    # A3.4 (blindaje): procedencia y aprobación de features importados
+    source: Optional[str]                       # "imported" si vino de session_importer
+    pending_approval: Optional[bool]            # True = espera aprobación del Founder antes de ejecutarse
 
 
 class Phase(TypedDict):

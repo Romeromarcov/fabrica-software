@@ -33,7 +33,37 @@ from typing import Any
 
 import httpx
 
+import config
+
 logger = logging.getLogger(__name__)
+
+# A1.1 — Bandera para advertir UNA sola vez si la whitelist de admins está vacía
+# (evita spam en logs cuando TELEGRAM_ADMIN_IDS no está configurado).
+_warned_no_whitelist = False
+
+
+def _is_authorized_user(user_id: int | None) -> bool:
+    """
+    A1.1 — Valida que el user_id esté en la whitelist de administradores.
+
+    Se lee `config.TELEGRAM_ADMIN_IDS` dinámicamente (no se enlaza al importar)
+    para que los tests puedan monkeypatchearlo.
+
+    - Whitelist NO vacía → solo se autoriza si user_id está en ella.
+    - Whitelist vacía → compatibilidad hacia atrás (solo chat_id), pero se
+      registra una advertencia UNA vez en logs.
+    """
+    global _warned_no_whitelist
+    admin_ids = config.TELEGRAM_ADMIN_IDS
+    if not admin_ids:
+        if not _warned_no_whitelist:
+            logger.warning(
+                "Telegram: whitelist de admins (TELEGRAM_ADMIN_IDS) NO configurada "
+                "— solo se valida chat_id. Recomendado definirla en producción."
+            )
+            _warned_no_whitelist = True
+        return True
+    return user_id in admin_ids
 
 # ── Tipos de interrupción ─────────────────────────────────────────────────────
 
@@ -763,6 +793,15 @@ class TelegramBotWorker:
             from_chat = str(msg.get("chat", {}).get("id", ""))
             if from_chat != self.chat_id:
                 return
+            # A1.1 — Whitelist de usuarios: aunque el chat_id sea correcto, solo
+            # los user IDs autorizados pueden controlar la fábrica.
+            user_id = msg.get("from", {}).get("id")
+            if not _is_authorized_user(user_id):
+                logger.warning(
+                    "Telegram: usuario %s NO autorizado (chat_id correcto) — update ignorado",
+                    user_id,
+                )
+                return
             text = msg.get("text", "").strip()
             if text.startswith("/"):
                 _handle_command(self.token, self.chat_id, text)
@@ -774,6 +813,16 @@ class TelegramBotWorker:
             if from_chat != self.chat_id:
                 # Responder para quitar el spinner aunque no sea nuestro chat
                 _tg_answer_callback(self.token, cb["id"], "⚠️ Chat no autorizado")
+                return
+            # A1.1 — Whitelist de usuarios también para callbacks de botones inline.
+            user_id = cb.get("from", {}).get("id")
+            if not _is_authorized_user(user_id):
+                logger.warning(
+                    "Telegram: usuario %s NO autorizado (chat_id correcto) — update ignorado",
+                    user_id,
+                )
+                # Responder para quitar el spinner del botón
+                _tg_answer_callback(self.token, cb["id"], "⚠️ Usuario no autorizado")
                 return
             _handle_callback(
                 self.token,

@@ -42,6 +42,9 @@ def get_ready_indices(
     for i, f in enumerate(backlog):
         if f.get("status") != "pending":
             continue
+        # A3.4: features importados sin aprobar no entran al lote (anti prompt-injection).
+        if f.get("pending_approval"):
+            continue
         deps: list[str] = dependency_graph.get(f["name"], f.get("depends_on", []))
         if all(d in completed_names for d in deps):
             ready.append(i)

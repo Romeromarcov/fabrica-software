@@ -35,6 +35,10 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 WORKDIR /app
 
 COPY requirements.txt .
+# A3.2 (pinning): existe requirements.lock (pip-compile, deps transitivas fijadas).
+# Aún NO se instala desde el lock: se generó con Python 3.11 y falta verificarlo en
+# CI bajo python:3.12 (Bloque C: pip-audit). Una vez verificado, cambiar a:
+#   RUN pip install --no-cache-dir -r requirements.lock
 RUN pip install --no-cache-dir -r requirements.txt
 
 # ── App code ──────────────────────────────────────────────────────────────────
@@ -48,6 +52,21 @@ EXPOSE 7860
 # ── Entrypoint ────────────────────────────────────────────────────────────────
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
+
+# ── A3.3: usuario no-root ─────────────────────────────────────────────────────
+# Crear el usuario sin privilegios `fabrica` (uid 10001) y darle propiedad de las
+# rutas que la app escribe en runtime:
+#   /app        → entrypoint reescribe /app/.env (guardia de modelos) y clona repos
+#   /data       → DB (/data/fabrica_state.db) y runs (/data/runs)
+#   /workspace  → WORKSPACES_ROOT: repos destino clonados al arrancar (clone-on-startup)
+#   /home/fabrica → git config --global escribe ~/.gitconfig
+# NOTA: si en producción se monta un volumen sobre /data o /workspace (compose),
+# el host debe darle propiedad/permiso de escritura al uid 10001.
+RUN useradd --create-home --uid 10001 --shell /bin/sh fabrica \
+    && mkdir -p /data/runs /workspace \
+    && chown -R fabrica:fabrica /app /data /workspace
+
+USER fabrica
 
 ENTRYPOINT ["/entrypoint.sh"]
 # sh -c para que ${PORT} (inyectado por Railway) se expanda; default 7860 local/compose.
