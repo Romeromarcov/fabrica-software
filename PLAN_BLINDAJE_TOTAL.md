@@ -47,43 +47,50 @@ interno no exponga secretos ni corrompa estado. **Prerequisito de todo lo demás
 Bloques C–D amplían la superficie de ataque (más tokens, más entornos, más despliegues).
 
 ### Fase A1 — Control de acceso (CRÍTICO)
-- [ ] **A1.1 — Whitelist de usuario en Telegram.** `tools/telegram_bot.py:763` solo compara
-      `chat_id`. Añadir validación de `from_user.id` contra `TELEGRAM_ADMIN_IDS` (env var,
-      lista separada por comas). Loguear intentos rechazados. *Test:* update con `from.id`
-      no autorizado → ignorado y logueado, aunque el `chat_id` coincida.
-- [ ] **A1.2 — Autenticación obligatoria en la UI.** Si `RBAC_ENABLED=false`, activar
-      Basic Auth por defecto (credenciales en env). Sin auth configurada → la UI arranca
-      en modo solo-lectura o no arranca (elegir: no arranca, con mensaje claro).
-      *Test:* `POST /new` sin credenciales → 401.
-- [ ] **A1.3 — Validación de `project_id` (path traversal).** En TODOS los endpoints de
-      `ui/server.py` que componen rutas con `project_id` (líneas ~1063, ~1135, ~1713…):
-      regex `^[a-zA-Z0-9_-]{1,64}$` + `resolve()` verificado bajo `RUNS_DIR`. Helper único
-      `_safe_project_dir(project_id)` reutilizado. *Test:* `project_id="../../.env"` → 403.
-- [ ] **A1.4 — Whitelist de `action` y `repo_name`.** `action` validado contra
-      `{"approve","cancel","vetar"}`; `repo_name` validado contra `list_repos()`.
-      *Test:* valores fuera de whitelist → 400.
+- [x] **A1.1 — Whitelist de usuario en Telegram.** `tools/telegram_bot.py` valida ahora
+      `from.id` (mensajes y callbacks) contra `config.TELEGRAM_ADMIN_IDS` (env var lista
+      separada por comas). Vacío = compat. hacia atrás con advertencia. Intentos rechazados
+      logueados. *Test:* `tests/test_telegram_auth.py` (user no autorizado con chat_id
+      correcto → ignorado y logueado).
+- [x] **A1.2 — Autenticación obligatoria en la UI.** Si no hay NI RBAC NI Basic Auth, la UI
+      **se niega a arrancar** (`_enforce_ui_auth_configured` en el lifespan) salvo
+      `UI_ALLOW_NO_AUTH=true` (solo dev, con advertencia). *Test:* `tests/test_server_security.py`
+      (sin auth → RuntimeError; con RBAC o BasicAuth → ok).
+- [x] **A1.3 — Validación de `project_id`/`feature_id` (path traversal).** Helper único
+      `_safe_run_dir()` en `ui/server.py`: regex `^[A-Za-z0-9_-]{1,64}$` + `resolve()`
+      verificado bajo `RUNS_DIR`, aplicado en TODOS los endpoints (project/feature/quality/
+      import/approve/stream/session/events/intervene); los ids generados se reducen a chars
+      seguros. *Test:* `tests/test_server_security.py` (`../../etc`, `a/b`, absolutos… → 403).
+- [x] **A1.4 — Whitelist de `action` y `repo_name`.** `action` validado contra
+      `{"approve","cancel","vetar","reject","CONTINUAR"}`; `repo_name` validado contra
+      `list_repos()`. *Test:* `tests/test_server_security.py` (fuera de whitelist → 400).
 
 ### Fase A2 — Secretos y logs
-- [ ] **A2.1 — Sanitización de tokens en logs.** Filtro de logging global que enmascara
-      patrones `ghp_…`, `sk-…`, `AIza…`, `\d+:AA…` (Telegram) en todo stdout/stderr
-      capturado de subprocess (especialmente `tools/git_tools.py`). *Test:* comando git
-      que falla con token en la URL → el log muestra `ghp_***`.
-- [ ] **A2.2 — Scanner determinista de secretos como gate duro en A9.** Integrar
-      `gitleaks` (o regex propio equivalente) sobre `files_written` antes del PR. Hallazgo
-      → gate FAIL → A6 con feedback quirúrgico. Deja de depender de que el LLM de A8 lo note.
-      *Test:* A4 genera `API_KEY = "sk-..."` en código → sandbox bloquea.
-- [ ] **A2.3 — CORS explícito** en `ui/server.py` (allowlist de orígenes por env var).
+- [x] **A2.1 — Sanitización de tokens en logs.** `tools/log_sanitizer.py`: `redact()` +
+      `SecretRedactionFilter` (enmascara `ghp_/github_pat_/gho_…`, `sk-/sk-ant-…`, `AIza…`,
+      Telegram `\d+:AA…`, y credenciales en URLs `https://user:secret@host`). Aplicado en
+      todos los logs de `tools/git_tools.py` + filtro instalado. *Test:* `tests/test_log_sanitizer.py`.
+- [x] **A2.2 — Scanner determinista de secretos como gate duro en A9.** `scan_secrets()` en
+      `tools/code_sandbox.py` (regex propio, excluye placeholders) cableado como gate HARD
+      (`SECRET_SCAN_GATE`) sobre `files_written`; hallazgo → FAIL → feedback a A6. *Test:*
+      `tests/test_secret_scan.py` (`API_KEY="sk-ant-..."` real bloquea; placeholder no).
+- [x] **A2.3 — CORS explícito** en `ui/server.py` (allowlist `CORS_ALLOWED_ORIGINS`; sin
+      orígenes → no se añade middleware = sin cruce de orígenes).
 
 ### Fase A3 — Integridad de estado y cadena de suministro
-- [ ] **A3.1 — Escrituras atómicas de JSON.** `tools/file_tools.py:73` y todos los
-      `write_text` de metadata: patrón write-to-temp + `replace()` atómico. *Test:* simular
-      muerte de proceso entre write y rename → el metadata.json original queda intacto.
-- [ ] **A3.2 — Pinear dependencias.** `requirements.lock` generado con pip-compile;
-      Dockerfile instala desde el lock. `pip-audit` como check en CI (Bloque C lo hospeda).
-- [ ] **A3.3 — Dockerfile no-root.** `USER fabrica` + permisos mínimos sobre `/data`.
-- [ ] **A3.4 — Validación de sesiones importadas.** Features que entran por
-      `session_importer` se marcan `source=imported` y **requieren aprobación explícita
-      del Founder** antes de que A0 los procese (mitiga prompt injection vía .md subido).
+- [x] **A3.1 — Escrituras atómicas de JSON.** `atomic_write_text()` reutilizable en
+      `tools/file_tools.py` (temp en el mismo dir + `fsync` + `os.replace`), aplicado a
+      metadata y artefactos del run. *Test:* `tests/test_atomic_write.py` (fallo a mitad de
+      escritura → original intacto; concurrencia → JSON válido).
+- [x] **A3.2 — Pinear dependencias.** `requirements.lock` (pip-compile, deps transitivas
+      fijadas). El Dockerfile documenta el cambio a instalar desde el lock tras verificarlo
+      en CI bajo Python 3.12 (pip-audit en Bloque C).
+- [x] **A3.3 — Dockerfile no-root.** Usuario `fabrica` (uid 10001) + `chown` de
+      `/app /data /workspace`; `USER fabrica` antes del ENTRYPOINT.
+- [x] **A3.4 — Validación de sesiones importadas.** Los features de `session_importer` se
+      marcan `source=imported` + `pending_approval=True` (`IMPORTED_SESSION_REQUIRES_APPROVAL`)
+      y el scheduler (`pick_next_feature` + `get_ready_indices`) los **omite** hasta que el
+      Founder los aprueba (`POST /api/projects/{id}/approve_import`). *Test:* `tests/test_server_security.py`.
 
 **DoD Bloque A:** un tercero con acceso de red a la UI y conocimiento del `chat_id` de
 Telegram **no puede** lanzar features, vetar, aprobar ni leer archivos fuera de `RUNS_DIR`;
