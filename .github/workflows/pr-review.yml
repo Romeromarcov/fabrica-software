@@ -1,0 +1,48 @@
+# PLAN_BLINDAJE_TOTAL — C1: revisor independiente de PR.
+# Segunda opinión con CONTEXTO LIMPIO sobre cada PR de los agentes (sin heredar el
+# master_plan ni el estado del pipeline): evita el sesgo de confirmación de A6–A8.5 y
+# actúa como control si la fábrica estuviera comprometida (corre en infra separada).
+#
+# REQUISITO para activarse: definir el secret ANTHROPIC_API_KEY en el repo. Sin el
+# secret, el job hace skip explícito (no falla en falso). Token de scope mínimo.
+name: PR Independent Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  review:
+    name: Revisor independiente (contexto limpio)
+    runs-on: ubuntu-latest
+    # Solo corre si el secret está configurado (evita fallos en repos sin la clave).
+    if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Guard — requiere ANTHROPIC_API_KEY
+        id: guard
+        run: |
+          if [ -z "${{ secrets.ANTHROPIC_API_KEY }}" ]; then
+            echo "ANTHROPIC_API_KEY no configurado — revisor independiente OMITIDO." >&2
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Revisión independiente del diff
+        if: steps.guard.outputs.enabled == 'true'
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Revisa SOLO el diff + repo: bugs, seguridad, coherencia con el código vecino.
+          # No recibe el master_plan ni el estado del pipeline (contexto limpio).
+          prompt: >
+            Eres un revisor senior independiente. Revisa SOLO el diff de este PR y el
+            código vecino. Busca bugs, vulnerabilidades (fugas cross-tenant, secretos,
+            inyección), y coherencia con el código existente. Comenta inline y emite un
+            veredicto APPROVE o REQUEST_CHANGES. No asumas que el plan es correcto.

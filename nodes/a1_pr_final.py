@@ -448,22 +448,34 @@ Al final escribe: `✅ CICLO COMPLETADO`
     # El riesgo se recalcula por las rutas REALES tocadas (no la auto-declaración del
     # LLM; el LLM solo pudo subirlo). Un gate de cierre no verde —que incluye un BLOCK
     # de A8.5 o de seguridad— fuerza HIGH. Solo tier LOW + gate verde es auto-mergeable.
-    from tools.risk_classifier import final_risk_for_merge
+    from tools.risk_classifier import final_risk_for_merge, is_auto_mergeable
     final_risk = final_risk_for_merge(files_written, state.get("risk_level", "MEDIUM"), gate_all_green)
+    # C3: el revisor independiente (GitHub Action fuera de este pipeline) también debe
+    # estar verde. Sin confirmación explícita en el state → conservadoramente DENEGADO.
+    independent_review_passed = bool(state.get("independent_review_passed", False))
+    auto_mergeable = is_auto_mergeable(
+        files_written, state.get("risk_level", "MEDIUM"), gate_all_green, AUTO_MERGE_ENABLED,
+        independent_review_passed=independent_review_passed,
+    )
     save_run_metadata(state["feature_id"], {
         "risk_level_final": final_risk,
-        "auto_mergeable":   bool(AUTO_MERGE_ENABLED and final_risk == "LOW" and gate_all_green),
+        "auto_mergeable":   auto_mergeable,
     })
 
-    if pr_url and AUTO_MERGE_ENABLED and not (final_risk == "LOW" and gate_all_green):
-        razon = "gate de cierre no verde" if not gate_all_green else f"tier de riesgo {final_risk} (no LOW)"
+    if pr_url and AUTO_MERGE_ENABLED and not auto_mergeable:
+        if not gate_all_green:
+            razon = "gate de cierre no verde"
+        elif final_risk != "LOW":
+            razon = f"tier de riesgo {final_risk} (no LOW)"
+        else:
+            razon = "revisor independiente no verde (o sin confirmar)"
         logger.warning("Auto-merge BLOQUEADO (%s) — revisión humana: %s", razon, pr_url)
         send_message(
             f"🛑 *Auto-merge bloqueado* — {razon}\n"
             f"*Feature:* {state['feature_name']}\n*PR:* {pr_url}\n"
             f"Requiere revisión humana."
         )
-    elif pr_url and AUTO_MERGE_ENABLED and final_risk == "LOW" and gate_all_green:
+    elif pr_url and AUTO_MERGE_ENABLED and auto_mergeable:
         try:
             import subprocess as _sp
             result = _sp.run(

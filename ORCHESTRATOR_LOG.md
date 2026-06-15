@@ -44,3 +44,16 @@ LOCAL tests: 148 passed (was 133; +15). Lint limpio (1 F-error en graph.py es pr
 Bloque B status: A1/B1.1/B1.2/B2.2/B2.3/B3.1/B3.2/B3.3 DONE. B2.1 (Postgres efímero) y
   B2.4 (smoke HTTP) DIFERIDOS a Bloque D (requieren Docker/app viva — sin infra en el sandbox).
 RAILWAY: no verificado. CI: sin runner → gate = suite local (148 green).
+
+2026-06-15T14:20Z ✅ MILESTONE: PLAN_BLINDAJE_TOTAL — Bloque C (revisor independiente + CI)
+Branch: feature/20260615-blindaje-bloque-c → PR a main
+C1 .github/workflows/pr-review.yml (revisor independiente, gated por ANTHROPIC_API_KEY).
+C3 is_auto_mergeable exige check independiente verde (independent_review_passed); a1_pr_final
+   lo lee de state (deny conservador). Flag INDEPENDENT_REVIEW_REQUIRED. AUTO_MERGE sigue false.
+C4 learning_memory.record_missed_by_pipeline (tag missed_by_pipeline).
+C5 .github/workflows/ci.yml (pytest bloqueante + pip-audit + gitleaks).
+LOCAL tests: 157 passed (was 148; +9). YAML de workflows validado.
+PENDIENTE/ESCALADO:
+  - C2 (branch protection) → acción HUMANA: settings de admin del repo en GitHub, no código.
+  - C1/C5 ejecutables solo en GitHub Actions real (no hay runner en este contenedor).
+RAILWAY: no verificado. CI: sin runner local → gate = suite local (157 green).

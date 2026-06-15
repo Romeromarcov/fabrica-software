@@ -108,6 +108,11 @@ class FabricaState(TypedDict):
     adversarial_report: Optional[str]  # Resumen de hallazgos adversariales
     adversarial_iterations: int        # Iteraciones del ciclo A8.5→A6 (máx MAX_ADVERSARIAL_ITER)
 
+    # ── Bloque C (PLAN_BLINDAJE_TOTAL): condición de auto-merge ampliada ─────────
+    # True solo cuando el revisor independiente (GitHub Action fuera del pipeline)
+    # confirmó verde. Por defecto False → sin confirmación, el auto-merge se deniega.
+    independent_review_passed: bool
+
     # ── Control interno ───────────────────────────────────────────────────────
     current_agent: str
     # operator.add permite que múltiples nodos appendeen a esta lista sin conflictos
@@ -177,6 +182,7 @@ def initial_state(
         adversarial_clear=True,
         adversarial_report=None,
         adversarial_iterations=0,
+        independent_review_passed=False,
         current_agent="inicio",
         errors=[],
         cost_entries=[],
