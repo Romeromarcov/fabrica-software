@@ -138,7 +138,7 @@ def test_api_metrics_empty_runs_dir(tmp_path, monkeypatch):
 
 # ── E1.3 — /healthz ────────────────────────────────────────────────────────────
 
-def test_healthz_ok_with_provider_key_and_git(monkeypatch):
+def test_healthz_ok_with_provider_key_and_git(monkeypatch, tmp_path):
     import ui.server as srv
     # Forzar presencia de una key de proveedor a nivel del módulo config
     monkeypatch.setattr("config.ANTHROPIC_API_KEY", "sk-test", raising=False)
@@ -148,6 +148,9 @@ def test_healthz_ok_with_provider_key_and_git(monkeypatch):
     monkeypatch.setattr("config.KIMI_API_KEY", "", raising=False)
     monkeypatch.setattr("config.CUSTOM_PROVIDERS", [], raising=False)
     monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/git")
+    # Despliegue nuevo: el dir padre del DB NO existe aún → healthz debe crearlo y
+    # reportar "ok" (no "degraded"). Reproduce el escenario que falló en CI.
+    monkeypatch.setattr(srv, "DB_PATH", tmp_path / "data" / "fabrica_state.db")
 
     resp = asyncio.run(srv.healthz())
     payload = json.loads(resp.body)

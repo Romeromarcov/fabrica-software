@@ -875,15 +875,18 @@ async def healthz():
 
     checks: dict[str, bool] = {}
 
-    # (a) DB / SqliteSaver alcanzable
+    # (a) DB / SqliteSaver alcanzable. En un despliegue nuevo el dir `data/` aún no
+    # existe: eso NO es "degradado" (la app lo crea de forma perezosa). Aseguramos el
+    # dir padre (idempotente) y validamos que sqlite puede operar sobre la ruta.
     db_ok = False
     try:
         parent = DB_PATH.parent
-        if parent.exists() or parent == Path("."):
-            # Abrir una conexión efímera valida que sqlite puede operar sobre la ruta.
-            conn = _sqlite3.connect(str(DB_PATH))
-            conn.close()
-            db_ok = True
+        if parent != Path("."):
+            parent.mkdir(parents=True, exist_ok=True)
+        # Abrir una conexión efímera valida que sqlite puede operar sobre la ruta.
+        conn = _sqlite3.connect(str(DB_PATH))
+        conn.close()
+        db_ok = True
     except (OSError, _sqlite3.Error):
         db_ok = False
     checks["db"] = db_ok
