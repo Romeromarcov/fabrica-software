@@ -158,21 +158,25 @@ sin heredar el `master_plan` ni el estado del pipeline (evita el sesgo de confir
 estructural de A6–A8.5). Corre en infraestructura separada (GitHub Actions) con token
 propio de scope mínimo: también funciona como control si la fábrica está comprometida.
 
-- [ ] **C1 — GitHub Action de revisión.** Workflow `pr-review.yml` con `claude-code-action`
-      (o script propio vía API) disparado en `pull_request`. Revisa SOLO el diff + repo:
-      bugs, seguridad, coherencia con el código vecino. Comenta inline y emite check.
-- [ ] **C2 — Branch protection.** El check del revisor es **requisito de merge** en los
-      repos gestionados. Protege también los caminos que saltan gates internos (lightning,
-      PRs manuales).
-- [ ] **C3 — Condición de auto-merge ampliada.** Bloque III pasa de "gates internos verdes"
-      a "gates internos verdes **Y** check independiente verde". Dos sistemas con contextos
-      distintos de acuerdo = confianza real para merge sin humano.
-- [ ] **C4 — Feedback al aprendizaje.** Si el revisor independiente encuentra algo que
-      A6–A8.5 dejaron pasar → esa discrepancia se registra en `learning_memory` con tag
-      `missed_by_pipeline` (la lección más valiosa posible) y aparece en el reporte de
-      gobernanza del feature.
-- [ ] **C5 — CI básico de la fábrica misma.** En el mismo workflow del repo fabrica-software:
-      `pytest tests/` + `pip-audit` + gitleaks en cada push (hoy no hay CI).
+- [x] **C1 — GitHub Action de revisión.** `.github/workflows/pr-review.yml` (revisor con
+      contexto limpio vía `anthropics/claude-code-action`, disparado en `pull_request`,
+      gated por el secret `ANTHROPIC_API_KEY`; sin secret hace skip explícito). *Test:*
+      `tests/test_ci_workflows.py`. ⚠️ Requiere runner de GitHub Actions + secret para
+      activarse (no ejecutable en el contenedor de la fábrica; YAML validado).
+- [ ] **C2 — Branch protection.** ⏸ REQUIERE acción humana: es ajuste de *settings* del repo
+      en GitHub (admin), no código. Configurar el check del revisor (y CI) como requisito de
+      merge en `main`. Pendiente de sign-off humano con permisos de admin.
+- [x] **C3 — Condición de auto-merge ampliada.** `is_auto_mergeable(..., independent_review_passed)`
+      exige además el check independiente verde; `a1_pr_final` lo lee de `state` (deny
+      conservador si no hay confirmación). Flag `INDEPENDENT_REVIEW_REQUIRED`. *Test:*
+      `tests/test_independent_review.py`. (`AUTO_MERGE_ENABLED` sigue en false.)
+- [x] **C4 — Feedback al aprendizaje.** `learning_memory.record_missed_by_pipeline()` registra
+      bajo tag `missed_by_pipeline` lo que el revisor independiente detecta y los gates
+      internos dejaron pasar. *Test:* `tests/test_independent_review.py`.
+- [x] **C5 — CI básico de la fábrica misma.** `.github/workflows/ci.yml`: `pytest` (bloqueante)
+      + `pip-audit` (consultivo) + `gitleaks` en cada push/PR. *Test:* `tests/test_ci_workflows.py`.
+      ⚠️ No hay runner de Actions en el contenedor de ejecución de la fábrica → el CI corre en
+      GitHub real; aquí se valida el YAML y que `pytest` pasa en local (157 verde).
 
 **DoD Bloque C:** ningún PR de agentes puede mergearse sin el check verde del revisor
 independiente; existe al menos un caso registrado en tests donde el revisor bloquea un

@@ -173,6 +173,13 @@ VETO_WINDOW_MINUTES = int(os.getenv("VETO_WINDOW_MINUTES", "30"))
 # el auto-merge se bloquea aunque risk_level sea LOW.
 AUTO_MERGE_ENABLED = os.getenv("AUTO_MERGE_ENABLED", "false").lower() == "true"
 
+# ── Bloque C (PLAN_BLINDAJE_TOTAL): condición de auto-merge ampliada ───────────
+# C3: el revisor independiente (una GitHub Action que corre FUERA de este pipeline)
+# también debe estar verde antes del auto-merge. Esta flag documenta y expone ese
+# requisito para que el workflow de CI y a1_pr_final puedan consultarlo. El gate real
+# se aplica vía is_auto_mergeable(independent_review_passed=...). Default seguro: true.
+INDEPENDENT_REVIEW_REQUIRED = os.getenv("INDEPENDENT_REVIEW_REQUIRED", "true").lower() == "true"
+
 # ── Fase 1 (PLAN_HARDENING_FABRICA): endurecimiento de gates ──────────────────
 # STRICT_GATES: si True, una herramienta requerida-por-stack ausente cuenta como
 # FALLO del gate (no skip silencioso). Espejo leído también por tools/code_sandbox.py.

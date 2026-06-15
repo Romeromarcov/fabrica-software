@@ -168,7 +168,23 @@ def final_risk_for_merge(files_written: list[str], base_risk: str, gate_all_gree
 
 
 def is_auto_mergeable(files_written: list[str], base_risk: str,
-                      gate_all_green: bool, auto_merge_enabled: bool) -> bool:
-    """Solo tier LOW + gate verde + flag activo es auto-mergeable."""
+                      gate_all_green: bool, auto_merge_enabled: bool,
+                      *, independent_review_passed: bool = True) -> bool:
+    """Solo tier LOW + gate verde + flag activo + revisor independiente verde es
+    auto-mergeable (C3).
+
+    Auto-merge se permite SOLO si:
+        auto_merge_enabled AND fr == "LOW" AND gate_all_green AND independent_review_passed
+
+    `independent_review_passed` (keyword-only, default True para compatibilidad con
+    los call sites/tests existentes que pasan 4 args posicionales) refleja el estado
+    del revisor independiente (una GitHub Action que corre fuera de este pipeline).
+    Si el pipeline NO tiene confirmación de que el revisor independiente pasó, el
+    llamador debe pasar False, y el auto-merge queda conservadoramente DENEGADO."""
     fr = final_risk_for_merge(files_written, base_risk, gate_all_green)
-    return bool(auto_merge_enabled and fr == "LOW" and gate_all_green)
+    return bool(
+        auto_merge_enabled
+        and fr == "LOW"
+        and gate_all_green
+        and independent_review_passed
+    )

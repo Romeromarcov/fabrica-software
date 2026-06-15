@@ -32,6 +32,9 @@ CATEGORY_FRONTEND = "Frontend"
 CATEGORY_SECURITY = "Seguridad"
 CATEGORY_DB       = "Base de Datos"
 CATEGORY_TESTS    = "Tests"
+# C4: hallazgos que el revisor INDEPENDIENTE detectó y los gates internos (A6–A8.5)
+# dejaron pasar. Es la lección más valiosa: marca un punto ciego real del pipeline.
+CATEGORY_MISSED   = "missed_by_pipeline"
 
 
 # ── Patrones de regex para extraer bugs de los reportes ──────────────────────
@@ -199,6 +202,69 @@ def append_to_lessons(repo_path: str, patterns: list[dict]) -> bool:
     except Exception as exc:
         logger.error("LearningMemory: error al escribir LESSONS_LEARNED: %s", exc)
         return False
+
+
+def record_missed_by_pipeline(repo_path: str, finding: str, feature_name: str = "") -> None:
+    """
+    C4 — Feedback al aprendizaje: registra un hallazgo que el revisor INDEPENDIENTE
+    detectó y que los gates internos (A6–A8.5) dejaron pasar.
+
+    Es la lección más valiosa del sistema: cada entrada marca un punto ciego real del
+    pipeline. Se anexa a `agents/LESSONS_LEARNED.md` bajo la categoría
+    `### missed_by_pipeline`, con el mismo formato `- [date | feature | tag | sev]`
+    que el resto de lecciones, de modo que `load_lessons()` lo inyecte en el contexto
+    y `recurring_error_patterns()` lo cuente por categoría.
+
+    Defensivo: crea archivo/directorio si faltan; no usa except desnudo (captura OSError).
+    Escritor con efecto lateral (como `append_to_lessons`); no retorna nada.
+    """
+    finding = (finding or "").strip()
+    if not finding or not repo_path:
+        return
+
+    lessons_path = Path(repo_path) / LESSONS_FILE
+
+    # Crear el directorio si falta (defensivo, sin except desnudo)
+    try:
+        lessons_path.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        logger.error("LearningMemory: no se pudo crear el dir de LESSONS_LEARNED: %s", exc)
+        return
+
+    existing = ""
+    if lessons_path.exists():
+        try:
+            existing = lessons_path.read_text(encoding="utf-8")
+        except OSError:
+            existing = ""
+
+    date  = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    entry = (
+        f"- [{date} | {feature_name} | MISSED | CRÍTICA] {finding}"
+    )
+
+    now   = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    block = [f"\n<!-- actualizado: {now} -->", f"\n### {CATEGORY_MISSED}", entry]
+
+    if not existing.strip():
+        header = (
+            "# Lessons Learned\n\n"
+            "> Generado automáticamente por la Fábrica de Software.\n"
+            "> Cada agente que escribe código recibe este documento al inicio.\n"
+            "> **No editar manualmente** — se actualiza tras cada feature.\n"
+        )
+        content = header + "\n".join(block) + "\n"
+    else:
+        content = existing.rstrip() + "\n" + "\n".join(block) + "\n"
+
+    try:
+        lessons_path.write_text(content, encoding="utf-8")
+        logger.info(
+            "LearningMemory: hallazgo missed_by_pipeline registrado en %s (feature=%s)",
+            lessons_path, feature_name,
+        )
+    except OSError as exc:
+        logger.error("LearningMemory: error al escribir missed_by_pipeline: %s", exc)
 
 
 def load_lessons(repo_path: str, max_entries: int = MAX_LESSONS_IN_CONTEXT) -> str:

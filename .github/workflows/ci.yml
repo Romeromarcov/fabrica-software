@@ -1,0 +1,48 @@
+# PLAN_BLINDAJE_TOTAL — C5: CI básico de la fábrica misma.
+# Corre en cada push/PR: tests (bloqueante) + pip-audit (consultivo) + gitleaks (secretos).
+# Nota: el linter de todo el repo NO es bloqueante aún (hay deuda de lint pre-existente);
+# se endurecerá una vez saldada. Los tests SÍ son la barrera dura.
+name: CI
+
+on:
+  push:
+    branches: [main, "feature/**", "claude/**"]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: pytest + lint (advisory)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install ruff pip-audit
+      - name: pytest (bloqueante)
+        run: pytest tests/ -q
+      - name: ruff (consultivo — no bloquea por deuda pre-existente)
+        run: ruff check . || true
+      - name: pip-audit (consultivo)
+        run: pip-audit -r requirements.txt || true
+
+  gitleaks:
+    name: gitleaks (secretos)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
