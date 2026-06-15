@@ -283,47 +283,136 @@ def pipeline_detenido(state: FabricaState) -> dict:
     from tools.file_tools import save_run_metadata
     from datetime import datetime
 
-    # G9: Rollback de archivos escritos si el pipeline falla
+    # G9 + B3.2: Rollback confiable de archivos escritos si el pipeline falla.
     files_backup: dict = state.get("files_backup", {})
     files_written: list = state.get("files_written", [])
     repo_path = state.get("repo_path", "")
+    feature_id = state["feature_id"]
 
-    if files_backup and repo_path:
-        from pathlib import Path
-        import logging
-        _log = logging.getLogger(__name__)
-        restored = 0
-        for rel_path, original_content in files_backup.items():
-            try:
-                full = Path(repo_path) / rel_path
-                full.write_text(original_content, encoding="utf-8")
-                restored += 1
-            except Exception as exc:
-                _log.warning("rollback: no se pudo restaurar %s — %s", rel_path, exc)
-        # Eliminar archivos NEW (no estaban antes, sin backup)
-        new_files = [f for f in files_written if f not in files_backup]
-        for rel_path in new_files:
-            try:
-                full = Path(repo_path) / rel_path
-                if full.exists():
-                    full.unlink()
-                    restored += 1
-            except Exception as exc:
-                _log.warning("rollback: no se pudo eliminar %s — %s", rel_path, exc)
-        if restored:
-            _log.info("pipeline_detenido: rollback completado — %d archivos restaurados/eliminados", restored)
+    rollback_attempted = bool(files_backup) or bool(files_written)
+    rollback_dirty = False
+    rollback_error = ""
+
+    if rollback_attempted and repo_path:
+        rollback_dirty, rollback_error = _rollback_files(
+            files_written=list(files_written),
+            files_backup=files_backup,
+            repo_path=repo_path,
+            feature_id=feature_id,
+        )
 
     razon = (
         (state.get("errors") or ["Pipeline detenido"])[-1]
         or "Pipeline detenido por decisión del Founder"
     )
-    save_run_metadata(state["feature_id"], {
+    meta = {
         "status":     "detenido",
         "razon":      str(razon)[:200],
         "stopped_at": datetime.utcnow().isoformat(),
-        "rollback":   bool(files_backup),
-    })
-    return {"errors": [f"Pipeline detenido: {str(razon)[:100]}"]}
+        "rollback":   rollback_attempted,
+    }
+    # B3.2: marcador explícito de estado sucio si el rollback no pudo completarse.
+    if rollback_dirty:
+        meta["rollback_dirty"] = True
+        meta["rollback_error"] = rollback_error[:300]
+    save_run_metadata(feature_id, meta)
+
+    return {
+        "errors": [f"Pipeline detenido: {str(razon)[:100]}"],
+        "rollback_dirty": rollback_dirty,
+    }
+
+
+def _rollback_files(
+    files_written: list,
+    files_backup: dict,
+    repo_path: str,
+    feature_id: str,
+) -> tuple[bool, str]:
+    """B3.2: Orquesta el rollback confiable. Devuelve (rollback_dirty, error_msg).
+
+    Estrategia:
+      1) Rollback basado en git (`restore_paths`) para TODOS los archivos tocados:
+         restaura los rastreados a HEAD y elimina los generados nuevos. Con
+         reintentos y backoff exponencial ante fallos transitorios.
+      2) Fallback: si git falla, restaura desde los backups en memoria (G9) y
+         elimina los archivos nuevos manualmente.
+      3) Si AMBAS vías fallan → estado sucio: persistir marcador, log de ERROR
+         y alerta de Telegram (no un warning silencioso).
+    """
+    from pathlib import Path
+    import logging
+    import subprocess
+    from tools.git_tools import restore_paths
+
+    _log = logging.getLogger(__name__)
+
+    # Conjunto completo de rutas tocadas por el pipeline.
+    all_paths: list[str] = list(dict.fromkeys(list(files_written) + list(files_backup.keys())))
+    if not all_paths:
+        return False, ""
+
+    # ── 1) Vía preferente: rollback basado en git ────────────────────────────
+    git_ok = False
+    try:
+        git_ok = restore_paths(all_paths, repo_path)
+    except (subprocess.SubprocessError, OSError) as exc:
+        _log.error("rollback: restore_paths lanzó %s — usando fallback de backups", exc)
+
+    if git_ok:
+        _log.info("pipeline_detenido: rollback git OK — %d ruta(s)", len(all_paths))
+        return False, ""
+
+    # ── 2) Fallback: restaurar desde backups en memoria (G9) ─────────────────
+    _log.warning("rollback: vía git falló — intentando fallback de backups en memoria (G9)")
+    fallback_ok = True
+    fallback_err = ""
+    for rel_path, original_content in files_backup.items():
+        try:
+            full = Path(repo_path) / rel_path
+            full.parent.mkdir(parents=True, exist_ok=True)
+            full.write_text(original_content, encoding="utf-8")
+        except OSError as exc:
+            fallback_ok = False
+            fallback_err = f"restaurar {rel_path}: {exc}"
+            _log.error("rollback: no se pudo restaurar %s — %s", rel_path, exc)
+
+    # Eliminar archivos NEW (no estaban antes, sin backup)
+    new_files = [f for f in files_written if f not in files_backup]
+    for rel_path in new_files:
+        try:
+            full = Path(repo_path) / rel_path
+            if full.exists():
+                full.unlink()
+        except OSError as exc:
+            fallback_ok = False
+            fallback_err = f"eliminar {rel_path}: {exc}"
+            _log.error("rollback: no se pudo eliminar %s — %s", rel_path, exc)
+
+    if fallback_ok:
+        _log.info("pipeline_detenido: rollback completado vía fallback de backups (G9)")
+        return False, ""
+
+    # ── 3) Estado sucio: ni git ni backups lograron restaurar ────────────────
+    error_msg = fallback_err or "rollback git y fallback de backups fallaron"
+    _log.error(
+        "pipeline_detenido: ROLLBACK FALLIDO — repo en estado SUCIO (feature %s): %s",
+        feature_id, error_msg,
+    )
+    # B3.2: alerta NO silenciosa vía Telegram (best-effort; si no está configurado
+    # el marcador en metadata + el log de ERROR son el mínimo garantizado).
+    try:
+        from tools.telegram import send_message
+        send_message(
+            "🚨 *Rollback FALLIDO — repo en estado sucio*\n"
+            f"*Feature:* `{feature_id}`\n"
+            f"*Error:* {error_msg[:300]}\n\n"
+            "Se requiere intervención manual para limpiar el repositorio."
+        )
+    except Exception as exc:  # noqa: BLE001 — best-effort, nunca debe romper el rollback
+        _log.error("rollback: no se pudo enviar alerta de Telegram — %s", exc)
+
+    return True, error_msg
 
 
 # ── Construcción del grafo ────────────────────────────────────────────────────

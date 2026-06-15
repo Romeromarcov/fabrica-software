@@ -1,6 +1,7 @@
 """Operaciones git para el PR Final. El Agente 1 las usa al cerrar el ciclo."""
 import os
 import re
+import time
 import subprocess
 from pathlib import Path
 import logging
@@ -17,6 +18,110 @@ def _run(cmd: list[str], cwd: str | Path, env: dict | None = None) -> tuple[str,
     merged_env = {**os.environ, **(env or {})}
     result = subprocess.run(cmd, cwd=str(cwd), capture_output=True, text=True, env=merged_env)
     return result.stdout.strip(), result.stderr.strip(), result.returncode
+
+
+def _is_tracked(rel_path: str, repo_path: str | Path) -> bool:
+    """B3.2: True si `rel_path` está versionado en HEAD (git lo conoce).
+
+    Usa `git ls-files --error-unmatch` que devuelve código 0 sólo si el archivo
+    está rastreado. Sirve para decidir entre `git restore` (rastreado) y borrado
+    de archivo generado nuevo (no rastreado).
+    """
+    _, _, code = _run(["git", "ls-files", "--error-unmatch", "--", rel_path], repo_path)
+    return code == 0
+
+
+def restore_paths(
+    files: list[str],
+    repo_path: str,
+    attempts: int = 3,
+) -> bool:
+    """B3.2: Rollback confiable basado en git para los archivos indicados.
+
+    Para cada archivo:
+      • Rastreado en HEAD → `git restore --source=HEAD --staged --worktree -- <f>`
+        (revierte staging + working tree al estado del último commit).
+      • No rastreado (archivo generado nuevo) → se elimina del working tree.
+        Se intenta `git clean -f -- <f>`; si no aplica, se borra el archivo en disco.
+
+    SEGURIDAD: sólo se tocan los archivos explícitamente pasados. Nunca se hace
+    `git reset --hard` del árbol completo ni `git clean` de todo el repo.
+
+    Reintentos con backoff exponencial (1s, 2s, 4s…) ante fallos transitorios.
+
+    Devuelve True si TODOS los archivos se restauraron/eliminaron con éxito.
+    """
+    if not files:
+        return True
+
+    # Particionar en rastreados (restore) vs no rastreados (eliminar).
+    tracked: list[str] = []
+    untracked: list[str] = []
+    for f in files:
+        rel = f.replace("\\", "/").lstrip("/")
+        if not rel:
+            continue
+        if _is_tracked(rel, repo_path):
+            tracked.append(rel)
+        else:
+            untracked.append(rel)
+
+    last_err = ""
+    for attempt in range(1, attempts + 1):
+        ok = True
+
+        # 1) Restaurar archivos rastreados al estado de HEAD.
+        if tracked:
+            _, err, code = _run(
+                ["git", "restore", "--source=HEAD", "--staged", "--worktree", "--"]
+                + tracked,
+                repo_path,
+            )
+            if code != 0:
+                ok = False
+                last_err = err or "git restore devolvió código != 0"
+
+        # 2) Eliminar archivos generados nuevos (no rastreados).
+        for rel in untracked:
+            # `git clean -f` sólo elimina archivos no rastreados; acotado a este path.
+            _, cerr, ccode = _run(["git", "clean", "-f", "--", rel], repo_path)
+            full = Path(repo_path) / rel
+            if full.exists():
+                # Fallback: borrar directamente si git clean no lo removió
+                # (p. ej. el path está ignorado por .gitignore → clean lo respeta).
+                try:
+                    full.unlink()
+                except OSError as exc:
+                    ok = False
+                    last_err = f"no se pudo eliminar {rel}: {exc}"
+                else:
+                    if ccode != 0:
+                        logger.debug(
+                            "restore_paths: %s eliminado en disco (git clean: %s)",
+                            rel, redact(cerr),
+                        )
+
+        if ok:
+            logger.info(
+                "restore_paths: rollback git OK — %d restaurado(s), %d eliminado(s)",
+                len(tracked), len(untracked),
+            )
+            return True
+
+        # Fallo: backoff exponencial salvo en el último intento.
+        if attempt < attempts:
+            sleep_s = 2 ** (attempt - 1)  # 1s, 2s, 4s…
+            logger.warning(
+                "restore_paths: intento %d/%d falló (%s) — reintentando en %ds",
+                attempt, attempts, redact(last_err), sleep_s,
+            )
+            time.sleep(sleep_s)
+
+    logger.error(
+        "restore_paths: rollback git FALLÓ tras %d intento(s): %s",
+        attempts, redact(last_err),
+    )
+    return False
 
 
 def _github_env() -> dict[str, str]:
