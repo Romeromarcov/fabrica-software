@@ -20,6 +20,7 @@ from __future__ import annotations
 import ast
 import json
 import os
+import re
 import shutil
 import subprocess
 import logging
@@ -35,7 +36,8 @@ STRICT_GATES = os.getenv("STRICT_GATES", "true").lower() == "true"
 TENANT_ISOLATION_GATE = os.getenv("TENANT_ISOLATION_GATE", "auto").lower()
 
 # Gates DUROS: bloquean el PR aunque sean el único gate ejecutado.
-HARD_GATES = {"tsc", "npm-build", "migrate-check", "makemigrations-check", "tenant-isolation"}
+HARD_GATES = {"tsc", "npm-build", "migrate-check", "makemigrations-check",
+              "tenant-isolation", "secret-scan"}
 
 # Bases de DRF que NO garantizan aislamiento por sí solas (heredar de ellas y
 # exponer un queryset sin get_queryset es la firma del bug CRIT-1..3).
@@ -438,6 +440,176 @@ def _check_tenant_isolation(repo_path: str, stack: dict) -> dict:
     return _result(gate, "tenant-isolation", passed, out)
 
 
+# ── A2.2 — Escáner determinista de secretos (gate DURO) ────────────────────────
+# Regexes precompiladas para tokens conocidos + asignación genérica de alta entropía.
+# Espejo del scanner de A8 (LLM) pero determinista: un secreto hardcodeado FALLA el
+# gate aunque el LLM no lo note.
+
+_SECRET_PATTERNS: list[tuple[str, re.Pattern]] = [
+    ("github-pat-classic", re.compile(r"ghp_[A-Za-z0-9]{30,}")),
+    ("github-pat-fine",    re.compile(r"github_pat_[A-Za-z0-9_]{20,}")),
+    ("github-oauth",       re.compile(r"gh[osur]_[A-Za-z0-9]{30,}")),
+    ("anthropic-key",      re.compile(r"sk-ant-[A-Za-z0-9_\-]{16,}")),
+    ("openai-key",         re.compile(r"sk-[A-Za-z0-9_\-]{16,}")),
+    ("google-api-key",     re.compile(r"AIza[A-Za-z0-9_\-]{30,}")),
+    ("telegram-bot-token", re.compile(r"\d{6,}:AA[\w-]{20,}")),
+]
+
+# Asignación genérica: api_key/secret/token/password = "<≥12 chars>".
+_GENERIC_SECRET = re.compile(
+    r"(?i)(api[_-]?key|secret|token|password)\s*[:=]\s*['\"][^'\"]{12,}['\"]"
+)
+
+# Marcadores que delatan un placeholder (no un secreto real). Se evalúan sobre la
+# línea completa en minúsculas.
+_PLACEHOLDER_MARKERS = (
+    "os.getenv", "os.environ", "process.env", "getenv", "environ[",
+    "...", "xxx", "your-", "your_", "<", "changeme", "change-me",
+    "example", "placeholder", "dummy", "fake", "todo", "redacted",
+)
+
+# Directorios que nunca se escanean.
+_SECRET_SKIP_DIRS = {".git", "node_modules", "__pycache__", ".venv", "venv",
+                     "dist", "build", ".mypy_cache", ".pytest_cache"}
+
+# Extensiones binarias comunes a saltar (defensa extra; igual leemos con errors="replace").
+_BINARY_EXTS = {
+    ".png", ".jpg", ".jpeg", ".gif", ".ico", ".webp", ".svg",
+    ".pdf", ".zip", ".gz", ".tar", ".tgz", ".7z", ".rar",
+    ".pyc", ".pyo", ".so", ".dylib", ".dll", ".exe", ".bin",
+    ".woff", ".woff2", ".ttf", ".eot", ".mp4", ".mp3", ".wav",
+    ".lock",
+}
+
+
+def _mask_secret(s: str) -> str:
+    """Enmascara un secreto: conserva prefijo corto + ***, nunca el valor completo."""
+    s = s.strip()
+    if len(s) <= 8:
+        return s[:2] + "***"
+    return s[:6] + "***"
+
+
+def _looks_like_placeholder(line: str) -> bool:
+    low = line.lower()
+    return any(m in low for m in _PLACEHOLDER_MARKERS)
+
+
+def _iter_scan_files(repo_path: str, cap: int = 2000):
+    """Itera archivos de texto candidatos para el escaneo de secretos."""
+    p = Path(repo_path)
+    seen = 0
+    for f in p.rglob("*"):
+        if not f.is_file():
+            continue
+        parts = {x for x in f.parts}
+        if _SECRET_SKIP_DIRS & parts:
+            continue
+        if f.suffix.lower() in _BINARY_EXTS:
+            continue
+        yield f
+        seen += 1
+        if seen >= cap:
+            return
+
+
+def scan_secrets(repo_path: str, files: list[str] | None = None) -> list[dict]:
+    """Escanea archivos en busca de secretos hardcodeados (determinista).
+
+    Si `files` es None, escanea todos los archivos de texto del repo (saltando
+    dirs no-código y binarios). Si se pasa `files`, escanea solo esos (rutas
+    relativas a repo_path o absolutas).
+
+    Retorna hallazgos: {"file": rel_path, "line": n, "kind": <pattern>,
+    "snippet": <excerpt enmascarado>}. El secreto SIEMPRE va enmascarado.
+    """
+    root = Path(repo_path)
+    findings: list[dict] = []
+
+    if files is not None:
+        candidates: list[Path] = []
+        for f in files:
+            fp = Path(f)
+            if not fp.is_absolute():
+                fp = root / fp
+            if fp.is_file() and fp.suffix.lower() not in _BINARY_EXTS:
+                parts = {x for x in fp.parts}
+                if not (_SECRET_SKIP_DIRS & parts):
+                    candidates.append(fp)
+    else:
+        candidates = list(_iter_scan_files(repo_path))
+
+    for fp in candidates:
+        try:
+            text = fp.read_text(encoding="utf-8", errors="replace")
+        except (OSError, ValueError):
+            continue
+        try:
+            rel = str(fp.relative_to(root))
+        except ValueError:
+            rel = str(fp)
+
+        for lineno, line in enumerate(text.splitlines(), start=1):
+            if len(line) > 4000:
+                line = line[:4000]
+            # 1) Tokens conocidos por patrón fijo.
+            for kind, pat in _SECRET_PATTERNS:
+                m = pat.search(line)
+                if m:
+                    findings.append({
+                        "file": rel,
+                        "line": lineno,
+                        "kind": kind,
+                        "snippet": line.replace(m.group(0), _mask_secret(m.group(0)))[:200],
+                    })
+                    break  # un hallazgo por línea para los patrones de token
+            else:
+                # 2) Asignación genérica de alta entropía (solo si no matcheó token).
+                gm = _GENERIC_SECRET.search(line)
+                if gm and not _looks_like_placeholder(line):
+                    # Enmascara el valor entre comillas.
+                    val_match = re.search(r"['\"][^'\"]{12,}['\"]", line)
+                    masked = line
+                    if val_match:
+                        raw = val_match.group(0)
+                        quote = raw[0]
+                        masked = line.replace(raw, quote + _mask_secret(raw[1:-1]) + quote)
+                    findings.append({
+                        "file": rel,
+                        "line": lineno,
+                        "kind": "generic-assignment",
+                        "snippet": masked[:200],
+                    })
+
+    return findings
+
+
+def _check_secret_scan(repo_path: str, stack: dict, files: list[str] | None = None) -> dict:
+    """A2.2: gate DURO determinista de secretos hardcodeados.
+
+    Guardado por config.SECRET_SCAN_GATE (referencia dinámica para que monkeypatch
+    funcione). Si está desactivado, se salta como `disabled`.
+    """
+    gate = "secret-scan"
+    import config  # referencia dinámica → monkeypatch-friendly
+    if not getattr(config, "SECRET_SCAN_GATE", True):
+        return _skip(gate, "disabled", "Escaneo de secretos desactivado (SECRET_SCAN_GATE=false).",
+                     layer="security")
+
+    findings = scan_secrets(repo_path, files=files)
+    passed = len(findings) == 0
+
+    if findings:
+        lines = [f"{len(findings)} secreto(s) hardcodeado(s) detectado(s) (enmascarados):"]
+        for fd in findings[:30]:
+            lines.append(f"  - {fd['file']}:{fd['line']} · {fd['kind']} · {fd['snippet']}")
+        out = "\n".join(lines)
+    else:
+        out = "Sin secretos hardcodeados detectados."
+
+    return _result(gate, "secret-scan", passed, out, layer="security")
+
+
 # ── Política de gates requeridos por stack (F1.1) ──────────────────────────────
 
 def _required_gates(repo_path: str, stack: dict) -> set[str]:
@@ -459,7 +631,8 @@ def _required_gates(repo_path: str, stack: dict) -> set[str]:
     return req
 
 
-def run_all_checks(repo_path: str, install_deps: bool = True) -> dict:
+def run_all_checks(repo_path: str, install_deps: bool = True,
+                   files: list[str] | None = None) -> dict:
     """
     Ejecuta todos los gates de calidad y seguridad. Retorna dict con resultados,
     resumen legible y lista estructurada de fallos para A6 Refactor.
@@ -483,6 +656,7 @@ def run_all_checks(repo_path: str, install_deps: bool = True) -> dict:
         "python_type":   _check_mypy(repo_path, stack),
         "python_lint":   _check_lint_py(repo_path, stack),
         "tenant_iso":    _check_tenant_isolation(repo_path, stack),  # F1.2
+        "secret_scan":   _check_secret_scan(repo_path, stack, files),  # A2.2
         "js_type":       _check_tsc(repo_path, stack),
         "js_build":      _check_npm_build(repo_path, stack),
         "js_tests":      _check_jest(repo_path, stack),

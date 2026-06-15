@@ -273,6 +273,7 @@ def _start_telegram_bot() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # ── Startup ──────────────────────────────────────────────────────────────
+    _enforce_ui_auth_configured()   # A1.2: aborta si la UI no tiene auth configurada
     scheduler = _start_news_scheduler()
     _start_auditor_scheduler()
     _start_telegram_bot()
@@ -299,12 +300,50 @@ app.add_middleware(SessionMiddleware, secret_key=GITHUB_OAUTH_SECRET, session_co
 # IX-1: RBAC middleware (activo solo si RBAC_ENABLED=true)
 app.add_middleware(_RBACMiddleware)
 
+# A2.3 — CORS explícito (allowlist por env var). Sin orígenes configurados no se
+# añade el middleware (comportamiento por defecto: sin orígenes cruzados permitidos).
+from config import CORS_ALLOWED_ORIGINS as _CORS_ORIGINS
+if _CORS_ORIGINS:
+    from fastapi.middleware.cors import CORSMiddleware
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=_CORS_ORIGINS,
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "PUT", "DELETE"],
+        allow_headers=["*"],
+    )
+    logger.info("UI: CORS habilitado para orígenes %s", _CORS_ORIGINS)
+
 _ui_user = os.getenv("UI_USERNAME", "")
 _ui_pass = os.getenv("UI_PASSWORD", "")
-if _ui_user and _ui_pass and not RBAC_ENABLED:
+_basic_auth_on = bool(_ui_user and _ui_pass and not RBAC_ENABLED)
+if _basic_auth_on:
     # BasicAuth solo si RBAC está desactivado (son mutuamente excluyentes)
     app.add_middleware(_BasicAuthMiddleware, username=_ui_user, password=_ui_pass)
     logger.info("UI: Basic Auth habilitado para usuario '%s'", _ui_user)
+
+# A1.2 — Autenticación obligatoria. Si no hay NI RBAC NI Basic Auth, la UI se niega a
+# ARRANCAR (fallo seguro): una UI sin auth deja el control de la fábrica abierto a quien
+# tenga acceso de red. UI_ALLOW_NO_AUTH=true lo permite solo en desarrollo consciente.
+# La verificación se hace al arrancar el servidor (lifespan), NO al importar el módulo,
+# para que los tests / herramientas puedan importar ui.server sin requerir credenciales.
+from config import UI_ALLOW_NO_AUTH as _UI_ALLOW_NO_AUTH
+
+
+def _enforce_ui_auth_configured() -> None:
+    """A1.2: aborta el arranque del servidor si no hay autenticación configurada."""
+    if not RBAC_ENABLED and not _basic_auth_on and not _UI_ALLOW_NO_AUTH:
+        raise RuntimeError(
+            "Seguridad (A1.2): la UI no tiene autenticación configurada. "
+            "Define RBAC_ENABLED=true, o UI_USERNAME + UI_PASSWORD para Basic Auth. "
+            "Para desarrollo local sin auth (NO recomendado, deja la UI abierta), "
+            "pon UI_ALLOW_NO_AUTH=true."
+        )
+    if not RBAC_ENABLED and not _basic_auth_on and _UI_ALLOW_NO_AUTH:
+        logger.warning(
+            "UI: arrancando SIN autenticación (UI_ALLOW_NO_AUTH=true). "
+            "La UI queda abierta a cualquiera con acceso de red — solo para dev local."
+        )
 
 _UI_DIR = Path(__file__).parent
 _STATIC_DIR = _UI_DIR / "static"
@@ -312,6 +351,51 @@ _STATIC_DIR.mkdir(exist_ok=True)   # BUG-019: crea el dir si no existe
 app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
 templates = Jinja2Templates(directory=_UI_DIR / "templates")
 store = ConfigStore()
+
+# ── Bloque A (blindaje) — helpers de seguridad de entrada ────────────────────
+import re as _re_security
+
+# A1.3 — Validación de project_id / feature_id (anti path-traversal).
+_SAFE_ID_RE = _re_security.compile(r"^[A-Za-z0-9_-]{1,64}$")
+_RUNS_DIR_RESOLVED = RUNS_DIR.resolve()
+
+
+def _safe_run_dir(run_id: str) -> Path:
+    """Devuelve el directorio del run validado y contenido dentro de RUNS_DIR.
+
+    A1.3: regex estricta sobre el id + verificación de que la ruta resuelta cae
+    bajo RUNS_DIR. Bloquea `../`, rutas absolutas y symlinks que escapen del área.
+    Lanza HTTPException 403 si el id es inválido o la ruta se sale del área.
+    """
+    if not run_id or not _SAFE_ID_RE.match(run_id):
+        raise HTTPException(status_code=403, detail="Identificador inválido")
+    candidate = (RUNS_DIR / run_id).resolve()
+    if candidate != _RUNS_DIR_RESOLVED and _RUNS_DIR_RESOLVED not in candidate.parents:
+        raise HTTPException(status_code=403, detail="Ruta fuera del área permitida")
+    return candidate
+
+
+# A1.4 — Whitelist de acciones de aprobación/veto escritas a disco.
+_ALLOWED_ACTIONS = {"approve", "cancel", "vetar", "reject", "CONTINUAR"}
+
+
+def _validate_action(action: str) -> str:
+    """A1.4: rechaza acciones fuera de la whitelist (400)."""
+    if action not in _ALLOWED_ACTIONS:
+        raise HTTPException(status_code=400, detail=f"Acción no permitida: {action!r}")
+    return action
+
+
+def _validate_repo_name(repo_name: str) -> str:
+    """A1.4: el repo debe existir en el workspace (list_repos). Evita que un valor
+    arbitrario componga rutas fuera del workspace vía resolve_repo_path."""
+    name = (repo_name or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Debes seleccionar un repositorio")
+    allowed = {r["name"] for r in list_repos()}
+    if name not in allowed:
+        raise HTTPException(status_code=400, detail=f"Repositorio no reconocido: {name!r}")
+    return name
 
 # ── IX-1: RBAC helpers ───────────────────────────────────────────────────────
 
@@ -1002,17 +1086,18 @@ async def start_project(
 ):
     if not project_name.strip():
         raise HTTPException(400, "El nombre del proyecto no puede estar vacío")
+    repo_name = _validate_repo_name(repo_name)
     _is_audit = audit_mode.lower() in ("true", "1", "on")
     if not _is_audit and not project_brief.strip():
         raise HTTPException(400, "El brief del proyecto no puede estar vacío")
 
-    project_id = (
-        f"proj_{datetime.now().strftime('%Y%m%d_%H%M%S')}_"
-        f"{project_name.strip()[:20].replace(' ', '_').lower()}"
-    )
+    # A1.3: project_id path-safe (slug reducido a [a-z0-9_]).
+    _pslug = _re_security.sub(r"[^a-z0-9_]+", "_", project_name.strip()[:20].lower()).strip("_")
+    project_id = f"proj_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{_pslug or 'proyecto'}"
+    _proj_dir = _safe_run_dir(project_id)
 
     # ── Guardar archivos subidos ANTES de lanzar el proceso ───────────────────
-    uploads_dir = RUNS_DIR / project_id / "uploads"
+    uploads_dir = _proj_dir / "uploads"
     uploaded_names: list[str] = []
 
     for upload in files:
@@ -1034,18 +1119,18 @@ async def start_project(
         uploaded_names.append(safe_name)
 
     # ── Crear directorio del run y lanzar proceso ─────────────────────────────
-    (RUNS_DIR / project_id).mkdir(parents=True, exist_ok=True)
-    (RUNS_DIR / project_id / "process.pid").write_text("starting")
+    _proj_dir.mkdir(parents=True, exist_ok=True)
+    (_proj_dir / "process.pid").write_text("starting")
 
     is_new   = is_new_project.lower() in ("true", "1", "on")
     is_audit = audit_mode.lower() in ("true", "1", "on")
     # brief vacío → placeholder para el audit (A0 lo ignora y usa el código)
-    brief_arg = project_brief.strip() or f"Onboarding de {repo_name.strip()}"
+    brief_arg = project_brief.strip() or f"Onboarding de {repo_name}"
     cmd = [
         sys.executable, "cli.py", "new-project",
         project_name.strip(),
         brief_arg,
-        "--repo", repo_name.strip(),
+        "--repo", repo_name,
     ] + (["--new"] if is_new else []) + (["--audit"] if is_audit else [])
 
     subprocess.Popen(
@@ -1086,10 +1171,14 @@ async def import_sessions(project_id: str, file: UploadFile = File(...)):
         return {"ok": False, "message": "No se detectaron features en el archivo", "count": 0}
 
     # Leer metadata actual del proyecto y añadir los features al backlog
-    meta_path = RUNS_DIR / project_id / "metadata.json"
+    meta_path = _safe_run_dir(project_id) / "metadata.json"
     if not meta_path.exists():
         raise HTTPException(404, f"Proyecto {project_id!r} no encontrado")
 
+    # A3.4 — Los features importados se marcan source=imported y, si la política lo
+    # exige, pending_approval=True para que A0 NO los procese sin aprobación explícita
+    # del Founder (mitiga prompt injection vía .md subido).
+    from config import IMPORTED_SESSION_REQUIRES_APPROVAL
     try:
         meta = json.loads(meta_path.read_text(encoding="utf-8"))
         current_backlog = meta.get("backlog", [])
@@ -1101,24 +1190,58 @@ async def import_sessions(project_id: str, file: UploadFile = File(...)):
                 # VI-1: asegurar campo depends_on en features importados
                 if "depends_on" not in f:
                     f["depends_on"] = []
+                f["source"] = "imported"
+                f["pending_approval"] = bool(IMPORTED_SESSION_REQUIRES_APPROVAL)
                 current_backlog.append(f)
                 added.append(f["name"])
         meta["backlog"] = current_backlog
         meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
-    except Exception as exc:
+    except (OSError, json.JSONDecodeError, KeyError) as exc:
         raise HTTPException(500, f"Error al actualizar el backlog: {exc}")
 
+    needs_approval = bool(IMPORTED_SESSION_REQUIRES_APPROVAL) and added
     return {
         "ok": True,
         "count": len(added),
         "added": added,
-        "message": f"{len(added)} features importados al backlog",
+        "pending_approval": bool(needs_approval),
+        "message": (
+            f"{len(added)} features importados — requieren tu aprobación antes de ejecutarse"
+            if needs_approval else
+            f"{len(added)} features importados al backlog"
+        ),
     }
+
+
+@app.post("/api/projects/{project_id}/approve_import")
+async def approve_imported_features(request: Request, project_id: str, names: str = Form("")):
+    """A3.4: el Founder aprueba features importados (pending_approval=False).
+
+    `names` = lista separada por comas de nombres a aprobar; vacío = aprueba todos
+    los pendientes. Solo afecta features con source=imported.
+    """
+    _require_perm(request, "launch_feature")
+    meta_path = _safe_run_dir(project_id) / "metadata.json"
+    if not meta_path.exists():
+        raise HTTPException(404, f"Proyecto {project_id!r} no encontrado")
+    wanted = {n.strip().lower() for n in names.split(",") if n.strip()}
+    try:
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        approved = []
+        for f in meta.get("backlog", []):
+            if f.get("source") == "imported" and f.get("pending_approval"):
+                if not wanted or f.get("name", "").lower() in wanted:
+                    f["pending_approval"] = False
+                    approved.append(f.get("name", ""))
+        meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+    except (OSError, json.JSONDecodeError) as exc:
+        raise HTTPException(500, f"Error al aprobar features: {exc}")
+    return {"ok": True, "approved": approved, "count": len(approved)}
 
 
 @app.get("/project/{project_id}", response_class=HTMLResponse)
 async def project_detail(request: Request, project_id: str):
-    run_dir = RUNS_DIR / project_id
+    run_dir = _safe_run_dir(project_id)
     if not run_dir.exists():
         raise HTTPException(404, "Proyecto no encontrado")
 
@@ -1135,7 +1258,10 @@ async def project_detail(request: Request, project_id: str):
 @app.post("/project/{project_id}/approve-roadmap")
 async def approve_roadmap(project_id: str, action: str = Form("approve")):
     """Aprueba o cancela el roadmap desde la UI."""
-    run_dir = RUNS_DIR / project_id
+    action = _validate_action(action)
+    run_dir = _safe_run_dir(project_id)
+    if not run_dir.exists():
+        raise HTTPException(404, "Proyecto no encontrado")
     approval_file = run_dir / "pending_approval.txt"
     approval_file.write_text(action)
     return JSONResponse({"ok": True, "action": action})
@@ -1151,23 +1277,20 @@ async def start_feature(
 ):
     if not feature_name.strip():
         raise HTTPException(400, "El nombre del feature no puede estar vacío")
-    if not repo_name.strip():
-        raise HTTPException(400, "Debes seleccionar un repositorio")
+    repo_name = _validate_repo_name(repo_name)
 
     # El feature_id se genera en cli.py — llamamos al proceso
     cmd = [
         sys.executable, "cli.py", "new-feature",
         feature_name.strip(),
-        "--repo", repo_name.strip(),
+        "--repo", repo_name,
         "--mode", mode,
     ]
     # Lanzar en background — el usuario verá el progreso en /stream/<feature_id>
-    # Generamos el feature_id anticipado para poder redirigir
-    feature_id = (
-        f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_"
-        f"{feature_name.strip()[:20].replace(' ', '_').lower()}"
-    )
-    env_path = Path(__file__).parent.parent / ".env"
+    # Generamos el feature_id anticipado para poder redirigir.
+    # A1.3: el slug se reduce a [a-z0-9_] para que el feature_id sea path-safe.
+    _slug = _re_security.sub(r"[^a-z0-9_]+", "_", feature_name.strip()[:20].lower()).strip("_")
+    feature_id = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{_slug or 'feature'}"
     proc = subprocess.Popen(
         cmd,
         cwd=str(Path(__file__).parent.parent),
@@ -1176,9 +1299,10 @@ async def start_feature(
         text=True,
         env={**os.environ, "FEATURE_ID_OVERRIDE": feature_id},
     )
-    # Guardar PID para status
-    (RUNS_DIR / feature_id).mkdir(parents=True, exist_ok=True)
-    (RUNS_DIR / feature_id / "process.pid").write_text(str(proc.pid))
+    # Guardar PID para status (feature_id validado anti-traversal)
+    run_dir = _safe_run_dir(feature_id)
+    run_dir.mkdir(parents=True, exist_ok=True)
+    (run_dir / "process.pid").write_text(str(proc.pid))
 
     return RedirectResponse(f"/feature/{feature_id}", status_code=303)
 
@@ -1187,7 +1311,7 @@ async def start_feature(
 
 @app.get("/feature/{feature_id}", response_class=HTMLResponse)
 async def feature_detail(request: Request, feature_id: str):
-    run_dir = RUNS_DIR / feature_id
+    run_dir = _safe_run_dir(feature_id)
     if not run_dir.exists():
         raise HTTPException(404, "Feature no encontrado")
 
@@ -1217,7 +1341,10 @@ async def feature_detail(request: Request, feature_id: str):
 @app.post("/feature/{feature_id}/approve")
 async def approve_feature(feature_id: str, action: str = Form("approve")):
     """Permite aprobar el MASTER_PLAN o pausar checkpoints desde la UI."""
-    run_dir = RUNS_DIR / feature_id
+    action = _validate_action(action)
+    run_dir = _safe_run_dir(feature_id)
+    if not run_dir.exists():
+        raise HTTPException(404, "Feature no encontrado")
     approval_file = run_dir / "pending_approval.txt"
     approval_file.write_text(action)
     return JSONResponse({"ok": True, "action": action})
@@ -1268,7 +1395,7 @@ async def api_costs():
 
 @app.get("/api/feature/{feature_id}/status")
 async def api_feature_status(feature_id: str):
-    meta_path = RUNS_DIR / feature_id / "metadata.json"
+    meta_path = _safe_run_dir(feature_id) / "metadata.json"
     if not meta_path.exists():
         return {"status": "not_found"}
     return json.loads(meta_path.read_text())
@@ -1506,6 +1633,7 @@ async def api_auditor_status():
 @app.get("/api/auditor/result/{repo_name}")
 async def api_auditor_result(repo_name: str):
     """Devuelve el informe completo de la última auditoría de un repo específico."""
+    repo_name = _validate_repo_name(repo_name)
     from tools.codebase_auditor import get_result
     result = get_result(repo_name)
     if result is None:
@@ -1715,7 +1843,7 @@ async def api_project_quality(project_id: str):
     from tools.quality_tracker import compute_trend, propose_standards_update
     import json as _json
 
-    metrics_path = RUNS_DIR / project_id / "quality_metrics.jsonl"
+    metrics_path = _safe_run_dir(project_id) / "quality_metrics.jsonl"
     features: list[dict] = []
     if metrics_path.exists():
         for line in metrics_path.read_text(encoding="utf-8").splitlines():
@@ -1760,7 +1888,7 @@ async def api_delete_skill(skill_name: str, repo: str = ""):
 @app.get("/stream/{feature_id}")
 async def stream_logs(feature_id: str):
     """Server-Sent Events: emite líneas del log del feature en tiempo real."""
-    run_dir = RUNS_DIR / feature_id
+    run_dir = _safe_run_dir(feature_id)
 
     async def event_generator() -> AsyncIterator[str]:
         log_path = run_dir / "run.log"
@@ -1863,22 +1991,22 @@ async def api_prechat_confirm(request: Request):
         raise HTTPException(400, "Body JSON inválido")
 
     feature_name  = body.get("feature_name", "").strip()
-    repo_name     = body.get("repo_name", "").strip()
     mode          = body.get("mode", "auto")
     refined_brief = body.get("refined_brief", "").strip()
 
-    if not feature_name or not repo_name:
+    if not feature_name:
         raise HTTPException(400, "feature_name y repo_name son requeridos")
+    repo_name = _validate_repo_name(body.get("repo_name", ""))
 
-    feature_id = (
-        f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_"
-        f"{feature_name[:20].replace(' ', '_').lower()}"
-    )
+    # A1.3: feature_id path-safe.
+    _slug = _re_security.sub(r"[^a-z0-9_]+", "_", feature_name[:20].lower()).strip("_")
+    feature_id = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{_slug or 'feature'}"
 
     # Guardar el refined_brief en metadata para que el CLI lo cargue
-    (RUNS_DIR / feature_id).mkdir(parents=True, exist_ok=True)
+    _run_dir = _safe_run_dir(feature_id)
+    _run_dir.mkdir(parents=True, exist_ok=True)
     import json as _json
-    (RUNS_DIR / feature_id / "metadata.json").write_text(
+    (_run_dir / "metadata.json").write_text(
         _json.dumps({"refined_brief": refined_brief, "feature_name": feature_name}),
         encoding="utf-8",
     )
@@ -1903,7 +2031,7 @@ async def api_prechat_confirm(request: Request):
         text=True,
         env=env,
     )
-    (RUNS_DIR / feature_id / "process.pid").write_text(str(proc.pid))
+    (_run_dir / "process.pid").write_text(str(proc.pid))
 
     return JSONResponse({"ok": True, "feature_id": feature_id, "redirect": f"/feature/{feature_id}"})
 
@@ -1915,7 +2043,7 @@ async def api_prechat_confirm(request: Request):
 @app.get("/session/{feature_id}", response_class=HTMLResponse)
 async def session_live(request: Request, feature_id: str):
     """Vista en vivo del feature — muestra agentes, tokens, costos en tiempo real."""
-    run_dir = RUNS_DIR / feature_id
+    run_dir = _safe_run_dir(feature_id)
     meta = {}
     if (run_dir / "metadata.json").exists():
         meta = json.loads((run_dir / "metadata.json").read_text())
@@ -1934,6 +2062,7 @@ async def session_live(request: Request, feature_id: str):
 @app.get("/api/sessions/{feature_id}/stream")
 async def session_stream(feature_id: str):
     """SSE endpoint — hace tail del events.jsonl y lo streamea al cliente."""
+    _safe_run_dir(feature_id)  # A1.3: valida el id antes de pasarlo a event_bus
     from tools.event_bus import tail_sse
 
     async def event_generator():
@@ -1954,6 +2083,7 @@ async def session_stream(feature_id: str):
 @app.get("/api/sessions/{feature_id}/events")
 async def session_events(feature_id: str, limit: int = 100):
     """Devuelve los últimos N eventos del feature (para carga inicial)."""
+    _safe_run_dir(feature_id)  # A1.3: valida el id
     from tools.event_bus import get_recent_events
     return JSONResponse({"events": get_recent_events(feature_id, limit=limit)})
 
@@ -1970,6 +2100,7 @@ async def session_intervene(feature_id: str, request: Request):
     except Exception:
         raise HTTPException(400, "Body JSON inválido")
 
+    _safe_run_dir(feature_id)  # A1.3: valida el id
     text = body.get("text", "").strip()
     if not text:
         raise HTTPException(400, "El campo 'text' es requerido")

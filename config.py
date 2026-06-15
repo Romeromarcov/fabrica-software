@@ -192,6 +192,51 @@ MAX_ADVERSARIAL_ITER = int(os.getenv("MAX_ADVERSARIAL_ITER", "2"))
 ADVERSARIAL_MIN_TIER = os.getenv("ADVERSARIAL_MIN_TIER", "MEDIUM").upper()
 MODEL_A85 = os.getenv("MODEL_A85", MODEL_A8)   # mismo modelo que SecOps por defecto
 
+# ── PLAN_BLINDAJE_TOTAL — Bloque A: hardening de seguridad de la fábrica ──────
+# A1.1 — Whitelist de administradores de Telegram. Lista de user IDs (no chat_id)
+# autorizados a enviar comandos / pulsar botones. Vacío = compatibilidad hacia atrás
+# (solo se valida chat_id, con advertencia en logs). Recomendado: definirlo en prod.
+TELEGRAM_ADMIN_IDS_RAW = os.getenv("TELEGRAM_ADMIN_IDS", "")
+
+
+def parse_admin_ids() -> set[int]:
+    """Parsea TELEGRAM_ADMIN_IDS (lista separada por comas) → set[int]."""
+    out: set[int] = set()
+    for tok in (TELEGRAM_ADMIN_IDS_RAW or "").split(","):
+        tok = tok.strip()
+        if not tok:
+            continue
+        try:
+            out.add(int(tok))
+        except ValueError:
+            continue
+    return out
+
+
+TELEGRAM_ADMIN_IDS = parse_admin_ids()
+
+# A1.2 — Autenticación obligatoria de la UI. Si no hay RBAC ni Basic Auth configurada,
+# la UI se niega a arrancar (fallo seguro). Poner UI_ALLOW_NO_AUTH=true SOLO en
+# desarrollo local consciente (la UI quedaría abierta a quien tenga acceso de red).
+UI_ALLOW_NO_AUTH = os.getenv("UI_ALLOW_NO_AUTH", "false").lower() == "true"
+
+# A2.2 — Scanner determinista de secretos como gate duro en A9. Si encuentra un secreto
+# en los archivos generados, el gate FALLA (no depende de que el LLM de A8 lo note).
+SECRET_SCAN_GATE = os.getenv("SECRET_SCAN_GATE", "true").lower() == "true"
+
+# A2.3 — CORS explícito. Allowlist de orígenes (separados por comas). Vacío = no se
+# añade middleware CORS (comportamiento por defecto: sin orígenes cruzados permitidos).
+CORS_ALLOWED_ORIGINS = [
+    o.strip() for o in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",") if o.strip()
+]
+
+# A3.4 — Validación de sesiones importadas. Los features que entran por session_importer
+# se marcan source=imported y requieren aprobación explícita del Founder antes de que
+# A0 los procese (mitiga prompt injection vía .md subido). Default seguro: true.
+IMPORTED_SESSION_REQUIRES_APPROVAL = (
+    os.getenv("IMPORTED_SESSION_REQUIRES_APPROVAL", "true").lower() == "true"
+)
+
 # ── Agente de Noticias (independiente de la Fábrica) ─────────────────────────
 NEWS_AGENT_ENABLED = os.getenv("NEWS_AGENT_ENABLED", "true").lower() == "true"
 NEWS_AGENT_HOUR    = int(os.getenv("NEWS_AGENT_HOUR", "8"))

@@ -97,6 +97,11 @@ def pick_next_feature(state: ProjectState) -> dict:
     # para no perderse features que quedaron en "pending" por reordenación
     for i in range(len(backlog)):
         if backlog[i]["status"] == "pending":
+            # A3.4: los features importados sin aprobar no se ejecutan (anti prompt-injection).
+            if backlog[i].get("pending_approval"):
+                logger.info("Project Loop: feature '%s' importado pendiente de aprobación — omitido",
+                            backlog[i].get("name", "?"))
+                continue
             updated = list(backlog)
             updated[i] = FeatureTask(**{**backlog[i], "status": "running"})
             logger.info("Project Loop: iniciando feature %d/%d — %s", i+1, len(backlog), backlog[i]["name"])

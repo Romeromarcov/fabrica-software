@@ -15,7 +15,8 @@ def a9_sandbox(state: FabricaState) -> dict:
     repo_path  = state["repo_path"]
     feature_id = state["feature_id"]
 
-    result  = run_all_checks(repo_path)
+    files_written = state.get("files_written") or None  # A2.2: escanea lo escrito; None → repo completo
+    result  = run_all_checks(repo_path, files=files_written)
     summary = result["summary"]
     gate_failures: list[dict] = result.get("gate_failures", [])
 
