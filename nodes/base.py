@@ -334,6 +334,15 @@ def call_agent(
     # feature_id puede venir como parámetro o del env var que el CLI inyecta
     _fid = feature_id or os.getenv("FEATURE_ID_OVERRIDE", "")
 
+    # E1.1: fijar el trace_id de la traza para que todos los logs de este feature
+    # compartan el mismo identificador de correlación (barato, sin cambio de comportamiento).
+    if _fid:
+        try:
+            from tools.trace import set_trace_id, new_trace_id
+            set_trace_id(new_trace_id(_fid))
+        except ImportError:
+            pass
+
     # VIII-1: Verificar intervención del Founder antes de llamar al LLM
     if _fid:
         try:

@@ -56,6 +56,13 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
     datefmt="%H:%M:%S",
 )
+# E1.1: instalar el filtro de trace_id sobre el logging para que todos los logs
+# de un feature compartan su identificador de correlación (incluye [%(trace_id)s]).
+try:
+    from tools.trace import install_trace_logging
+    install_trace_logging()
+except ImportError:
+    pass
 logger = logging.getLogger(__name__)
 
 
@@ -841,6 +848,137 @@ async def health_check():
     """Endpoint de salud para Docker healthcheck y Railway."""
     from datetime import datetime, timezone
     return {"status": "ok", "ts": datetime.now(timezone.utc).isoformat()}
+
+
+# ── E1.3: /healthz — chequeo profundo de dependencias ────────────────────────
+
+@app.get("/healthz")
+async def healthz():
+    """
+    E1.3: chequeo profundo de salud (separado del /health superficial).
+
+    Verifica dependencias duras de la fábrica SIN llamadas de red externas:
+      (a) la ruta del SqliteSaver (DB_PATH) es alcanzable: el dir padre existe
+          y se puede abrir una conexión sqlite,
+      (b) hay al menos una API key de proveedor LLM configurada,
+      (c) git está disponible en el PATH (shutil.which).
+
+    Devuelve 200 con status "ok" si todo pasa; 503 con "degraded" si falta una
+    dependencia dura. No requiere autenticación (igual que /health).
+    """
+    import shutil as _shutil
+    import sqlite3 as _sqlite3
+    from config import (
+        ANTHROPIC_API_KEY, OPENAI_API_KEY, GOOGLE_API_KEY,
+        ZHIPU_API_KEY, KIMI_API_KEY, CUSTOM_PROVIDERS,
+    )
+
+    checks: dict[str, bool] = {}
+
+    # (a) DB / SqliteSaver alcanzable
+    db_ok = False
+    try:
+        parent = DB_PATH.parent
+        if parent.exists() or parent == Path("."):
+            # Abrir una conexión efímera valida que sqlite puede operar sobre la ruta.
+            conn = _sqlite3.connect(str(DB_PATH))
+            conn.close()
+            db_ok = True
+    except (OSError, _sqlite3.Error):
+        db_ok = False
+    checks["db"] = db_ok
+
+    # (b) al menos un proveedor LLM configurado (solo presencia de la key, sin red)
+    custom_keys = any((cp or {}).get("api_key") for cp in CUSTOM_PROVIDERS)
+    checks["llm_provider"] = bool(
+        ANTHROPIC_API_KEY or OPENAI_API_KEY or GOOGLE_API_KEY
+        or ZHIPU_API_KEY or KIMI_API_KEY or custom_keys
+    )
+
+    # (c) git disponible
+    checks["git"] = _shutil.which("git") is not None
+
+    ok = all(checks.values())
+    payload = {"status": "ok" if ok else "degraded", "checks": checks}
+    return JSONResponse(payload, status_code=200 if ok else 503)
+
+
+# ── E1.2: /api/metrics — métricas agregadas por feature/agente ───────────────
+
+@app.get("/api/metrics")
+async def api_metrics(request: Request):
+    """
+    E1.2: agrega, sobre todos los runs en RUNS_DIR, métricas de costo/tokens por
+    agente y contadores del pipeline (auto-merge vs escalado).
+
+    Defensivo: si la metadata de un run falta o está corrupta, ese run se salta
+    (OSError / JSONDecodeError) sin tumbar el endpoint.
+    """
+    _require_perm(request, "view")
+
+    total_cost = 0.0
+    features = 0
+    auto_merge = 0
+    escalated = 0
+    status_counts: dict[str, int] = {}
+    by_agent: dict[str, dict] = {}   # agente → {input, output, cache, cost, runs}
+
+    run_dirs = list(RUNS_DIR.iterdir()) if RUNS_DIR.exists() else []
+    for run_dir in run_dirs:
+        if not run_dir.is_dir():
+            continue
+        meta_path = run_dir / "metadata.json"
+        if not meta_path.exists():
+            continue
+        try:
+            meta = json.loads(meta_path.read_text())
+        except (OSError, json.JSONDecodeError):
+            # Run con metadata ilegible / corrupta → se ignora, sin crash.
+            continue
+
+        features += 1
+        total_cost += meta.get("total_cost_usd", 0) or 0
+
+        status = meta.get("status", "?")
+        status_counts[status] = status_counts.get(status, 0) + 1
+
+        # auto-merge vs escalado: leemos approval_action o approval_mode + auto_mergeable
+        action = meta.get("approval_action") or meta.get("approval_mode") or ""
+        if meta.get("auto_mergeable") or action in ("auto", "confidence_auto_approve", "veto", "veto_window"):
+            auto_merge += 1
+        elif action in ("human", "stop_protocol"):
+            escalated += 1
+
+        # Rollup por agente desde cost_entries.json (si está presente)
+        entries_path = run_dir / "cost_entries.json"
+        if entries_path.exists():
+            try:
+                entries = json.loads(entries_path.read_text())
+            except (OSError, json.JSONDecodeError):
+                entries = []
+            for e in entries:
+                ag = e.get("agent", "?")
+                g = by_agent.setdefault(
+                    ag, {"input_tokens": 0, "output_tokens": 0,
+                         "cache_read_tokens": 0, "cost_usd": 0.0, "runs": 0},
+                )
+                g["input_tokens"]      += e.get("input_tokens", 0)
+                g["output_tokens"]     += e.get("output_tokens", 0)
+                g["cache_read_tokens"] += e.get("cache_read_tokens", 0)
+                g["cost_usd"]           = round(g["cost_usd"] + e.get("cost_usd", 0), 6)
+                g["runs"]              += 1
+
+    decided = auto_merge + escalated
+    return {
+        "total_cost_usd": round(total_cost, 6),
+        "features":       features,
+        "by_agent":       by_agent,
+        "status_counts":  status_counts,
+        "auto_merge":     auto_merge,
+        "escalated":      escalated,
+        "pct_auto_merge": round(auto_merge / decided * 100, 1) if decided else 0.0,
+        "pct_escalated":  round(escalated / decided * 100, 1) if decided else 0.0,
+    }
 
 
 @app.get("/api/sidebar-data")

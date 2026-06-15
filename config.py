@@ -255,6 +255,41 @@ TEST_QUALITY_GATE = os.getenv("TEST_QUALITY_GATE", "true").lower() == "true"
 NEW_CODE_COVERAGE_GATE = os.getenv("NEW_CODE_COVERAGE_GATE", "false").lower() == "true"
 COVERAGE_MIN_NEW = int(os.getenv("COVERAGE_MIN_NEW", "80"))
 
+# ── PLAN_BLINDAJE_TOTAL — Bloque E: resiliencia LLM (E2) ──────────────────────
+# E2.1 — Backoff exponencial + manejo de 429. Reintentos máximos y delay base
+# (segundos) usados por el backoff exponencial (base * 2**intento, con tope y jitter).
+LLM_MAX_RETRIES          = int(os.getenv("LLM_MAX_RETRIES", "4"))
+LLM_BACKOFF_BASE_SECONDS = float(os.getenv("LLM_BACKOFF_BASE_SECONDS", "2"))
+# E2.2 — Circuit breaker: fallos consecutivos del proveedor antes de ABRIR el
+# breaker (fallo rápido + notificación) en lugar de dejar caer 100 features en cascada.
+LLM_BREAKER_THRESHOLD    = int(os.getenv("LLM_BREAKER_THRESHOLD", "5"))
+# E2.2 — Fallback de modelo: JSON opcional primario→alterno, p.ej.
+# {"glm-5.1":"claude-sonnet-4-6"}. Vacío = sin fallback (comportamiento actual).
+MODEL_FALLBACKS          = os.getenv("MODEL_FALLBACKS", "")
+
+
+def parse_model_fallbacks() -> dict[str, str]:
+    """Parsea MODEL_FALLBACKS (JSON primario→alterno) → dict. Vacío/inválido → {}."""
+    import json as _json
+    raw = (MODEL_FALLBACKS or "").strip()
+    if not raw:
+        return {}
+    try:
+        data = _json.loads(raw)
+    except (ValueError, TypeError):
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    return {str(k): str(v) for k, v in data.items() if k and v}
+
+
+# E4 — Evals deterministas del pipeline mismo: suite offline que verifica que los
+# gates deterministas (secret-scan, tenant-scan, test-quality, clasificador de riesgo)
+# atrapan problemas sembrados. Si False, el orquestador NO debe auto-correr la suite;
+# las funciones en tools/evals.py siguen funcionando si se invocan a mano.
+EVALS_ENABLED = os.getenv("EVALS_ENABLED", "true").lower() == "true"
+
+
 # ── Agente de Noticias (independiente de la Fábrica) ─────────────────────────
 NEWS_AGENT_ENABLED = os.getenv("NEWS_AGENT_ENABLED", "true").lower() == "true"
 NEWS_AGENT_HOUR    = int(os.getenv("NEWS_AGENT_HOUR", "8"))

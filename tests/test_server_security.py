@@ -155,9 +155,7 @@ def test_import_sessions_tags_imported_pending(monkeypatch, tmp_path):
         file=BytesIO(b"# plan\n- Feat Uno"),
         headers=Headers({"content-type": "text/markdown"}),
     )
-    result = asyncio.get_event_loop().run_until_complete(
-        srv.import_sessions("proj_x", upload)
-    )
+    result = asyncio.run(srv.import_sessions("proj_x", upload))
     assert result["ok"] is True
     assert result["pending_approval"] is True
 
