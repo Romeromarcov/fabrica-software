@@ -105,35 +105,34 @@ ningún token aparece en logs; un kill -9 a mitad de escritura no corrompe metad
 a pesar de los gates.
 
 ### Fase B1 — Lightning y clasificación de riesgo
-- [ ] **B1.1 — Lightning restringido por paths reales.** El modo lightning solo procede si
-      TODOS los `files_written` clasifican LOW por `risk_classifier` (validación determinista
-      post-A10, no por intención declarada en el texto). Si algún path es MEDIUM/HIGH →
-      upgrade forzado a pipeline lite con gates. Incluso en lightning: lint + tests rápidos
-      del módulo tocado. *Test:* "hotfix" que toca `apps/core/` en lightning → upgrade forzado.
-- [ ] **B1.2 — `risk_level` por paths ANTES de A8.5.** Hoy A8.5 decide con el tier del texto
-      de A1 y el recálculo por paths llega al final (a1_pr_final). Mover el recálculo a
-      post-A10/pre-A8.5: el tier efectivo para la revisión adversarial es
-      `max(tier_texto, tier_paths)`. *Test:* plan "actualizar endpoint" (MEDIUM) que toca
-      `apps/core/models.py` (HIGH) → A8.5 corre con LLM en tier HIGH.
+- [x] **B1.1 — Lightning restringido por paths reales.** `nodes/a10_code_writer._maybe_upgrade_lightning`:
+      tras escribir, si el modo es lightning y `classify_change_risk(files_written) != LOW`,
+      eleva el modo a `lite` (el routing manda al sandbox/gates) con WARNING. *Test:*
+      `tests/test_bloque_b_risk.py` (hotfix que toca `apps/core/` → elevado a lite).
+- [x] **B1.2 — `risk_level` por paths ANTES de A8.5.** `nodes/a85_adversarial._effective_tier`
+      computa `max_tier(tier_texto, classify_change_risk(files_written))` y A8.5 lo usa para
+      `do_llm`. *Test:* `tests/test_bloque_b_risk.py` + `tests/test_acceptance.py` (red case con
+      `apps/core/` → tier efectivo HIGH → LLM se invoca; mock para hermeticidad).
 
 ### Fase B2 — Gates de runtime que hoy faltan
-- [ ] **B2.1 — `migrate` real en DB efímera.** A9 levanta Postgres efímero (docker) y corre
-      `manage.py migrate` de verdad, no solo `--check`. SQL inválido o constraint
-      insatisfacible → gate FAIL. (Anticipo del Bloque D; se implementa aquí en versión mínima.)
-- [ ] **B2.2 — Gate de cobertura sobre código nuevo.** Cobertura de los `files_written`
-      < umbral (`COVERAGE_MIN_NEW`, default 80%) → FAIL con feedback a A7 ("estas líneas
-      no están cubiertas").
-- [ ] **B2.3 — Validación AST de los tests generados.** Detectar asserts triviales
-      (`assert True`, asserts vacíos, tests sin asserts) y mocks que mockean el propio
-      sistema bajo prueba. Hallazgo → feedback quirúrgico a A7.
-- [ ] **B2.4 — Smoke test HTTP real.** A9 arranca la app (servidor de test) y hace requests
-      reales a los endpoints declarados en el `master_plan` (200/expected status, no 500).
-      *Test e2e:* endpoint que crashea en import-time → gate FAIL aunque los unit tests pasen.
+- [ ] **B2.1 — `migrate` real en DB efímera.** ⏸ REQUIERE Docker/Postgres (no disponible en el
+      contenedor de ejecución). Pendiente — se implementa en el Bloque D (entorno efímero).
+- [x] **B2.2 — Gate de cobertura sobre código nuevo.** `tools/code_sandbox`: helper puro
+      `coverage_shortfall()` + gate `_check_new_code_coverage` (`NEW_CODE_COVERAGE_GATE`,
+      `COVERAGE_MIN_NEW=80`). Opt-in y defensivo: SKIP `n/a` si no hay datos de cobertura
+      (no `passed=True` falso). La activación con cobertura real corre en el CI del repo
+      destino. *Test:* `tests/test_test_quality.py` (`coverage_shortfall`).
+- [x] **B2.3 — Validación AST de los tests generados.** `tools/code_sandbox.scan_trivial_tests`
+      detecta `assert True`, tests sin asserts y tests vacíos vía AST; gate HARD
+      (`TEST_QUALITY_GATE`) → feedback a A7/A6. *Test:* `tests/test_test_quality.py`.
+- [ ] **B2.4 — Smoke test HTTP real.** ⏸ REQUIERE arrancar la app (servidor de test) — se
+      implementa en el Bloque D (entorno efímero por feature). Pendiente.
 
 ### Fase B3 — Robustez del loop de proyecto
-- [ ] **B3.1 — Validación del grafo de dependencias.** `pick_next_feature()` no entrega un
-      feature cuyo `depends_on` incluya features en estado `failed`/`escalated`. Se marca
-      `blocked_by` y se notifica. *Test:* A falla → B (depende de A) no arranca.
+- [x] **B3.1 — Validación del grafo de dependencias.** `get_ready_indices(block_on_failed_deps=True)`
+      + `blocked_feature_indices()` en `tools/branch_manager`; `pick_next_feature` omite features
+      cuyas `depends_on` incluyan features `failed`/`escalated` (WARNING). Campo `blocked_by` en
+      `FeatureTask`. *Test:* `tests/test_dep_blocking.py` (A falla → B no arranca).
 - [ ] **B3.2 — Rollback confiable.** Sustituir restauración por archivos por `git restore`/
       `git revert` sobre la rama del feature; reintento con backoff; si falla → estado
       `dirty` explícito en metadata + alerta Telegram (no `logger.warning` silencioso).

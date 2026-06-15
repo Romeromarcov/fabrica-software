@@ -48,7 +48,12 @@ def test_red_case_blocks_and_routes_human(tmp_path, monkeypatch):
     assert sandbox["passed"] is False
     assert "tenant-isolation" in {gf["gate"] for gf in sandbox["gate_failures"]}
 
-    # (b) A8.5 adversarial (tier LOW → solo estático) bloquea por la View vecina
+    # (b) A8.5 adversarial bloquea por la View vecina (escaneo estático a nivel repo).
+    #     B1.2: `apps/core/` eleva el tier efectivo a HIGH → do_llm=True; se mockea
+    #     `call_agent` para no tocar red. El bloqueo lo garantiza el escaneo estático
+    #     (static_block) con independencia del veredicto del LLM.
+    from unittest.mock import Mock
+    monkeypatch.setattr(adv, "call_agent", Mock(return_value=("ADVERSARIAL CLEAR", None)))
     state = {"feature_id": "red", "repo_path": str(tmp_path),
              "files_written": ["apps/core/views.py"], "risk_level": "LOW",
              "feature_name": "x", "master_plan": ""}

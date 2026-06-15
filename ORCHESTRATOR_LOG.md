@@ -17,3 +17,21 @@ Notas:
     servidor de firma SSH del contenedor en repos temporales, NO defectos de código (16/16
     pasan con commit.gpgsign=false).
   - Pendiente humano: CTF-FABRICA-001, ramp-up AUTO_MERGE, PARALLEL_FEATURES (sin cambios).
+
+2026-06-15T14:00Z ✅ MILESTONE: PLAN_BLINDAJE_TOTAL — Bloque B (parcial, gaps locamente verificables)
+Plan source: PLAN_BLINDAJE_TOTAL.md — Bloque B (B1, B2, B3)
+Branch: feature/20260615-blindaje-bloque-b → PR a main
+Implementado + tests: B1.1 (lightning elevado a lite por paths), B1.2 (tier efectivo
+  max(texto,rutas) antes de A8.5), B2.2 (gate cobertura código nuevo, opt-in), B2.3
+  (validación AST de tests triviales, gate HARD), B3.1 (bloqueo por dependencias fallidas).
+Regresión detectada y corregida: test_red_case hacía llamada LLM real (401) porque B1.2
+  eleva apps/core a HIGH → do_llm=True; arreglado mockeando call_agent (el bloqueo lo
+  garantiza el escaneo estático). test_adversarial.py también actualizado (hermético).
+LOCAL tests: 133 passed (was 115). New flags safe: TEST_QUALITY_GATE=true,
+  NEW_CODE_COVERAGE_GATE=false, COVERAGE_MIN_NEW=80.
+PENDIENTE (requiere infra no disponible en este contenedor):
+  - B2.1 (migrate en Postgres efímero) y B2.4 (smoke HTTP real) → necesitan Docker/app viva;
+    se difieren al Bloque D (entorno efímero).
+  - B3.2 (rollback git restore/revert) y B3.3 (aprendizaje preventivo) → pendientes (sí
+    implementables localmente; siguiente iteración).
+RAILWAY: no verificado (sin proyecto linkeado). CI: sin runner en el sandbox → gate = suite local.

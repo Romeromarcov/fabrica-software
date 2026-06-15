@@ -237,6 +237,17 @@ IMPORTED_SESSION_REQUIRES_APPROVAL = (
     os.getenv("IMPORTED_SESSION_REQUIRES_APPROVAL", "true").lower() == "true"
 )
 
+# ── PLAN_BLINDAJE_TOTAL — Bloque B: calidad de tests + cobertura de código nuevo ─
+# B2.3 — Validación AST de los tests generados. Si un test generado no tiene asserts,
+# solo asserts triviales (assert True/1/"...") o está vacío, el gate DURO `test-quality`
+# FALLA y el sandbox enruta de vuelta a A7/A6 con feedback quirúrgico.
+TEST_QUALITY_GATE = os.getenv("TEST_QUALITY_GATE", "true").lower() == "true"
+# B2.2 — Cobertura mínima sobre el código NUEVO (líneas en files_written). Default False
+# para no romper repos sin setup de coverage: si no hay datos de cobertura, el gate hace
+# SKIP (n/a), nunca asume verde. COVERAGE_MIN_NEW: umbral de % por archivo nuevo.
+NEW_CODE_COVERAGE_GATE = os.getenv("NEW_CODE_COVERAGE_GATE", "false").lower() == "true"
+COVERAGE_MIN_NEW = int(os.getenv("COVERAGE_MIN_NEW", "80"))
+
 # ── Agente de Noticias (independiente de la Fábrica) ─────────────────────────
 NEWS_AGENT_ENABLED = os.getenv("NEWS_AGENT_ENABLED", "true").lower() == "true"
 NEWS_AGENT_HOUR    = int(os.getenv("NEWS_AGENT_HOUR", "8"))

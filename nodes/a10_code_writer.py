@@ -26,8 +26,26 @@ from pathlib import Path
 from state import FabricaState
 from tools.code_writer import write_files
 from tools.file_tools import save_agent_output
+from tools.risk_classifier import classify_change_risk
 
 logger = logging.getLogger(__name__)
+
+
+def _maybe_upgrade_lightning(mode: str, files_written: list[str]) -> str:
+    """B1.1: lightning salta TODOS los gates (sandbox/adversarial). Un "hotfix" que
+    toque rutas sensibles (p. ej. `apps/core/`) NO debe saltarlos.
+
+    Como las funciones de routing de LangGraph no pueden mutar el state, el ascenso se
+    decide aquí (función pura): si el modo es lightning y los archivos escritos clasifican
+    por encima de LOW, devuelve "lite" (que el routing existente envía por el sandbox).
+    En cualquier otro caso devuelve el modo sin cambios.
+    """
+    if mode != "lightning":
+        return mode
+    tier = classify_change_risk(files_written or [])
+    if tier != "LOW":
+        return "lite"
+    return mode
 
 
 def _run_makemigrations(repo_path: str) -> tuple[list[str], str]:
@@ -148,6 +166,18 @@ def a10_code_writer(state: FabricaState) -> dict:
         len(files_written), len(files_skipped), len(errors), len(files_backup),
     )
 
+    # ── B1.1: lightning restringido por rutas reales ─────────────────────────
+    # Si un "hotfix" lightning toca rutas sensibles, lo ascendemos a "lite" para que
+    # el routing existente lo envíe por el sandbox/gates en vez de lightning_complete.
+    mode = state.get("mode")
+    new_mode = _maybe_upgrade_lightning(mode, files_written)
+    if new_mode != mode:
+        tier = classify_change_risk(files_written or [])
+        logger.warning(
+            "B1.1: lightning ELEVADO a lite — archivos tier %s tocan rutas sensibles: %s",
+            tier, sorted(files_written),
+        )
+
     # ── Decidir si A11 DevOps debe correr ─────────────────────────────────────
     # Activar si:
     #   • Hay archivos escritos (pueden requerir nuevas dependencias)
@@ -181,6 +211,7 @@ def a10_code_writer(state: FabricaState) -> dict:
         "files_backup":   files_backup,
         "migration_note": migration_note or None,
         "needs_devops":   needs_devops,
+        "mode":           new_mode,   # B1.1: posiblemente "lite" si lightning tocó rutas sensibles
         "current_agent":  "a10_code_writer",
         "errors":         errors,
     }

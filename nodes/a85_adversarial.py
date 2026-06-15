@@ -28,6 +28,7 @@ from pathlib import Path
 from state import FabricaState
 from nodes.base import call_agent
 from tools.code_sandbox import scan_unfiltered_views
+from tools.risk_classifier import classify_change_risk, max_tier
 from tools.file_tools import save_agent_output, save_run_metadata, RUNS_DIR
 from tools.learning_memory import extract_patterns, append_to_lessons
 from config import (
@@ -47,6 +48,19 @@ _MAX_FILE_CHARS = 1800
 
 def _tier_at_least(risk: str, minimum: str) -> bool:
     return _TIER_ORDER.get((risk or "MEDIUM").upper(), 1) >= _TIER_ORDER.get(minimum, 1)
+
+
+def _effective_tier(state: FabricaState) -> str:
+    """B1.2: tier efectivo = máx(tier de TEXTO/planificación, tier por RUTAS reales).
+
+    Antes A8.5 usaba solo `risk_level` (señal LLM de planificación). El recálculo por
+    rutas solo ocurría más tarde en a1_pr_final, dejando una ventana ciega: un cambio
+    cuyo plan parecía LOW pero que tocaba `apps/core/` no disparaba el análisis
+    adversarial. Aquí adelantamos ese piso de rutas (función pura, testeable).
+    """
+    text_tier = state.get("risk_level", "MEDIUM")
+    path_tier = classify_change_risk(state.get("files_written", []) or [])
+    return max_tier(text_tier, path_tier)
 
 
 def _gather_repo_context(repo_path: str, files_written: list[str]) -> str:
@@ -111,7 +125,8 @@ def a85_adversarial(state: FabricaState) -> dict:
         static_txt = "\n".join(lines)
 
     # ── 2. Análisis adversarial LLM (solo tier >= mínimo) ─────────────────────
-    risk = state.get("risk_level", "MEDIUM")
+    # B1.2: tier efectivo = máx(texto, rutas reales) — adelanta el piso de rutas.
+    risk = _effective_tier(state)
     do_llm = _tier_at_least(risk, ADVERSARIAL_MIN_TIER)
     llm_block = False
     llm_output = ""

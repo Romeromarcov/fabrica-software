@@ -1,9 +1,12 @@
 """Tests de A8.5 — revisión adversarial a nivel repo (Fase 2).
 
-Herméticos: usan tier LOW para que NO se invoque el LLM (solo el escaneo estático
-a nivel repo), evitando red. Verifican que una fuga cross-tenant en una View VECINA
-bloquea el cierre, que la inyecta como gate failure y que un repo limpio pasa.
+Herméticos: parchean `call_agent` para no tocar red. Desde B1.2 el tier efectivo es
+máx(texto, rutas): un cambio en `apps/core/` clasifica HIGH aunque `risk_level=LOW`, por
+lo que el LLM se invocaría — de ahí el mock. Verifican que una fuga cross-tenant en una
+View VECINA bloquea el cierre, que la inyecta como gate failure y que un repo limpio pasa.
 """
+from unittest.mock import Mock
+
 import tools.file_tools as ft
 import nodes.a85_adversarial as adv
 
@@ -37,6 +40,8 @@ def test_tier_at_least():
 
 def test_adversarial_blocks_unfiltered_neighbor(tmp_path, monkeypatch):
     _patch_runs(tmp_path, monkeypatch)
+    # B1.2: apps/core/ → tier efectivo HIGH → do_llm True; mock para no tocar red.
+    monkeypatch.setattr(adv, "call_agent", Mock(return_value=("ADVERSARIAL CLEAR", None)))
     app = tmp_path / "repo" / "apps" / "core"
     app.mkdir(parents=True)
     (app / "views.py").write_text(UNFILTERED, encoding="utf-8")
@@ -59,6 +64,8 @@ def test_adversarial_blocks_unfiltered_neighbor(tmp_path, monkeypatch):
 
 def test_adversarial_clears_safe_repo(tmp_path, monkeypatch):
     _patch_runs(tmp_path, monkeypatch)
+    # B1.2: apps/ventas/views.py → tier efectivo MEDIUM → do_llm True; mock CLEAR.
+    monkeypatch.setattr(adv, "call_agent", Mock(return_value=("ADVERSARIAL CLEAR", None)))
     app = tmp_path / "repo" / "apps" / "ventas"
     app.mkdir(parents=True)
     (app / "views.py").write_text(SAFE, encoding="utf-8")
