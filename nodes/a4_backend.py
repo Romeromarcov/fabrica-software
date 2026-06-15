@@ -2,7 +2,7 @@
 from state import FabricaState
 from nodes.base import call_agent
 from tools.file_tools import save_agent_output
-from tools.learning_memory import load_lessons
+from tools.learning_memory import load_lessons, recurring_error_patterns, hard_instruction_block
 from tools.fewshot_builder import build_fewshots
 from config import MODEL_A4
 
@@ -19,6 +19,16 @@ def a4_backend(state: FabricaState) -> dict:
     # Sistema de aprendizaje: lecciones del proyecto + few-shots
     lessons_block  = load_lessons(state["repo_path"])
     fewshot_block  = build_fewshots(state.get("project_id", ""), context="backend")
+
+    # B3.3 Aprendizaje preventivo: patrones que fallaron ≥2 veces → instrucción DURA
+    _recurring     = recurring_error_patterns(state["repo_path"], state.get("project_id", "") or "")
+    hard_block     = hard_instruction_block(_recurring)
+    if hard_block:
+        import logging
+        logging.getLogger(__name__).info(
+            "A4 Backend: inyectando %d patrones recurrentes como instrucción OBLIGATORIA",
+            len(_recurring),
+        )
 
     # Inyectar instrucciones del stack real del proyecto
     stack = read_stack(state["repo_path"])
@@ -39,7 +49,7 @@ Corrige ÚNICAMENTE los bugs listados. No cambies lo que ya funciona.
 
     task = f"""
 Eres el Agente 4 — Backend Developer.
-{adr_block}{memory_block}{fingerprint_block}{lessons_block}{fewshot_block}{stack_block}
+{hard_block}{adr_block}{memory_block}{fingerprint_block}{lessons_block}{fewshot_block}{stack_block}
 MASTER_PLAN del feature:
 ---
 {state['master_plan']}

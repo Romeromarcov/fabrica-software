@@ -10,8 +10,11 @@ Ciclo de vida:
 """
 from __future__ import annotations
 
+import json
 import re
 import logging
+from collections import Counter
+from json import JSONDecodeError
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -231,3 +234,93 @@ def load_lessons(repo_path: str, max_entries: int = MAX_LESSONS_IN_CONTEXT) -> s
     )
     block += "\n".join(recent) + "\n"
     return block
+
+
+# ── B3.3: Aprendizaje preventivo — patrones recurrentes ──────────────────────
+
+def recurring_error_patterns(
+    repo_path: str,
+    project_id: str = "",
+    min_occurrences: int = 2,
+) -> list[str]:
+    """
+    Detecta patrones de error que se han repetido históricamente (≥ min_occurrences).
+
+    Combina dos fuentes:
+      1. Las `bug_categories` registradas en
+         `data/runs/[project_id]/quality_metrics.jsonl` (una línea JSON por feature).
+      2. Las lecciones almacenadas en `agents/LESSONS_LEARNED.md` del repo,
+         agrupadas por su categoría (### Categoría) para contar repeticiones.
+
+    Defensivo: si faltan archivos o hay JSON corrupto → retorna [] (sin excepción).
+    Retorna la lista ordenada de patrones que aparecen ≥ min_occurrences veces.
+    """
+    counter: Counter = Counter()
+
+    # ── Fuente 1: bug_categories del quality_metrics.jsonl ───────────────────
+    if project_id:
+        try:
+            from tools.quality_tracker import _metrics_path  # reutiliza la ruta canónica
+            metrics_path = _metrics_path(project_id)
+        except ImportError:
+            metrics_path = Path("data/runs") / project_id / "quality_metrics.jsonl"
+
+        if metrics_path.exists():
+            try:
+                for line in metrics_path.read_text(encoding="utf-8").splitlines():
+                    line = line.strip()
+                    if not line:
+                        continue
+                    record = json.loads(line)
+                    for cat in record.get("bug_categories", []):
+                        if isinstance(cat, str) and cat.strip():
+                            counter[cat.strip()] += 1
+            except (OSError, JSONDecodeError):
+                # Archivo ilegible o JSON corrupto: ignoramos esta fuente
+                logger.warning(
+                    "LearningMemory: no se pudo leer quality_metrics.jsonl en %s",
+                    metrics_path,
+                )
+
+    # ── Fuente 2: lecciones de LESSONS_LEARNED.md (agrupadas por categoría) ──
+    if repo_path:
+        lessons_path = Path(repo_path) / LESSONS_FILE
+        if lessons_path.exists():
+            try:
+                content = lessons_path.read_text(encoding="utf-8")
+            except OSError:
+                content = ""
+            current_category = ""
+            for raw in content.splitlines():
+                stripped = raw.strip()
+                # Encabezados "### Categoría" definen el grupo de las lecciones siguientes
+                if stripped.startswith("### "):
+                    current_category = stripped[4:].strip()
+                    continue
+                # Cada lección "- [..]" suma una ocurrencia a su categoría
+                if stripped.startswith("- [") and current_category:
+                    counter[current_category] += 1
+
+    patterns = [pat for pat, count in counter.items() if count >= min_occurrences]
+    return sorted(patterns)
+
+
+def hard_instruction_block(patterns: list[str]) -> str:
+    """
+    Renderiza los patrones recurrentes como una sección de prompt OBLIGATORIA
+    (no opcional). Esta es una capa de blindaje adicional a las lecciones.
+
+    Retorna "" cuando no hay patrones.
+    """
+    if not patterns:
+        return ""
+
+    lines = [
+        "\n## ⚠️ ERRORES RECURRENTES — CORRECCIÓN OBLIGATORIA",
+        "Estos patrones han fallado ≥2 veces en este proyecto. "
+        "DEBES evitarlos explícitamente:",
+    ]
+    for pat in patterns:
+        lines.append(f"- {pat}")
+    lines.append("")  # newline final
+    return "\n".join(lines)

@@ -35,3 +35,12 @@ PENDIENTE (requiere infra no disponible en este contenedor):
   - B3.2 (rollback git restore/revert) y B3.3 (aprendizaje preventivo) → pendientes (sí
     implementables localmente; siguiente iteración).
 RAILWAY: no verificado (sin proyecto linkeado). CI: sin runner en el sandbox → gate = suite local.
+
+2026-06-15T14:10Z ✅ MILESTONE: PLAN_BLINDAJE_TOTAL — Bloque B finish (B3.2 + B3.3)
+Branch: feature/20260615-blindaje-bloque-b-finish → PR a main
+B3.2 rollback confiable (git restore/clean + backoff; rollback_dirty + alerta Telegram).
+B3.3 aprendizaje preventivo (recurring_error_patterns + hard_instruction_block en A4/A5).
+LOCAL tests: 148 passed (was 133; +15). Lint limpio (1 F-error en graph.py es pre-existente).
+Bloque B status: A1/B1.1/B1.2/B2.2/B2.3/B3.1/B3.2/B3.3 DONE. B2.1 (Postgres efímero) y
+  B2.4 (smoke HTTP) DIFERIDOS a Bloque D (requieren Docker/app viva — sin infra en el sandbox).
+RAILWAY: no verificado. CI: sin runner → gate = suite local (148 green).

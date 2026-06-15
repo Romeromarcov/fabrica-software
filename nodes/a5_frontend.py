@@ -2,7 +2,7 @@
 from state import FabricaState
 from nodes.base import call_agent
 from tools.file_tools import save_agent_output
-from tools.learning_memory import load_lessons
+from tools.learning_memory import load_lessons, recurring_error_patterns, hard_instruction_block
 from config import MODEL_A5
 
 
@@ -17,6 +17,16 @@ def a5_frontend(state: FabricaState) -> dict:
 
     # Sistema de aprendizaje: lecciones del proyecto
     lessons_block = load_lessons(state["repo_path"])
+
+    # B3.3 Aprendizaje preventivo: patrones que fallaron ≥2 veces → instrucción DURA
+    _recurring = recurring_error_patterns(state["repo_path"], state.get("project_id", "") or "")
+    hard_block = hard_instruction_block(_recurring)
+    if hard_block:
+        import logging
+        logging.getLogger(__name__).info(
+            "A5 Frontend: inyectando %d patrones recurrentes como instrucción OBLIGATORIA",
+            len(_recurring),
+        )
 
     # Instrucciones del stack frontend real del proyecto
     stack = read_stack(state["repo_path"])
@@ -37,7 +47,7 @@ Corrige ÚNICAMENTE los bugs listados en el frontend.
 
     task = f"""
 Eres el Agente 5 — Frontend Developer.
-{adr_block}{memory_block}{fingerprint_block}{lessons_block}{stack_block}
+{hard_block}{adr_block}{memory_block}{fingerprint_block}{lessons_block}{stack_block}
 MASTER_PLAN del feature (especialmente secciones 5 y 6 — UI/UX):
 ---
 {state['master_plan']}

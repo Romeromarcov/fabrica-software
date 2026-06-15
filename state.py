@@ -78,6 +78,7 @@ class FabricaState(TypedDict):
     # ── Code Writer (A10) ────────────────────────────────────────────────────
     files_written: list[str]         # Rutas relativas de archivos escritos al repo
     files_backup: dict               # {ruta_relativa: contenido_original} antes de sobrescribir
+    rollback_dirty: bool             # B3.2: True si el rollback falló y el repo quedó en estado sucio
     needs_devops: bool               # True = A11 DevOps debe ejecutarse
 
     # ── DevOps (A11) ─────────────────────────────────────────────────────────
@@ -161,6 +162,7 @@ def initial_state(
         skip_frontend=False,
         files_written=[],
         files_backup={},
+        rollback_dirty=False,
         needs_devops=False,
         devops_output=None,
         migration_note=None,

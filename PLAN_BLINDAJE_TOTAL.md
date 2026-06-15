@@ -133,10 +133,14 @@ a pesar de los gates.
       + `blocked_feature_indices()` en `tools/branch_manager`; `pick_next_feature` omite features
       cuyas `depends_on` incluyan features `failed`/`escalated` (WARNING). Campo `blocked_by` en
       `FeatureTask`. *Test:* `tests/test_dep_blocking.py` (A falla → B no arranca).
-- [ ] **B3.2 — Rollback confiable.** Sustituir restauración por archivos por `git restore`/
-      `git revert` sobre la rama del feature; reintento con backoff; si falla → estado
-      `dirty` explícito en metadata + alerta Telegram (no `logger.warning` silencioso).
-- [ ] **B3.3 — Aprendizaje preventivo.** Las métricas de `quality_tracker` y las lecciones
+- [x] **B3.2 — Rollback confiable.** `tools/git_tools.restore_paths` (git restore/clean por
+      archivo, backoff exponencial) usado por `graph.pipeline_detenido._rollback_files`; si
+      falla → `rollback_dirty=True` en state + metadata + alerta Telegram (no warning silencioso).
+      *Test:* `tests/test_rollback.py` (restore tracked/untracked; fallo → dirty + alerta).
+- [x] **B3.3 — Aprendizaje preventivo.** `tools/learning_memory.recurring_error_patterns`
+      (≥N ocurrencias en quality_metrics.jsonl + LESSONS_LEARNED) + `hard_instruction_block`
+      inyectado como instrucción OBLIGATORIA en A4/A5 ANTES de generar (no solo postmortem).
+      *Test:* `tests/test_preventive_learning.py` (patrón ≥2 veces → bloque duro en el prompt).
       del feature anterior se consultan ANTES de A4/A5 del siguiente (hoy alimentan solo el
       postmortem). Si un patrón de error se repitió ≥2 veces → se inyecta como instrucción
       dura en el prompt, no como contexto opcional.
