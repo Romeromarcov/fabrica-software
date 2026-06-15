@@ -57,3 +57,20 @@ PENDIENTE/ESCALADO:
   - C2 (branch protection) → acción HUMANA: settings de admin del repo en GitHub, no código.
   - C1/C5 ejecutables solo en GitHub Actions real (no hay runner en este contenedor).
 RAILWAY: no verificado. CI: sin runner local → gate = suite local (157 green).
+
+2026-06-15T14:35Z ✅ MILESTONE: PLAN_BLINDAJE_TOTAL — Bloque E (observabilidad + resiliencia + evals)
+Branch: feature/20260615-blindaje-bloque-e → PR a main
+E1.1 trace_id (tools/trace.py + base.call_agent). E1.2 GET /api/metrics. E1.3 GET /healthz.
+E2.1 backoff exponencial + 429 (corrige bug: RateLimitError no capturada). E2.2 fallback de
+  modelo (MODEL_FALLBACKS) + CircuitBreaker. E4.1/E4.2 tools/evals.py (5 casos deterministas
+  offline + tendencia). Flags: LLM_MAX_RETRIES, LLM_BACKOFF_BASE_SECONDS, LLM_BREAKER_THRESHOLD,
+  MODEL_FALLBACKS, EVALS_ENABLED (defaults seguros).
+Regresión corregida: test_import_sessions usaba asyncio.get_event_loop() (deprecado, se rompía
+  por orden de tests al introducir TestClient) → asyncio.run(). 
+LOCAL tests: 186 passed (was 157; +29). Lint: nuevos limpios; 3 F-errors en base.py son
+  pre-existentes (imports de keys no usados, ya en origin).
+PENDIENTE/ESCALADO:
+  - E3.1 (auditoría ~180 except Exception) → PENDIENTE (iteración dedicada; churn amplio).
+  - E5.1 → ESCALADO CTF-FABRICA-001 (E2E worktree + claves en vivo + sign-off humano).
+NOTA IMPORTANTE: ¡EL CI REAL FUNCIONA! Los workflows del Bloque C corren en GitHub Actions
+  (PR #5: pytest+gitleaks+revisor verdes). Desde ahora el gate de merge es CI verde real.

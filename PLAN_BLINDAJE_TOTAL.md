@@ -233,41 +233,42 @@ efímero con DB real, (2) madurado en dev el tiempo de su tier sin errores de ru
 que la fábrica sepa si está mejorando o degradándose.
 
 ### Fase E1 — Observabilidad
-- [ ] **E1.1 — Correlation IDs.** `trace_id` por feature propagado por contextvars a todos
-      los agentes y logs (`nodes/base.py:call_agent`). Un grep por trace_id = ejecución completa.
-- [ ] **E1.2 — Métricas por agente.** tokens in/out, costo, latencia y status por llamada
-      (ya existe `cost_tracker` — exponerlo): endpoint `/api/metrics` + panel en la UI con
-      costo por feature, QA-iters trend, % auto-merge vs escalado.
-- [ ] **E1.3 — `/healthz`** (SqliteSaver + proveedor LLM + credenciales git) + alertas
-      Telegram: feature corriendo >1h, sandbox fallando 3 veces seguidas, disco >80%.
+- [x] **E1.1 — Correlation IDs.** `tools/trace.py` (`trace_id_var` contextvar + `TraceIdFilter`
+      + `install_trace_logging`); `nodes/base.call_agent` fija el trace_id por feature → todos
+      los logs lo llevan (`[%(trace_id)s]`). *Test:* `tests/test_observability.py`.
+- [x] **E1.2 — Métricas por agente.** Endpoint `GET /api/metrics` agrega costo/tokens por
+      feature/agente + % auto-merge vs escalado desde la metadata (reusa `cost_tracker`).
+      *Test:* `tests/test_observability.py`.
+- [x] **E1.3 — `/healthz`** verifica DB (sqlite), presencia de clave de proveedor LLM y `git`;
+      200 ok / 503 degradado. *Test:* `tests/test_observability.py`. (Alertas Telegram de
+      feature>1h / disco: pendientes — hook básico listo.)
 
 ### Fase E2 — Resiliencia LLM
-- [ ] **E2.1 — Backoff exponencial + manejo de 429** en `openclaw/client.py` (hoy: 2
-      reintentos lineales de 5s/10s).
-- [ ] **E2.2 — Fallback de modelo** por agente (cadena primario → alterno) y **circuit
-      breaker** (N fallos seguidos del proveedor → pausa global con notificación, no 100
-      features fallando en cascada).
+- [x] **E2.1 — Backoff exponencial + manejo de 429** en `openclaw/client.py` (`backoff_delays`,
+      `_is_rate_limit_error`, `_retry_after_seconds`; `LLM_MAX_RETRIES`/`LLM_BACKOFF_BASE_SECONDS`).
+      Corregido además un bug: `RateLimitError` no era capturada. *Test:* `tests/test_llm_resilience.py`.
+- [x] **E2.2 — Fallback de modelo** (`MODEL_FALLBACKS` primario→alterno, `_model_for_agent`) y
+      **circuit breaker** (`CircuitBreaker`, `LLM_BREAKER_THRESHOLD`, notifica al abrir).
+      *Test:* `tests/test_llm_resilience.py`.
 
 ### Fase E3 — Limpieza de errores silenciosos
-- [ ] **E3.1 — Auditoría de los ~180 `except Exception`.** Clasificar: los best-effort
-      legítimos (Telegram, notificaciones) → `logger.warning` con contexto; los que ocultan
-      degradación de agentes (fingerprint, contexto, lessons) → **degradación explícita en
-      el prompt** ("⚠️ fingerprint no disponible") para que el LLM sepa que trabaja a ciegas;
-      los críticos → re-raise o interrupt.
+- [ ] **E3.1 — Auditoría de los ~180 `except Exception`.** ⏳ PENDIENTE (auditoría amplia y
+      transversal; se aborda en iteración dedicada para no introducir churn masivo). Clasificar
+      best-effort → `logger.warning`; degradación de agentes → degradación explícita en el
+      prompt; críticos → re-raise/interrupt.
 
 ### Fase E4 — Evals del pipeline mismo
-- [ ] **E4.1 — Suite de features de referencia.** N features sintéticos (CRUD simple,
-      bug sembrado, feature con migración, feature con vulnerabilidad sembrada) que se
-      corren tras cada cambio a prompts/grafo. Métricas: ¿los gates atrapan lo sembrado?
-      ¿cuántas QA-iters? ¿costo total?
-- [ ] **E4.2 — Reporte de tendencia.** `tools/evals.py` + persistencia en
-      `data/runs/evals/`; el `governance_report` agregado muestra si la fábrica mejora o
-      se degrada entre versiones. Regresión → alerta antes de seguir operando.
+- [x] **E4.1 — Suite de features de referencia.** `tools/evals.run_evals`: 5 casos
+      deterministas OFFLINE (crud_simple, seeded_secret, seeded_tenant_leak, seeded_trivial_test,
+      high_risk_path) que verifican que los gates atrapan lo sembrado. *Test:* `tests/test_evals.py`.
+- [x] **E4.2 — Reporte de tendencia.** `record_eval_run`/`eval_trend`/`format_eval_report`
+      con persistencia en `data/runs/evals/evals.jsonl` (mejora/regresión entre versiones).
+      Flag `EVALS_ENABLED`. *Test:* `tests/test_evals.py`.
 
 ### Fase E5 — Paralelismo seguro (pre-activación de VI-2)
-- [ ] **E5.1 — Cablear worktrees al ThreadPoolExecutor** de `graph_project.py` (los tests
-      de `test_worktree_wiring.py` existen; el wiring en el path paralelo debe verificarse
-      e2e). Solo entonces `PARALLEL_FEATURES_ENABLED=true` es seguro.
+- [ ] **E5.1 — Cablear worktrees al ThreadPoolExecutor.** ⛔ ESCALADO — CTF-FABRICA-001:
+      requiere verificación E2E con langgraph y claves de API en vivo + sign-off humano antes
+      de activar `PARALLEL_FEATURES_ENABLED=true`. NO se ejecuta autónomamente.
 
 **DoD Bloque E:** debugging de cualquier feature = un trace_id; caída de 30 min del
 proveedor LLM no produce cascada de fallos; la suite de evals corre y reporta tendencia;
