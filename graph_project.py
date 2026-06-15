@@ -91,7 +91,13 @@ def human_approve_roadmap(state: ProjectState) -> dict:
 
 def pick_next_feature(state: ProjectState) -> dict:
     """Selecciona el siguiente feature pendiente del backlog."""
+    from tools.branch_manager import blocked_feature_indices
+
     backlog = state.get("backlog", [])
+    dep_graph = state.get("dependency_graph", {})
+
+    # B3.1: features pendientes con dependencias fallidas/escaladas → bloqueados.
+    blocked = blocked_feature_indices(backlog, dep_graph)
 
     # BUG-005: buscar desde el inicio del backlog (no desde current_feature_index)
     # para no perderse features que quedaron en "pending" por reordenación
@@ -101,6 +107,13 @@ def pick_next_feature(state: ProjectState) -> dict:
             if backlog[i].get("pending_approval"):
                 logger.info("Project Loop: feature '%s' importado pendiente de aprobación — omitido",
                             backlog[i].get("name", "?"))
+                continue
+            # B3.1: no arrancar features cuya base depende de algo fallido/escalado.
+            if i in blocked:
+                logger.warning(
+                    "B3.1: feature '%s' bloqueado por dependencia(s) fallida(s): %s — omitido",
+                    backlog[i].get("name", "?"), ", ".join(blocked[i]),
+                )
                 continue
             updated = list(backlog)
             updated[i] = FeatureTask(**{**backlog[i], "status": "running"})
@@ -112,7 +125,7 @@ def pick_next_feature(state: ProjectState) -> dict:
             })
             return {"backlog": updated, "current_feature_index": i}
 
-    # No hay más features pendientes
+    # No hay más features pendientes (o las que quedan están bloqueadas por B3.1)
     return {"current_feature_index": len(backlog)}
 
 

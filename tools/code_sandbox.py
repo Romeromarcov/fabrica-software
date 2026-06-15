@@ -37,7 +37,7 @@ TENANT_ISOLATION_GATE = os.getenv("TENANT_ISOLATION_GATE", "auto").lower()
 
 # Gates DUROS: bloquean el PR aunque sean el único gate ejecutado.
 HARD_GATES = {"tsc", "npm-build", "migrate-check", "makemigrations-check",
-              "tenant-isolation", "secret-scan"}
+              "tenant-isolation", "secret-scan", "test-quality"}
 
 # Bases de DRF que NO garantizan aislamiento por sí solas (heredar de ellas y
 # exponer un queryset sin get_queryset es la firma del bug CRIT-1..3).
@@ -610,6 +610,256 @@ def _check_secret_scan(repo_path: str, stack: dict, files: list[str] | None = No
     return _result(gate, "secret-scan", passed, out, layer="security")
 
 
+# ── B2.3 — Validación AST de los tests generados (gate DURO) ───────────────────
+# AST-parsea los archivos de test y marca tests débiles: sin asserts, con asserts
+# triviales (assert True / 1 / "..." / not False) o vacíos (pass / solo docstring).
+# Un test trivial generado FALLA el sandbox y enruta de vuelta a A7/A6.
+
+# Sufijos/patrones que identifican un archivo de test Python.
+def _is_test_file(rel: str) -> bool:
+    """¿La ruta relativa corresponde a un archivo de test Python?"""
+    name = Path(rel).name
+    if not name.endswith(".py"):
+        return False
+    parts = {x.lower() for x in Path(rel).parts}
+    if name.startswith("test_") or name.endswith("_test.py"):
+        return True
+    return "tests" in parts
+
+
+def _assert_is_trivial(node: ast.Assert) -> bool:
+    """¿El assert es trivialmente verdadero?  assert True / 1 / "..." / not False."""
+    test = node.test
+    # assert not False  →  UnaryOp(Not, Constant(False))
+    if isinstance(test, ast.UnaryOp) and isinstance(test.op, ast.Not):
+        inner = test.operand
+        if isinstance(inner, ast.Constant) and not bool(inner.value):
+            return True
+        return False
+    # assert <constante truthy>: True, 1, "texto no vacío", etc.
+    if isinstance(test, ast.Constant):
+        return bool(test.value)
+    return False
+
+
+def _body_is_empty(body: list[ast.stmt]) -> bool:
+    """¿El cuerpo es solo `pass` y/o una docstring (sin lógica real)?"""
+    for stmt in body:
+        if isinstance(stmt, ast.Pass):
+            continue
+        # docstring: Expr envolviendo una constante str
+        if (isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Constant)
+                and isinstance(stmt.value.value, str)):
+            continue
+        return False
+    return True
+
+
+def scan_trivial_tests(repo_path: str, files: list[str] | None = None) -> list[dict]:
+    """Encuentra tests débiles generados (sin asserts / asserts triviales / vacíos).
+
+    AST-parsea los archivos de test entre `files` (filename `test_*.py` / `*_test.py`
+    o bajo un directorio `tests/`). Si `files` es None, escanea los archivos de test
+    del repo. Solo inspecciona funciones cuyo nombre empieza por `test`.
+
+    Retorna hallazgos:
+      {"file": rel, "line": n, "kind": "no-asserts"|"trivial-assert"|"empty-test",
+       "name": <test_name>}.
+
+    Salta archivos que no parsean (SyntaxError/OSError) sin recolectar nada para ellos
+    y sin propagar la excepción.
+    """
+    root = Path(repo_path)
+
+    if files is not None:
+        candidates: list[Path] = []
+        for f in files:
+            fp = Path(f)
+            rel_for_check = f if not fp.is_absolute() else str(fp)
+            if not fp.is_absolute():
+                fp = root / fp
+            if not _is_test_file(rel_for_check):
+                continue
+            if fp.is_file():
+                candidates.append(fp)
+    else:
+        candidates = [f for f in root.rglob("*.py")
+                      if _is_test_file(str(f.relative_to(root)))
+                      and not (_SECRET_SKIP_DIRS & set(f.parts))]
+
+    findings: list[dict] = []
+    for fp in candidates:
+        try:
+            tree = ast.parse(fp.read_text(encoding="utf-8", errors="replace"))
+        except (SyntaxError, OSError):
+            continue  # archivo roto / ilegible → no recolectamos nada para él
+        try:
+            rel = str(fp.relative_to(root))
+        except ValueError:
+            rel = str(fp)
+
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            if not node.name.startswith("test"):
+                continue
+
+            # 1) Cuerpo vacío (solo pass / docstring).
+            if _body_is_empty(node.body):
+                findings.append({"file": rel, "line": node.lineno,
+                                 "kind": "empty-test", "name": node.name})
+                continue
+
+            asserts = [n for n in ast.walk(node) if isinstance(n, ast.Assert)]
+            # 2) Sin ningún assert.
+            if not asserts:
+                findings.append({"file": rel, "line": node.lineno,
+                                 "kind": "no-asserts", "name": node.name})
+                continue
+            # 3) Todos los asserts son triviales.
+            if all(_assert_is_trivial(a) for a in asserts):
+                findings.append({"file": rel, "line": node.lineno,
+                                 "kind": "trivial-assert", "name": node.name})
+
+    return findings
+
+
+def _check_test_quality(repo_path: str, stack: dict, files: list[str] | None = None) -> dict:
+    """B2.3: gate DURO de calidad de tests generados.
+
+    Guardado por config.TEST_QUALITY_GATE (referencia dinámica → monkeypatch-friendly).
+    Si está desactivado, se salta como `disabled`.
+    """
+    gate = "test-quality"
+    import config  # referencia dinámica → monkeypatch-friendly
+    if not getattr(config, "TEST_QUALITY_GATE", True):
+        return _skip(gate, "disabled", "Validación de calidad de tests desactivada (TEST_QUALITY_GATE=false).",
+                     layer="tests")
+
+    findings = scan_trivial_tests(repo_path, files=files)
+    passed = len(findings) == 0
+
+    if findings:
+        _kind_desc = {
+            "no-asserts":     "sin ningún assert",
+            "trivial-assert": "solo asserts triviales (assert True/1/\"...\"/not False)",
+            "empty-test":     "cuerpo vacío (pass / solo docstring)",
+        }
+        lines = [f"{len(findings)} test(s) débil(es) detectado(s) — no validan comportamiento real:"]
+        for fd in findings[:30]:
+            lines.append(f"  - {fd['file']}:{fd['line']} · {fd['name']} · {_kind_desc.get(fd['kind'], fd['kind'])}")
+        lines.append("\nAñade asserts que verifiquen el comportamiento esperado (valores de retorno, "
+                     "efectos, excepciones). Un test sin assert real no protege contra regresiones.")
+        out = "\n".join(lines)
+    else:
+        out = "Tests generados con asserts reales (sin tests triviales/vacíos)."
+
+    return _result(gate, "test-quality", passed, out, layer="tests")
+
+
+# ── B2.2 — Cobertura sobre código nuevo (gate opcional) ────────────────────────
+# Política unit-testeable: dado un mapeo archivo→% cubierto, devuelve los archivos
+# nuevos por debajo del umbral. Mantiene la decisión sin depender de un run real de
+# coverage (no disponible en este entorno de fábrica).
+
+def coverage_shortfall(per_file_pct: dict[str, float], files: list[str],
+                       minimum: float) -> list[dict]:
+    """Archivos nuevos cuya cobertura está por debajo de `minimum`.
+
+    `per_file_pct`: mapeo archivo→% cubierto (0–100). `files`: archivos nuevos a evaluar.
+    Solo se consideran los archivos presentes en `per_file_pct` (si no hay dato de un
+    archivo, no se puede afirmar que falle → se omite, no se asume verde ni rojo).
+
+    Retorna: [{"file": f, "pct": <pct>, "minimum": minimum}] para los que incumplen.
+    """
+    short: list[dict] = []
+    for f in files:
+        if f not in per_file_pct:
+            continue
+        pct = per_file_pct[f]
+        if pct < minimum:
+            short.append({"file": f, "pct": pct, "minimum": minimum})
+    return short
+
+
+def _load_coverage_per_file(repo_path: str, files: list[str]) -> dict[str, float] | None:
+    """Carga % de cobertura por archivo desde `coverage.py` si hay datos.
+
+    Devuelve un mapeo {rel_path: pct} o None si no hay fuente de cobertura disponible
+    (sin `.coverage`, sin la librería `coverage`, o sin datos legibles). NUNCA inventa
+    cobertura: ante la duda, devuelve None para que el gate haga SKIP n/a.
+    """
+    root = Path(repo_path)
+    if not (root / ".coverage").exists():
+        return None
+    try:
+        import coverage  # noqa: F401  (solo disponible si el repo lo instaló)
+    except ImportError:
+        return None
+
+    try:
+        cov = coverage.Coverage(data_file=str(root / ".coverage"))
+        cov.load()
+        data = cov.get_data()
+    except (OSError, ValueError):
+        return None
+
+    measured = set(data.measured_files())
+    if not measured:
+        return None
+
+    per_file: dict[str, float] = {}
+    for f in files:
+        fp = Path(f)
+        abs_path = str((root / fp).resolve()) if not fp.is_absolute() else str(fp)
+        if abs_path not in measured:
+            continue
+        try:
+            analysis = cov.analysis2(abs_path)
+        except (OSError, ValueError, coverage.misc.CoverageException):
+            continue
+        # analysis2 → (filename, statements, excluded, missing, missing_formatted)
+        statements = analysis[1]
+        missing = analysis[3]
+        n_stmt = len(statements)
+        pct = 100.0 if n_stmt == 0 else (n_stmt - len(missing)) / n_stmt * 100.0
+        per_file[f] = pct
+    return per_file or None
+
+
+def _check_new_code_coverage(repo_path: str, stack: dict, files: list[str] | None = None) -> dict:
+    """B2.2: cobertura mínima sobre las líneas de código NUEVO (files_written).
+
+    Guardado por config.NEW_CODE_COVERAGE_GATE (referencia dinámica). Implementación
+    defensiva: si el gate está desactivado, no hay archivos nuevos, o no hay fuente de
+    cobertura disponible, hace SKIP (n/a) — NUNCA falla por ausencia ni asume verde.
+    """
+    gate = "new-code-coverage"
+    import config  # referencia dinámica → monkeypatch-friendly
+    if not getattr(config, "NEW_CODE_COVERAGE_GATE", False):
+        return _skip(gate, "disabled", "Cobertura de código nuevo desactivada (NEW_CODE_COVERAGE_GATE=false).")
+    if not files:
+        return _skip(gate, "n/a", "Sin archivos nuevos que evaluar para cobertura.")
+
+    per_file = _load_coverage_per_file(repo_path, files)
+    if not per_file:
+        return _skip(gate, "n/a", "Sin datos de cobertura disponibles (.coverage / librería coverage).")
+
+    minimum = float(getattr(config, "COVERAGE_MIN_NEW", 80))
+    short = coverage_shortfall(per_file, list(per_file.keys()), minimum)
+    passed = len(short) == 0
+
+    if short:
+        lines = [f"{len(short)} archivo(s) nuevo(s) por debajo del {minimum:.0f}% de cobertura:"]
+        for s in short[:30]:
+            lines.append(f"  - {s['file']}: {s['pct']:.1f}% (< {s['minimum']:.0f}%)")
+        out = "\n".join(lines)
+    else:
+        out = f"Todos los archivos nuevos medidos cumplen el {minimum:.0f}% de cobertura."
+
+    return _result(gate, "new-code-coverage", passed, out)
+
+
 # ── Política de gates requeridos por stack (F1.1) ──────────────────────────────
 
 def _required_gates(repo_path: str, stack: dict) -> set[str]:
@@ -657,6 +907,8 @@ def run_all_checks(repo_path: str, install_deps: bool = True,
         "python_lint":   _check_lint_py(repo_path, stack),
         "tenant_iso":    _check_tenant_isolation(repo_path, stack),  # F1.2
         "secret_scan":   _check_secret_scan(repo_path, stack, files),  # A2.2
+        "test_quality":  _check_test_quality(repo_path, stack, files),  # B2.3
+        "new_cov":       _check_new_code_coverage(repo_path, stack, files),  # B2.2
         "js_type":       _check_tsc(repo_path, stack),
         "js_build":      _check_npm_build(repo_path, stack),
         "js_tests":      _check_jest(repo_path, stack),

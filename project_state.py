@@ -19,6 +19,8 @@ class FeatureTask(TypedDict):
     # A3.4 (blindaje): procedencia y aprobación de features importados
     source: Optional[str]                       # "imported" si vino de session_importer
     pending_approval: Optional[bool]            # True = espera aprobación del Founder antes de ejecutarse
+    # B3.1 (blindaje): nombres de dependencias fallidas/escaladas que bloquean este feature
+    blocked_by: Optional[list[str]]
 
 
 class Phase(TypedDict):
