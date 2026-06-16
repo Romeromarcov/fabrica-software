@@ -92,3 +92,12 @@ repo_scanner x2) ahora LOGUEAN la degradación (control de flujo intacto, excepc
 Test ratchet AST tests/test_no_silent_except.py: bare except == 0 (bloqueado); swallows-pass
 <= BASELINE 57 (baja, nunca sube). Suite: 190 passed. Sin nueva deuda de lint.
 NOTA: ~55 sitios restantes quedan como objetivo futuro del ratchet (no se tocan masivamente).
+
+2026-06-16T10:55Z ✅ MILESTONE: PLAN_MEJORAS verificación (VII/VIII/IX) + VIII-3 cableado
+tests/test_mejoras_verification.py (28 tests offline) verifica: Lightning (P0-A), auth_manager
+(P0-B/IX-1), prechat (VII-1), event_bus + intervención (VII-2/VIII-1), railway_client (VII-3,
+red mockeada), dynamic_router (VIII-2), debate_panel (VIII-3), PWA presente (IX-2).
+Gap cerrado: DEBATE_PANEL_ENABLED (default false, opt-in) + MODEL_DEBATE añadidos a config y
+.env*; graph._route_after_plan_or_debate ahora respeta el flag; debate_panel usa MODEL_DEBATE.
+Suite: 218 passed (+28). Sin nueva deuda de lint.
+Pendiente CLAIMED (sin test e2e aquí): inyección mid-flight en call_agent (VIII-1), push VAPID (IX-2).

@@ -2,6 +2,22 @@
 > Versión: 2026-05-25 | Estado: BORRADOR
 > Bloques I–VI completados. Este plan cubre el camino desde VII en adelante.
 
+> **✅ VERIFICACIÓN 2026-06-16** — `tests/test_mejoras_verification.py` (28 tests) confirma
+> con pruebas (no solo "código existe") los siguientes ítems, antes CLAIMED:
+> - **P0-A Lightning Mode** — `"lightning"` válido en `state.py`; el routing salta DB/MCP/QA/
+>   SecOps/Sandbox/DevOps hasta `lightning_complete`.
+> - **P0-B / IX-1 Auth** — `auth_manager`: hash+verify de password (salteado), matriz `can()`
+>   por rol (owner/developer/viewer).
+> - **VII-1 Prechat** — `a0_prechat.extract_refined_brief` (ambas ramas).
+> - **VII-2 / VIII-1 Event bus** — emit/get_recent_events + intervención post→pop (consumo atómico).
+> - **VII-3 Railway** — `railway_client` (async, `_gql`/`_headers` con red mockeada).
+> - **VIII-2 Routing dinámico** — `dynamic_router.predict_routing` (flags bool, sin crash sin historial).
+> - **VIII-3 Debate** — flag `DEBATE_PANEL_ENABLED` (default false, opt-in) + `MODEL_DEBATE`
+>   AHORA cableados en `config.py` y respetados por `graph._route_after_plan_or_debate`.
+> - **IX-2 PWA** — `ui/static/manifest.json` + `sw.js` presentes.
+> Pendiente (no verificado por tests aquí): VIII-1 inyección mid-flight en `call_agent` e
+> IX-2 push real (VAPID) — quedan como CLAIMED hasta tener cobertura e2e.
+
 ---
 
 ## Criterios de priorización

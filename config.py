@@ -122,6 +122,15 @@ ARCH_REVIEW_INTERVAL = int(os.getenv("ARCH_REVIEW_INTERVAL", "3"))
 # Si True, el botón "Nuevo Feature" redirige al chat pre-planificación antes de A1.
 PRECHAT_ENABLED = os.getenv("PRECHAT_ENABLED", "true").lower() == "true"
 
+# ── VIII-3: Debate inter-agente (panel de revisión para riesgo ALTO) ──────────
+# Si True, los features con risk_level=HIGH (y modo != lightning) pasan por un
+# panel de 2 revisores + árbitro A1 antes de la aprobación. Opt-in: añade ~3x el
+# costo de LLM del plan (3 llamadas extra). Default seguro: false (debate omitido).
+DEBATE_PANEL_ENABLED = os.getenv("DEBATE_PANEL_ENABLED", "false").lower() == "true"
+# Modelo de los revisores/árbitro del debate. Por defecto usa el modelo económico
+# (MODEL_FAST ≈ Haiku) para mantener el costo del debate bajo.
+MODEL_DEBATE = os.getenv("MODEL_DEBATE", MODEL_FAST)
+
 # ── VII-3: Railway Deploy ─────────────────────────────────────────────────────
 RAILWAY_TOKEN      = os.getenv("RAILWAY_TOKEN",      "")
 RAILWAY_PROJECT_ID = os.getenv("RAILWAY_PROJECT_ID", "")

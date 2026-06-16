@@ -94,12 +94,18 @@ def _route_after_plan(state: FabricaState) -> str:
 
 def _route_after_plan_or_debate(state: FabricaState) -> str:
     """
-    VIII-3: Si RISK_LEVEL=HIGH y el modo no es lightning y el debate no se hizo
-    todavía → debate_panel (2 revisores + árbitro A1).
+    VIII-3: Si DEBATE_PANEL_ENABLED y RISK_LEVEL=HIGH y el modo no es lightning
+    y el debate no se hizo todavía → debate_panel (2 revisores + árbitro A1).
     Cualquier otro caso → flujo normal de aprobación via _route_after_plan().
+
+    El flag se lee dinámicamente desde el módulo `config` (no como símbolo
+    importado) para que pueda alternarse en runtime/tests. Default seguro: false
+    (debate omitido — flujo normal de aprobación).
     """
+    import config
     if (
-        state.get("risk_level") == "HIGH"
+        getattr(config, "DEBATE_PANEL_ENABLED", False)
+        and state.get("risk_level") == "HIGH"
         and state.get("mode") != "lightning"
         and not state.get("debate_done")
     ):
