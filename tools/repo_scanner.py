@@ -18,6 +18,8 @@ import logging
 import subprocess
 from pathlib import Path
 
+from tools.degradation import best_effort_log
+
 logger = logging.getLogger(__name__)
 
 # ── Archivos siempre incluidos si existen ─────────────────────────────────────
@@ -399,8 +401,10 @@ def _detect_conventions(repo: Path) -> list[str]:
             if fixtures:
                 flist = ", ".join(f"`{f}`" for f in fixtures[:5])
                 conventions.append(f"Fixtures de conftest.py disponibles: {flist}")
-        except Exception:
-            pass
+        except OSError as exc:
+            # E3.1: degradación observable — el fingerprint pierde las fixtures
+            # de conftest como contexto, pero queda logueado.
+            best_effort_log("Fingerprint: fixtures de conftest", exc, logger)
 
     # BaseModel / soft-delete
     for models_file in list(repo.glob("*/models.py"))[:6]:
@@ -446,8 +450,10 @@ def _detect_env_vars(repo: Path) -> list[str]:
                 if key not in seen:
                     seen.add(key)
                     env_vars.append(key)
-        except Exception:
-            pass
+        except OSError as exc:
+            # E3.1: degradación observable — el fingerprint pierde las env vars
+            # de settings.py como contexto, pero queda logueado.
+            best_effort_log("Fingerprint: env vars de settings.py", exc, logger)
 
     return env_vars[:20]
 

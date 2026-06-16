@@ -84,3 +84,11 @@ del root (sí cubre propagación) y se llama al configurar logging en ui/server.
 Railway verificado: deploy LIVE y sano (bot polling 200 OK); develop branch creada.
 Tests: 188 passed (+2). Branch protection (C2): NO aplicable vía API (sin PAT/herramienta MCP)
 — requiere acción del Founder (instrucciones entregadas).
+
+2026-06-16T10:45Z ✅ MILESTONE: PLAN_BLINDAJE_TOTAL E3.1 (bounded) — degradación silenciosa observable
+tools/degradation.py (degraded_note + best_effort_log). 6 sitios de swallow silencioso en
+rutas de contexto de agentes (learning_memory, fewshot_builder, project_memory, codebase_auditor,
+repo_scanner x2) ahora LOGUEAN la degradación (control de flujo intacto, excepción más específica).
+Test ratchet AST tests/test_no_silent_except.py: bare except == 0 (bloqueado); swallows-pass
+<= BASELINE 57 (baja, nunca sube). Suite: 190 passed. Sin nueva deuda de lint.
+NOTA: ~55 sitios restantes quedan como objetivo futuro del ratchet (no se tocan masivamente).

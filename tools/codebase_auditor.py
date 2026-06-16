@@ -32,6 +32,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+from tools.degradation import best_effort_log
+
 logger = logging.getLogger(__name__)
 
 # ── Configuración ─────────────────────────────────────────────────────────────
@@ -67,8 +69,10 @@ def _read_context_docs(repo_path: str) -> str:
             try:
                 content = f.read_text(encoding="utf-8", errors="ignore")[:4000]
                 docs.append(f"### {fname}\n{content}")
-            except Exception:
-                pass
+            except OSError as exc:
+                # E3.1: degradación observable — el auditor sigue sin este doc
+                # de contexto, pero el fallo queda logueado.
+                best_effort_log(f"Doc de contexto {fname}", exc, logger)
     return "\n\n".join(docs) if docs else "(Sin documentos de arquitectura encontrados)"
 
 

@@ -13,6 +13,8 @@ import logging
 from pathlib import Path
 from typing import Optional
 
+from tools.degradation import best_effort_log
+
 logger = logging.getLogger(__name__)
 
 MIN_FEATURES_FOR_FEWSHOT = 20
@@ -42,8 +44,10 @@ def _read_metrics(project_id: str) -> list[dict]:
             line = line.strip()
             if line:
                 records.append(json.loads(line))
-    except Exception:
-        pass
+    except (OSError, ValueError) as exc:
+        # E3.1: degradación observable — sin métricas no hay few-shot,
+        # el agente sigue sin ejemplos pero queda logueado.
+        best_effort_log("Métricas para few-shot", exc, logger)
     return records
 
 
