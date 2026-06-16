@@ -665,6 +665,13 @@ async def push_subscribe(request: Request):
     return JSONResponse({"ok": True})
 
 
+@app.get("/api/push/vapid-public-key")
+async def push_vapid_public_key():
+    """Devuelve la clave pública VAPID para que el cliente JS pueda suscribirse."""
+    import config as _config
+    return JSONResponse({"key": _config.VAPID_PUBLIC_KEY})
+
+
 # ── P0-B: GitHub OAuth 2.0 ───────────────────────────────────────────────────
 
 def _get_oauth_client():
