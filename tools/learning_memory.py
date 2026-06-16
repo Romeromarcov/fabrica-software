@@ -18,6 +18,8 @@ from json import JSONDecodeError
 from datetime import datetime, timezone
 from pathlib import Path
 
+from tools.degradation import best_effort_log
+
 logger = logging.getLogger(__name__)
 
 # Ruta relativa dentro del repo del proyecto
@@ -149,7 +151,10 @@ def append_to_lessons(repo_path: str, patterns: list[dict]) -> bool:
     if lessons_path.exists():
         try:
             existing = lessons_path.read_text(encoding="utf-8")
-        except Exception:
+        except OSError as exc:
+            # E3.1: degradación observable — no se pudo leer LESSONS_LEARNED
+            # para deduplicar; seguimos sin deduplicar pero lo dejamos logueado.
+            best_effort_log("Lecciones aprendidas (dedup)", exc, logger)
             existing = ""
 
     new_entries: list[str] = []
