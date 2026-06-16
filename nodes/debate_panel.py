@@ -20,7 +20,7 @@ from __future__ import annotations
 import logging
 from state import FabricaState
 from nodes.base import call_agent
-from config import MODEL_FAST
+from config import MODEL_DEBATE
 
 logger = logging.getLogger(__name__)
 
@@ -129,7 +129,7 @@ def run_debate(state: FabricaState) -> dict:
         agent_key="a1_pm",
         agent_label="Debate Revisor 1 (Arquitectura)",
         task_content=_REVIEWER_1_PROMPT.format(plan=plan_snippet),
-        model=MODEL_FAST,
+        model=MODEL_DEBATE,
         include_static=[],    # sin contexto estático para mantener el costo bajo
         feature_id=feature_id,
     )
@@ -140,7 +140,7 @@ def run_debate(state: FabricaState) -> dict:
         agent_key="a1_pm",
         agent_label="Debate Revisor 2 (Riesgos)",
         task_content=_REVIEWER_2_PROMPT.format(plan=plan_snippet),
-        model=MODEL_FAST,
+        model=MODEL_DEBATE,
         include_static=[],
         feature_id=feature_id,
     )
@@ -175,7 +175,7 @@ def run_debate(state: FabricaState) -> dict:
             review_1=review_1,
             review_2=review_2,
         ),
-        model=MODEL_FAST,
+        model=MODEL_DEBATE,
         include_static=[],
         feature_id=feature_id,
     )
