@@ -8,6 +8,11 @@
 > distinto por cada agente** se preserva siempre. En v2 pasa a ser una propiedad de cada
 > agente en el registry, con _fallback_ a un modelo por defecto del pipeline → la elección
 > por agente queda como **configuración opcional**, nunca obligatoria.
+>
+> **Documentos de dominio asociados:**
+> - `PLAN_PIPELINE_MARKETING.md` — primer pipeline de dominio de referencia (marketing),
+>   construido sobre el runtime de la Fase 4. Demuestra cómo un dominio nuevo consume el núcleo
+>   compartido sin reescribirlo y materializa la orquestación entre pipelines de la Fase 8.
 
 ---
 
@@ -187,6 +192,8 @@ funcionalidad (todos los gates, modos completo/lite/lightning, checkpoints human
 - 🟢 CLI: `fabrica-cli run <pipeline> "<objetivo>"`; UI lista pipelines disponibles.
 - 🟢 Output handlers pluggables: `github_pr`, `files`, `notion`, `email`, `api_call`.
 - ✅ **Entregable:** crear `pipelines/marketing/` como segundo dominio de referencia.
+  Diseño detallado en **`PLAN_PIPELINE_MARKETING.md`** (state, agentes M0–M10, gates de marca/
+  compliance, modos campaña/post/lightning, autonomía graduada y handlers de publicación).
 
 ### FASE 5 — Agentes dinámicos: Agent Builder [C2]
 - 🟡 Agente conversacional que, dado "quiero un agente de SEO que…", genera definición +
@@ -214,6 +221,8 @@ funcionalidad (todos los gates, modos completo/lite/lightning, checkpoints human
 - 🟡 Pipeline Orchestrator: bus de eventos desacoplado.
   `software.feature_merged` → dispara `marketing` con el changelog mapeado.
 - 🟢 Triggers configurables por el fundador en `pipeline.yaml`.
+- 📎 Caso estrella detallado en `PLAN_PIPELINE_MARKETING.md` §8: al mergear un feature del ERP,
+  marketing **propone automáticamente** el contenido para anunciarlo.
 
 ### FASE 9 — Auto-mejora y trazabilidad
 - 🔴 [M9] Meta-agente de auto-mejora: analiza historial (iteraciones QA, rollbacks,
