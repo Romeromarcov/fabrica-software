@@ -109,3 +109,12 @@ IX-2: tools/push_notify.py (send_push/notify_feature_done, degradación elegante
 sin pywebpush), endpoint GET /api/push/vapid-public-key, hook best-effort en emit_pipeline_end;
 pywebpush>=1.14.0 en requirements. test_push_notify.py (6, pywebpush mockeado, offline).
 Suite: 226 passed (+8). Sin nueva deuda de lint. Defaults seguros intactos.
+
+2026-06-16T12:50Z ✅ MILESTONE: PLAN_BLINDAJE Bloque D (parcial) — entorno efímero + gates runtime
+D1.1/D1.3: tools/ephemeral_env.py (compose aislado app+postgres+redis, naming fab-eph-*, teardown
+garantizado, reaper, límites CPU/RAM/timeout) — lógica verificada offline con docker mockeado
+(tests/test_ephemeral_env.py, 21). B2.1/B2.4: tools/runtime_gates.py (migrate real + smoke HTTP)
+VERIFICADOS EN CI REAL contra postgres:16 (service) sobre tests/fixtures/django_min/ vía
+.github/workflows/bloque-d.yml. Flags EPHEMERAL_* (default off). Suite: 259 passed (+33).
+Pendiente Bloque D (requiere host Docker + Railway deploy): D1.2 cableado en el efímero, D2/D3
+(dev estable, promoción a prod). Esos quedan para Opción B (runner con Docker) o Railway dev.
