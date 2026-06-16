@@ -19,11 +19,10 @@ import logging
 from datetime import datetime
 
 from langgraph.graph import StateGraph, END
-from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.types import interrupt
 
 from project_state import ProjectState, FeatureTask
-from config import DB_PATH, PARALLEL_WORKTREE_ISOLATION
+from config import PARALLEL_WORKTREE_ISOLATION
 from tools.file_tools import save_run_metadata, RUNS_DIR
 
 logger = logging.getLogger(__name__)
@@ -812,8 +811,8 @@ def build_project_graph() -> StateGraph:
 
 def compile_project_graph():
     """Compila el grafo de proyecto con persistencia SQLite."""
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    checkpointer = SqliteSaver.from_conn_string(str(DB_PATH))
+    from graph import _make_sqlite_checkpointer
+    checkpointer = _make_sqlite_checkpointer()
     return build_project_graph().compile(
         checkpointer=checkpointer,
         interrupt_before=[

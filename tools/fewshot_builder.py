@@ -35,6 +35,9 @@ def _metrics_path(project_id: str) -> Path:
 
 
 def _read_metrics(project_id: str) -> list[dict]:
+    # En modo feature standalone no hay project_id (None/"") → sin métricas, sin few-shot.
+    if not project_id:
+        return []
     path = _metrics_path(project_id)
     if not path.exists():
         return []
@@ -83,6 +86,8 @@ def build_fewshots(project_id: str, context: str = "planning") -> str:
 
     Retorna string para inyectar en el prompt, o "" si hay < MIN_FEATURES_FOR_FEWSHOT.
     """
+    if not project_id:
+        return ""
     records = _read_metrics(project_id)
     if len(records) < MIN_FEATURES_FOR_FEWSHOT:
         return ""
