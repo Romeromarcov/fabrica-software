@@ -101,3 +101,11 @@ Gap cerrado: DEBATE_PANEL_ENABLED (default false, opt-in) + MODEL_DEBATE añadid
 .env*; graph._route_after_plan_or_debate ahora respeta el flag; debate_panel usa MODEL_DEBATE.
 Suite: 218 passed (+28). Sin nueva deuda de lint.
 Pendiente CLAIMED (sin test e2e aquí): inyección mid-flight en call_agent (VIII-1), push VAPID (IX-2).
+
+2026-06-16T12:30Z ✅ MILESTONE: PLAN_MEJORAS VIII-1 (test) + IX-2 (sender VAPID) completados
+VIII-1: test_intervention_midflight.py (2) verifica que call_agent inyecta y CONSUME la
+intervención del Founder (pop_intervention) como override antes del LLM.
+IX-2: tools/push_notify.py (send_push/notify_feature_done, degradación elegante sin claves o
+sin pywebpush), endpoint GET /api/push/vapid-public-key, hook best-effort en emit_pipeline_end;
+pywebpush>=1.14.0 en requirements. test_push_notify.py (6, pywebpush mockeado, offline).
+Suite: 226 passed (+8). Sin nueva deuda de lint. Defaults seguros intactos.

@@ -14,9 +14,13 @@
 > - **VIII-2 Routing dinámico** — `dynamic_router.predict_routing` (flags bool, sin crash sin historial).
 > - **VIII-3 Debate** — flag `DEBATE_PANEL_ENABLED` (default false, opt-in) + `MODEL_DEBATE`
 >   AHORA cableados en `config.py` y respetados por `graph._route_after_plan_or_debate`.
-> - **IX-2 PWA** — `ui/static/manifest.json` + `sw.js` presentes.
-> Pendiente (no verificado por tests aquí): VIII-1 inyección mid-flight en `call_agent` e
-> IX-2 push real (VAPID) — quedan como CLAIMED hasta tener cobertura e2e.
+> - **IX-2 PWA** — `ui/static/manifest.json` + `sw.js` presentes; **sender VAPID** ahora
+>   implementado (`tools/push_notify.py`, `pywebpush`, degradación elegante sin claves) y
+>   cableado en `emit_pipeline_end`; endpoint `GET /api/push/vapid-public-key`.
+> - **VIII-1 Intervención mid-flight** — VERIFICADO: `call_agent` consulta `pop_intervention`
+>   antes de llamar al LLM e inyecta la instrucción del Founder como override (y la consume).
+> Pendiente (no verificado por tests aquí): push VAPID end-to-end real (requiere navegador +
+> claves VAPID configuradas) — el envío está cubierto con `pywebpush` mockeado.
 
 ---
 
