@@ -106,6 +106,11 @@ def install_redaction_filter(logger: logging.Logger | None = None) -> SecretReda
     """Añade `SecretRedactionFilter` al logger dado (o al root) de forma idempotente.
 
     Devuelve el filtro instalado (o el preexistente si ya estaba).
+
+    NOTA: un filtro en un *logger* solo se aplica a los registros emitidos
+    directamente a ese logger, NO a los propagados desde loggers hijos (p.ej.
+    `httpx`). Para sanear TODO lo que sale por los handlers del root —incluidos
+    los logs de librerías de terceros— usa `install_redaction_on_handlers()`.
     """
     target = logger if logger is not None else logging.getLogger()
     for existing in target.filters:
@@ -114,3 +119,26 @@ def install_redaction_filter(logger: logging.Logger | None = None) -> SecretReda
     new_filter = SecretRedactionFilter()
     target.addFilter(new_filter)
     return new_filter
+
+
+def install_redaction_on_handlers(logger: logging.Logger | None = None) -> int:
+    """Añade `SecretRedactionFilter` a cada handler del logger (root por defecto).
+
+    Esto sí cubre los registros PROPAGADOS desde loggers hijos (httpx, urllib3,
+    etc.), porque el filtrado de handler se aplica cuando el handler procesa el
+    registro, independientemente del logger donde se originó. Idempotente.
+
+    Si el logger no tiene handlers, se añade el filtro al propio logger como
+    red de seguridad (por si luego se configura `basicConfig`). Devuelve el
+    número de handlers a los que se añadió el filtro.
+    """
+    target = logger if logger is not None else logging.getLogger()
+    count = 0
+    for handler in target.handlers:
+        if not any(isinstance(f, SecretRedactionFilter) for f in handler.filters):
+            handler.addFilter(SecretRedactionFilter())
+            count += 1
+    if not target.handlers:
+        # Sin handlers todavía: al menos deja el filtro en el logger.
+        install_redaction_filter(target)
+    return count

@@ -74,3 +74,13 @@ PENDIENTE/ESCALADO:
   - E5.1 → ESCALADO CTF-FABRICA-001 (E2E worktree + claves en vivo + sign-off humano).
 NOTA IMPORTANTE: ¡EL CI REAL FUNCIONA! Los workflows del Bloque C corren en GitHub Actions
   (PR #5: pytest+gitleaks+revisor verdes). Desde ahora el gate de merge es CI verde real.
+
+2026-06-16T10:35Z 🔒 FIX (A2.1 refuerzo): redacción de secretos en handlers del root
+Evidencia: logs de Railway (fabrica-software/production) mostraban el token del bot de
+Telegram en claro (httpx loguea la URL de getUpdates con bot<token>). El filtro A2.1 solo
+estaba en el logger de git_tools; un filtro de LOGGER no cubre registros propagados de
+loggers hijos (httpx). Nuevo install_redaction_on_handlers() añade el filtro a los HANDLERS
+del root (sí cubre propagación) y se llama al configurar logging en ui/server.
+Railway verificado: deploy LIVE y sano (bot polling 200 OK); develop branch creada.
+Tests: 188 passed (+2). Branch protection (C2): NO aplicable vía API (sin PAT/herramienta MCP)
+— requiere acción del Founder (instrucciones entregadas).
