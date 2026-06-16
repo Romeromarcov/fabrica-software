@@ -118,3 +118,17 @@ VERIFICADOS EN CI REAL contra postgres:16 (service) sobre tests/fixtures/django_
 .github/workflows/bloque-d.yml. Flags EPHEMERAL_* (default off). Suite: 259 passed (+33).
 Pendiente Bloque D (requiere host Docker + Railway deploy): D1.2 cableado en el efímero, D2/D3
 (dev estable, promoción a prod). Esos quedan para Opción B (runner con Docker) o Railway dev.
+
+2026-06-16T23:40Z 🐛 FIX CRÍTICO (hallado por E2E en vivo con Gemini): el pipeline no arrancaba
+E2E real (cli.py new-feature, modelos→gemini-2.5-flash, key del Founder en /tmp, NO commiteada):
+  1. graph.compile_graph/compile_graph_project_mode + graph_project.compile_project_graph pasaban
+     SqliteSaver.from_conn_string() (context manager en langgraph-checkpoint-sqlite 3.1.0) a
+     .compile() → TypeError. Bloqueaba TODO run real (también en prod con requirements >=2.0).
+     Fix: _make_sqlite_checkpointer() → SqliteSaver(sqlite3.connect(DB_PATH, check_same_thread=False)).
+  2. fewshot_builder._metrics_path(None) → Path / None (modo feature standalone, project_id=None).
+     Fix: build_fewshots/_read_metrics devuelven ""/[] si no hay project_id.
+RESULTADO: tras los fixes el pipeline corrió END-TO-END en vivo y A1→A4→…→A10 ESCRIBIERON
+código correcto (multiply(a,b) con docstring) en el repo demo. Único fallo final: git push/gh
+en repo throwaway sin remote (esperado; el run salió 0, manejado). Verificación LLM en vivo ✅.
+gemini-2.0-flash tiene quota free_tier=0 en el proyecto del Founder; gemini-2.5-flash SÍ tiene quota.
+Tests: test_pipeline_boot.py (5). Suite: 264 passed.
