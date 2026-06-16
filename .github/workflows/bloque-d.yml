@@ -1,0 +1,95 @@
+# PLAN_BLINDAJE_TOTAL — Bloque D: gates de RUNTIME contra infra real.
+#
+# Hace REALES los gates B2.1 (migrate) y B2.4 (smoke HTTP) usando un servicio Postgres
+# de verdad (los runners de GitHub tienen Docker + `services:`) y un proyecto Django
+# fixture mínimo (tests/fixtures/django_min) que existe SOLO para ejercitar los gates.
+#
+# NOTA: este job NO es uno de los checks protegidos/requeridos (esos son pytest /
+# gitleaks / pr-review). Añade confianza extra sin renombrar los checks existentes.
+name: bloque-d (runtime gates)
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: ["feature/**"]
+
+permissions:
+  contents: read
+
+jobs:
+  runtime-gates:
+    name: runtime-gates (postgres real)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: fab
+          POSTGRES_PASSWORD: fab
+          POSTGRES_DB: fabtest
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U fab -d fabtest"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgres://fab:fab@localhost:5432/fabtest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install runtime-gate deps (NO van en requirements.txt de la fábrica)
+        run: |
+          python -m pip install --upgrade pip
+          pip install django psycopg2-binary httpx
+
+      - name: B2.1 — migrate real contra Postgres
+        run: python -m tools.runtime_gates migrate tests/fixtures/django_min
+
+      - name: B2.4 — smoke HTTP real (runserver + wait_for_http + smoke)
+        run: |
+          python - <<'PY'
+          import os
+          import subprocess
+          import sys
+
+          from tools.runtime_gates import smoke_http, wait_for_http
+
+          fixture = "tests/fixtures/django_min"
+          base_url = "http://127.0.0.1:8000"
+
+          # Levanta el servidor real en background (la DB ya está migrada en el paso previo).
+          env = dict(os.environ)
+          proc = subprocess.Popen(
+              [sys.executable, "manage.py", "runserver", "127.0.0.1:8000", "--noreload"],
+              cwd=fixture, env=env,
+          )
+          try:
+              if not wait_for_http(base_url, attempts=30, delay=1.0, path="/health/"):
+                  print("El servidor no respondió tras esperar — FALLO B2.4")
+                  sys.exit(1)
+
+              res = smoke_http(base_url, ["/", "/health/"])
+              print(f"[{res['gate']}] passed={res['passed']} results={res['results']}")
+              if not res["passed"]:
+                  print(res["stderr"])
+                  sys.exit(1)
+          finally:
+              proc.terminate()
+              try:
+                  proc.wait(timeout=10)
+              except subprocess.TimeoutExpired:
+                  proc.kill()
+
+          print("Runtime gates B2.1 + B2.4: OK")
+          PY

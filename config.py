@@ -264,6 +264,18 @@ TEST_QUALITY_GATE = os.getenv("TEST_QUALITY_GATE", "true").lower() == "true"
 NEW_CODE_COVERAGE_GATE = os.getenv("NEW_CODE_COVERAGE_GATE", "false").lower() == "true"
 COVERAGE_MIN_NEW = int(os.getenv("COVERAGE_MIN_NEW", "80"))
 
+# ── PLAN_BLINDAJE_TOTAL — Bloque D: entornos efímeros por feature (D1.1/D1.3) ──
+# D1.1 — Orquestación de un entorno docker-compose aislado por feature (app + db +
+# redis opcional) con teardown garantizado. Pesado: DESACTIVADO por defecto.
+EPHEMERAL_ENV_ENABLED = os.getenv("EPHEMERAL_ENV_ENABLED", "false").lower() == "true"
+# D1.3 — Límites de recursos por servicio del entorno efímero (defensa anti-fuga).
+EPHEMERAL_MEM_LIMIT   = os.getenv("EPHEMERAL_MEM_LIMIT", "1g")
+EPHEMERAL_CPUS        = os.getenv("EPHEMERAL_CPUS", "1.0")
+# Timeout (s) del `compose up --wait`; ante timeout → teardown + fallo (no cuelga).
+EPHEMERAL_TIMEOUT_SECONDS = int(os.getenv("EPHEMERAL_TIMEOUT_SECONDS", "300"))
+# Antigüedad máxima (s) antes de que el reaper coseche un entorno huérfano.
+EPHEMERAL_MAX_AGE_SECONDS = int(os.getenv("EPHEMERAL_MAX_AGE_SECONDS", "3600"))
+
 # ── PLAN_BLINDAJE_TOTAL — Bloque E: resiliencia LLM (E2) ──────────────────────
 # E2.1 — Backoff exponencial + manejo de 429. Reintentos máximos y delay base
 # (segundos) usados por el backoff exponencial (base * 2**intento, con tope y jitter).
