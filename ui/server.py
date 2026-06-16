@@ -63,6 +63,14 @@ try:
     install_trace_logging()
 except ImportError:
     pass
+# A2.1 (refuerzo): instalar la redacción de secretos en los HANDLERS del root para
+# sanear también los logs propagados de librerías de terceros (httpx registra la URL
+# de getUpdates de Telegram con el token embebido — observado en logs de Railway).
+try:
+    from tools.log_sanitizer import install_redaction_on_handlers
+    install_redaction_on_handlers()
+except ImportError:
+    pass
 logger = logging.getLogger(__name__)
 
 
