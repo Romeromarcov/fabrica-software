@@ -23,6 +23,7 @@ from config import (
 from state import CostEntry
 from tools.file_tools import read_static, read_system_prompt
 from tools.cost_tracker import make_cost_entry
+from tools.llm_retry import retry_sync
 
 logger = logging.getLogger(__name__)
 
@@ -384,12 +385,18 @@ def call_agent(
             agent_key=agent_key, agent_label=agent_label, model=model,
             static_keys=[], extra_context=resolved_extra, task_content=task_content,
         )
-        if provider == "anthropic":
-            text, cost_entry = _call_anthropic(**kwargs)
-        elif provider == "google-native":
-            text, cost_entry = _call_google_native(**kwargs)
-        else:
-            text, cost_entry = _call_openai_compat(provider=provider, **kwargs)
+
+        # E2.1 (path directo): reintento de errores transitorios (429 + 5xx +
+        # conexión/timeout). Antes la ruta directa NO reintentaba, así que un único
+        # 503 UNAVAILABLE transitorio del proveedor mataba al agente.
+        def _dispatch():
+            if provider == "anthropic":
+                return _call_anthropic(**kwargs)
+            elif provider == "google-native":
+                return _call_google_native(**kwargs)
+            return _call_openai_compat(provider=provider, **kwargs)
+
+        text, cost_entry = retry_sync(_dispatch, label=agent_label)
 
     # VII-2: señal de fin con métricas reales
     if _fid:
