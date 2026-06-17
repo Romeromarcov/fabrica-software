@@ -132,3 +132,16 @@ código correcto (multiply(a,b) con docstring) en el repo demo. Único fallo fin
 en repo throwaway sin remote (esperado; el run salió 0, manejado). Verificación LLM en vivo ✅.
 gemini-2.0-flash tiene quota free_tier=0 en el proyecto del Founder; gemini-2.5-flash SÍ tiene quota.
 Tests: test_pipeline_boot.py (5). Suite: 264 passed.
+
+2026-06-17T00:10Z 🛡️ FIX (hallado por el E2E paralelo CTF): reintento en el PATH DIRECTO de LLM
+CTF-FABRICA-001 corrido en vivo: pick_ready_features eligió ambas features → batch [0,1] →
+2 WORKTREES AISLADOS (ramas separadas, sin colisión) vía ThreadPoolExecutor → merge_coordinator
+NO mergeó features fallidas (main limpio). Mecánica de paralelismo VALIDADA en vivo. El único
+fallo fue un 503 transitorio de Gemini que destapó un gap: nodes/base.call_agent (path directo,
+USE_OPENCLAW=false = prod) NO tenía reintentos; E2.1 solo cubría openclaw.
+FIX: tools/llm_retry.py (is_transient_error cubre 429 Y 5xx 500/502/503/504 + conexión/timeout;
+retry_sync con backoff + breaker opcional) cableado en call_agent alrededor del dispatch directo.
+openclaw intacto (su check propio ya cubre; cambiarlo regresaba un test). Tests: test_llm_retry.py
+(10). Suite: 274 passed. Sin nueva deuda de lint.
+CTF: mecánica verificada en vivo; un re-run sería robusto a baches 5xx. PARALLEL_FEATURES_ENABLED
+sigue en false (sign-off humano).
