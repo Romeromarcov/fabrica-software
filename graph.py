@@ -39,7 +39,7 @@ Loops y escalaciones:
 from __future__ import annotations
 from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.sqlite import SqliteSaver
-
+import sqlite3
 from state import FabricaState
 from config import DB_PATH, MAX_QA_ITER_COMPLETO, MAX_QA_ITER_LITE, MAX_SECOPS_ITER, MAX_SANDBOX_ITER, MAX_ADVERSARIAL_ITER, VETO_WINDOW_MINUTES
 
@@ -94,12 +94,18 @@ def _route_after_plan(state: FabricaState) -> str:
 
 def _route_after_plan_or_debate(state: FabricaState) -> str:
     """
-    VIII-3: Si RISK_LEVEL=HIGH y el modo no es lightning y el debate no se hizo
-    todavía → debate_panel (2 revisores + árbitro A1).
+    VIII-3: Si DEBATE_PANEL_ENABLED y RISK_LEVEL=HIGH y el modo no es lightning
+    y el debate no se hizo todavía → debate_panel (2 revisores + árbitro A1).
     Cualquier otro caso → flujo normal de aprobación via _route_after_plan().
+
+    El flag se lee dinámicamente desde el módulo `config` (no como símbolo
+    importado) para que pueda alternarse en runtime/tests. Default seguro: false
+    (debate omitido — flujo normal de aprobación).
     """
+    import config
     if (
-        state.get("risk_level") == "HIGH"
+        getattr(config, "DEBATE_PANEL_ENABLED", False)
+        and state.get("risk_level") == "HIGH"
         and state.get("mode") != "lightning"
         and not state.get("debate_done")
     ):
@@ -607,13 +613,26 @@ def build_graph() -> StateGraph:
 
 # ── Compilación ───────────────────────────────────────────────────────────────
 
+def _make_sqlite_checkpointer() -> SqliteSaver:
+    """Crea un SqliteSaver persistente a partir de una conexión sqlite3.
+
+    En `langgraph-checkpoint-sqlite` 2.x/3.x, `SqliteSaver.from_conn_string()`
+    devuelve un *context manager*, no un saver — pasarlo directo a `.compile()`
+    lanza TypeError. El constructor `SqliteSaver(conn)` sí acepta una conexión y
+    mantiene el saver vivo durante toda la vida del proceso. `check_same_thread=False`
+    porque el grafo corre en hilos (UI, ThreadPoolExecutor del modo paralelo).
+    """
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(DB_PATH), check_same_thread=False)
+    return SqliteSaver(conn)
+
+
 def compile_graph():
     """
     Modo feature standalone: Stop Protocol espera aprobación humana del MASTER_PLAN.
     Solo dos puntos de interrupción: aprobación del plan y escalación.
     """
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    checkpointer = SqliteSaver.from_conn_string(str(DB_PATH))
+    checkpointer = _make_sqlite_checkpointer()
     return build_graph().compile(
         checkpointer=checkpointer,
         interrupt_before=[
@@ -629,8 +648,7 @@ def compile_graph_project_mode():
     Interrumpe ante: veto_window (Founder puede vetar) y escalaciones QA.
     confidence_auto_approve no necesita interrupt_before — aprueba sin suspender.
     """
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    checkpointer = SqliteSaver.from_conn_string(str(DB_PATH))
+    checkpointer = _make_sqlite_checkpointer()
     return build_graph().compile(
         checkpointer=checkpointer,
         interrupt_before=["veto_window", "qa_escalation"],

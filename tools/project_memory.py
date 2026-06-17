@@ -9,9 +9,14 @@ Almacenamiento: data/runs/{project_id}/project_memory.json
 from __future__ import annotations
 
 import json
+import logging
 import re
 from datetime import datetime
 from pathlib import Path
+
+from tools.degradation import best_effort_log
+
+logger = logging.getLogger(__name__)
 
 
 def _memory_path(project_id: str | None) -> Path | None:
@@ -39,7 +44,10 @@ def _load(project_id: str | None) -> dict:
         return _empty_memory()
     try:
         return json.loads(p.read_text(encoding="utf-8"))
-    except Exception:
+    except (OSError, ValueError) as exc:
+        # E3.1: degradación observable — sin memoria de proyecto los agentes
+        # codifican sin historial, pero el fallo queda logueado.
+        best_effort_log("Memoria de proyecto", exc, logger)
         return _empty_memory()
 
 

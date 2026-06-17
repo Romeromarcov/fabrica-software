@@ -74,3 +74,74 @@ PENDIENTE/ESCALADO:
   - E5.1 → ESCALADO CTF-FABRICA-001 (E2E worktree + claves en vivo + sign-off humano).
 NOTA IMPORTANTE: ¡EL CI REAL FUNCIONA! Los workflows del Bloque C corren en GitHub Actions
   (PR #5: pytest+gitleaks+revisor verdes). Desde ahora el gate de merge es CI verde real.
+
+2026-06-16T10:35Z 🔒 FIX (A2.1 refuerzo): redacción de secretos en handlers del root
+Evidencia: logs de Railway (fabrica-software/production) mostraban el token del bot de
+Telegram en claro (httpx loguea la URL de getUpdates con bot<token>). El filtro A2.1 solo
+estaba en el logger de git_tools; un filtro de LOGGER no cubre registros propagados de
+loggers hijos (httpx). Nuevo install_redaction_on_handlers() añade el filtro a los HANDLERS
+del root (sí cubre propagación) y se llama al configurar logging en ui/server.
+Railway verificado: deploy LIVE y sano (bot polling 200 OK); develop branch creada.
+Tests: 188 passed (+2). Branch protection (C2): NO aplicable vía API (sin PAT/herramienta MCP)
+— requiere acción del Founder (instrucciones entregadas).
+
+2026-06-16T10:45Z ✅ MILESTONE: PLAN_BLINDAJE_TOTAL E3.1 (bounded) — degradación silenciosa observable
+tools/degradation.py (degraded_note + best_effort_log). 6 sitios de swallow silencioso en
+rutas de contexto de agentes (learning_memory, fewshot_builder, project_memory, codebase_auditor,
+repo_scanner x2) ahora LOGUEAN la degradación (control de flujo intacto, excepción más específica).
+Test ratchet AST tests/test_no_silent_except.py: bare except == 0 (bloqueado); swallows-pass
+<= BASELINE 57 (baja, nunca sube). Suite: 190 passed. Sin nueva deuda de lint.
+NOTA: ~55 sitios restantes quedan como objetivo futuro del ratchet (no se tocan masivamente).
+
+2026-06-16T10:55Z ✅ MILESTONE: PLAN_MEJORAS verificación (VII/VIII/IX) + VIII-3 cableado
+tests/test_mejoras_verification.py (28 tests offline) verifica: Lightning (P0-A), auth_manager
+(P0-B/IX-1), prechat (VII-1), event_bus + intervención (VII-2/VIII-1), railway_client (VII-3,
+red mockeada), dynamic_router (VIII-2), debate_panel (VIII-3), PWA presente (IX-2).
+Gap cerrado: DEBATE_PANEL_ENABLED (default false, opt-in) + MODEL_DEBATE añadidos a config y
+.env*; graph._route_after_plan_or_debate ahora respeta el flag; debate_panel usa MODEL_DEBATE.
+Suite: 218 passed (+28). Sin nueva deuda de lint.
+Pendiente CLAIMED (sin test e2e aquí): inyección mid-flight en call_agent (VIII-1), push VAPID (IX-2).
+
+2026-06-16T12:30Z ✅ MILESTONE: PLAN_MEJORAS VIII-1 (test) + IX-2 (sender VAPID) completados
+VIII-1: test_intervention_midflight.py (2) verifica que call_agent inyecta y CONSUME la
+intervención del Founder (pop_intervention) como override antes del LLM.
+IX-2: tools/push_notify.py (send_push/notify_feature_done, degradación elegante sin claves o
+sin pywebpush), endpoint GET /api/push/vapid-public-key, hook best-effort en emit_pipeline_end;
+pywebpush>=1.14.0 en requirements. test_push_notify.py (6, pywebpush mockeado, offline).
+Suite: 226 passed (+8). Sin nueva deuda de lint. Defaults seguros intactos.
+
+2026-06-16T12:50Z ✅ MILESTONE: PLAN_BLINDAJE Bloque D (parcial) — entorno efímero + gates runtime
+D1.1/D1.3: tools/ephemeral_env.py (compose aislado app+postgres+redis, naming fab-eph-*, teardown
+garantizado, reaper, límites CPU/RAM/timeout) — lógica verificada offline con docker mockeado
+(tests/test_ephemeral_env.py, 21). B2.1/B2.4: tools/runtime_gates.py (migrate real + smoke HTTP)
+VERIFICADOS EN CI REAL contra postgres:16 (service) sobre tests/fixtures/django_min/ vía
+.github/workflows/bloque-d.yml. Flags EPHEMERAL_* (default off). Suite: 259 passed (+33).
+Pendiente Bloque D (requiere host Docker + Railway deploy): D1.2 cableado en el efímero, D2/D3
+(dev estable, promoción a prod). Esos quedan para Opción B (runner con Docker) o Railway dev.
+
+2026-06-16T23:40Z 🐛 FIX CRÍTICO (hallado por E2E en vivo con Gemini): el pipeline no arrancaba
+E2E real (cli.py new-feature, modelos→gemini-2.5-flash, key del Founder en /tmp, NO commiteada):
+  1. graph.compile_graph/compile_graph_project_mode + graph_project.compile_project_graph pasaban
+     SqliteSaver.from_conn_string() (context manager en langgraph-checkpoint-sqlite 3.1.0) a
+     .compile() → TypeError. Bloqueaba TODO run real (también en prod con requirements >=2.0).
+     Fix: _make_sqlite_checkpointer() → SqliteSaver(sqlite3.connect(DB_PATH, check_same_thread=False)).
+  2. fewshot_builder._metrics_path(None) → Path / None (modo feature standalone, project_id=None).
+     Fix: build_fewshots/_read_metrics devuelven ""/[] si no hay project_id.
+RESULTADO: tras los fixes el pipeline corrió END-TO-END en vivo y A1→A4→…→A10 ESCRIBIERON
+código correcto (multiply(a,b) con docstring) en el repo demo. Único fallo final: git push/gh
+en repo throwaway sin remote (esperado; el run salió 0, manejado). Verificación LLM en vivo ✅.
+gemini-2.0-flash tiene quota free_tier=0 en el proyecto del Founder; gemini-2.5-flash SÍ tiene quota.
+Tests: test_pipeline_boot.py (5). Suite: 264 passed.
+
+2026-06-17T00:10Z 🛡️ FIX (hallado por el E2E paralelo CTF): reintento en el PATH DIRECTO de LLM
+CTF-FABRICA-001 corrido en vivo: pick_ready_features eligió ambas features → batch [0,1] →
+2 WORKTREES AISLADOS (ramas separadas, sin colisión) vía ThreadPoolExecutor → merge_coordinator
+NO mergeó features fallidas (main limpio). Mecánica de paralelismo VALIDADA en vivo. El único
+fallo fue un 503 transitorio de Gemini que destapó un gap: nodes/base.call_agent (path directo,
+USE_OPENCLAW=false = prod) NO tenía reintentos; E2.1 solo cubría openclaw.
+FIX: tools/llm_retry.py (is_transient_error cubre 429 Y 5xx 500/502/503/504 + conexión/timeout;
+retry_sync con backoff + breaker opcional) cableado en call_agent alrededor del dispatch directo.
+openclaw intacto (su check propio ya cubre; cambiarlo regresaba un test). Tests: test_llm_retry.py
+(10). Suite: 274 passed. Sin nueva deuda de lint.
+CTF: mecánica verificada en vivo; un re-run sería robusto a baches 5xx. PARALLEL_FEATURES_ENABLED
+sigue en false (sign-off humano).

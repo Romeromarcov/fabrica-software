@@ -122,6 +122,15 @@ ARCH_REVIEW_INTERVAL = int(os.getenv("ARCH_REVIEW_INTERVAL", "3"))
 # Si True, el botón "Nuevo Feature" redirige al chat pre-planificación antes de A1.
 PRECHAT_ENABLED = os.getenv("PRECHAT_ENABLED", "true").lower() == "true"
 
+# ── VIII-3: Debate inter-agente (panel de revisión para riesgo ALTO) ──────────
+# Si True, los features con risk_level=HIGH (y modo != lightning) pasan por un
+# panel de 2 revisores + árbitro A1 antes de la aprobación. Opt-in: añade ~3x el
+# costo de LLM del plan (3 llamadas extra). Default seguro: false (debate omitido).
+DEBATE_PANEL_ENABLED = os.getenv("DEBATE_PANEL_ENABLED", "false").lower() == "true"
+# Modelo de los revisores/árbitro del debate. Por defecto usa el modelo económico
+# (MODEL_FAST ≈ Haiku) para mantener el costo del debate bajo.
+MODEL_DEBATE = os.getenv("MODEL_DEBATE", MODEL_FAST)
+
 # ── VII-3: Railway Deploy ─────────────────────────────────────────────────────
 RAILWAY_TOKEN      = os.getenv("RAILWAY_TOKEN",      "")
 RAILWAY_PROJECT_ID = os.getenv("RAILWAY_PROJECT_ID", "")
@@ -254,6 +263,18 @@ TEST_QUALITY_GATE = os.getenv("TEST_QUALITY_GATE", "true").lower() == "true"
 # SKIP (n/a), nunca asume verde. COVERAGE_MIN_NEW: umbral de % por archivo nuevo.
 NEW_CODE_COVERAGE_GATE = os.getenv("NEW_CODE_COVERAGE_GATE", "false").lower() == "true"
 COVERAGE_MIN_NEW = int(os.getenv("COVERAGE_MIN_NEW", "80"))
+
+# ── PLAN_BLINDAJE_TOTAL — Bloque D: entornos efímeros por feature (D1.1/D1.3) ──
+# D1.1 — Orquestación de un entorno docker-compose aislado por feature (app + db +
+# redis opcional) con teardown garantizado. Pesado: DESACTIVADO por defecto.
+EPHEMERAL_ENV_ENABLED = os.getenv("EPHEMERAL_ENV_ENABLED", "false").lower() == "true"
+# D1.3 — Límites de recursos por servicio del entorno efímero (defensa anti-fuga).
+EPHEMERAL_MEM_LIMIT   = os.getenv("EPHEMERAL_MEM_LIMIT", "1g")
+EPHEMERAL_CPUS        = os.getenv("EPHEMERAL_CPUS", "1.0")
+# Timeout (s) del `compose up --wait`; ante timeout → teardown + fallo (no cuelga).
+EPHEMERAL_TIMEOUT_SECONDS = int(os.getenv("EPHEMERAL_TIMEOUT_SECONDS", "300"))
+# Antigüedad máxima (s) antes de que el reaper coseche un entorno huérfano.
+EPHEMERAL_MAX_AGE_SECONDS = int(os.getenv("EPHEMERAL_MAX_AGE_SECONDS", "3600"))
 
 # ── PLAN_BLINDAJE_TOTAL — Bloque E: resiliencia LLM (E2) ──────────────────────
 # E2.1 — Backoff exponencial + manejo de 429. Reintentos máximos y delay base

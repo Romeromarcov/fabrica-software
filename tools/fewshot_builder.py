@@ -13,6 +13,8 @@ import logging
 from pathlib import Path
 from typing import Optional
 
+from tools.degradation import best_effort_log
+
 logger = logging.getLogger(__name__)
 
 MIN_FEATURES_FOR_FEWSHOT = 20
@@ -33,6 +35,9 @@ def _metrics_path(project_id: str) -> Path:
 
 
 def _read_metrics(project_id: str) -> list[dict]:
+    # En modo feature standalone no hay project_id (None/"") → sin métricas, sin few-shot.
+    if not project_id:
+        return []
     path = _metrics_path(project_id)
     if not path.exists():
         return []
@@ -42,8 +47,10 @@ def _read_metrics(project_id: str) -> list[dict]:
             line = line.strip()
             if line:
                 records.append(json.loads(line))
-    except Exception:
-        pass
+    except (OSError, ValueError) as exc:
+        # E3.1: degradación observable — sin métricas no hay few-shot,
+        # el agente sigue sin ejemplos pero queda logueado.
+        best_effort_log("Métricas para few-shot", exc, logger)
     return records
 
 
@@ -79,6 +86,8 @@ def build_fewshots(project_id: str, context: str = "planning") -> str:
 
     Retorna string para inyectar en el prompt, o "" si hay < MIN_FEATURES_FOR_FEWSHOT.
     """
+    if not project_id:
+        return ""
     records = _read_metrics(project_id)
     if len(records) < MIN_FEATURES_FOR_FEWSHOT:
         return ""

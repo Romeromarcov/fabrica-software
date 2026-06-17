@@ -63,6 +63,14 @@ try:
     install_trace_logging()
 except ImportError:
     pass
+# A2.1 (refuerzo): instalar la redacción de secretos en los HANDLERS del root para
+# sanear también los logs propagados de librerías de terceros (httpx registra la URL
+# de getUpdates de Telegram con el token embebido — observado en logs de Railway).
+try:
+    from tools.log_sanitizer import install_redaction_on_handlers
+    install_redaction_on_handlers()
+except ImportError:
+    pass
 logger = logging.getLogger(__name__)
 
 
@@ -655,6 +663,13 @@ async def push_subscribe(request: Request):
         json.dumps(sub, ensure_ascii=False), encoding="utf-8"
     )
     return JSONResponse({"ok": True})
+
+
+@app.get("/api/push/vapid-public-key")
+async def push_vapid_public_key():
+    """Devuelve la clave pública VAPID para que el cliente JS pueda suscribirse."""
+    import config as _config
+    return JSONResponse({"key": _config.VAPID_PUBLIC_KEY})
 
 
 # ── P0-B: GitHub OAuth 2.0 ───────────────────────────────────────────────────

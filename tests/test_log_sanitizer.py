@@ -1,11 +1,48 @@
 """Tests para tools.log_sanitizer (PLAN_BLINDAJE_TOTAL A2.1)."""
+import io
 import logging
 
 from tools.log_sanitizer import (
     SecretRedactionFilter,
     install_redaction_filter,
+    install_redaction_on_handlers,
     redact,
 )
+
+
+def test_handler_filter_redacts_propagated_telegram_token():
+    """Refuerzo A2.1: un token de Telegram que httpx loguea (logger hijo que
+    propaga al padre) debe salir enmascarado por el filtro a nivel de HANDLER."""
+    stream = io.StringIO()
+    parent = logging.getLogger("test_ls.prop")
+    parent.handlers = []
+    parent.propagate = False
+    handler = logging.StreamHandler(stream)
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    parent.addHandler(handler)
+    parent.setLevel(logging.INFO)
+
+    added = install_redaction_on_handlers(parent)
+    assert added == 1
+
+    child = logging.getLogger("test_ls.prop.httpx")
+    child.propagate = True  # sin handlers propios → propaga al padre
+    token = "8844647246:AAGq0ZDXOs7ASHQNRHuFp52YpmfxcnwWDVY"
+    child.info("HTTP Request: GET https://api.telegram.org/bot%s/getUpdates", token)
+
+    out = stream.getvalue()
+    assert token not in out
+    assert "8844647246:AA***" in out
+
+
+def test_install_redaction_on_handlers_idempotent():
+    parent = logging.getLogger("test_ls.idem_h")
+    parent.handlers = []
+    parent.addHandler(logging.StreamHandler(io.StringIO()))
+    install_redaction_on_handlers(parent)
+    install_redaction_on_handlers(parent)
+    h = parent.handlers[0]
+    assert sum(isinstance(f, SecretRedactionFilter) for f in h.filters) == 1
 
 
 def test_redact_url_embedded_credentials():

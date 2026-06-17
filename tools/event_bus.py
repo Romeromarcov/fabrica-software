@@ -153,6 +153,13 @@ async def tail_sse(
 def emit_pipeline_end(feature_id: str, status: str = "completed") -> None:
     """Señal de cierre — el servidor SSE se desconecta al verla."""
     emit(feature_id, "__pipeline__", "end", msg=status)
+    # IX-2: notificación push best-effort al Founder cuando un feature termina/falla.
+    # Import perezoso para evitar ciclos; jamás debe romper ni bloquear el pipeline.
+    try:
+        from tools.push_notify import notify_feature_done
+        notify_feature_done(feature_id, status)
+    except Exception as exc:  # noqa: BLE001 — push es best-effort
+        logger.debug("emit_pipeline_end: push notify falló: %s", exc)
 
 
 def get_recent_events(feature_id: str, limit: int = 100) -> list[dict]:

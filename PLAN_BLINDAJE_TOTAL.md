@@ -115,8 +115,11 @@ a pesar de los gates.
       `apps/core/` → tier efectivo HIGH → LLM se invoca; mock para hermeticidad).
 
 ### Fase B2 — Gates de runtime que hoy faltan
-- [ ] **B2.1 — `migrate` real en DB efímera.** ⏸ REQUIERE Docker/Postgres (no disponible en el
-      contenedor de ejecución). Pendiente — se implementa en el Bloque D (entorno efímero).
+- [x] **B2.1 — `migrate` real en DB efímera.** `tools/runtime_gates.run_django_migrate`
+      (`makemigrations --check` + `migrate --noinput`; tool/manage.py ausente = FAIL, no skip).
+      **Verificado en CI real** contra `postgres:16` (service de GitHub Actions) sobre el fixture
+      `tests/fixtures/django_min/`. *Workflow:* `.github/workflows/bloque-d.yml`. *Test unit
+      (offline, mock):* `tests/test_runtime_gates.py`.
 - [x] **B2.2 — Gate de cobertura sobre código nuevo.** `tools/code_sandbox`: helper puro
       `coverage_shortfall()` + gate `_check_new_code_coverage` (`NEW_CODE_COVERAGE_GATE`,
       `COVERAGE_MIN_NEW=80`). Opt-in y defensivo: SKIP `n/a` si no hay datos de cobertura
@@ -125,8 +128,10 @@ a pesar de los gates.
 - [x] **B2.3 — Validación AST de los tests generados.** `tools/code_sandbox.scan_trivial_tests`
       detecta `assert True`, tests sin asserts y tests vacíos vía AST; gate HARD
       (`TEST_QUALITY_GATE`) → feedback a A7/A6. *Test:* `tests/test_test_quality.py`.
-- [ ] **B2.4 — Smoke test HTTP real.** ⏸ REQUIERE arrancar la app (servidor de test) — se
-      implementa en el Bloque D (entorno efímero por feature). Pendiente.
+- [x] **B2.4 — Smoke test HTTP real.** `tools/runtime_gates.smoke_http` (5xx/conexión fallida =
+      FAIL; 401/403 = respondió) + `wait_for_http`. **Verificado en CI real**: el workflow
+      `bloque-d.yml` arranca `runserver` del fixture contra Postgres y golpea `/` y `/health/`.
+      *Test unit (offline, mock):* `tests/test_runtime_gates.py`.
 
 ### Fase B3 — Robustez del loop de proyecto
 - [x] **B3.1 — Validación del grafo de dependencias.** `get_ready_indices(block_on_failed_deps=True)`
@@ -191,15 +196,18 @@ Tres etapas con propósitos distintos: el efímero es el **gate duro**; el dev e
 acumulada**; prod requiere **promoción humana con evidencia**.
 
 ### Fase D1 — Entorno efímero por feature (vida: minutos)
-- [ ] **D1.1 — `tools/ephemeral_env.py`.** Por feature: `docker compose` aislado
-      (app + Postgres + Redis si aplica), deps instaladas desde cero (detecta lock files),
-      `migrate` real, seed de datos de prueba. Naming `fab-eph-{feature_id}`, destrucción
-      garantizada (try/finally + reaper de huérfanos por antigüedad).
-- [ ] **D1.2 — Gates de runtime dentro del efímero.** Mueve aquí B2.1/B2.4 en su versión
-      completa: smoke HTTP, e2e ligero (Playwright si hay UI), arranque limpio sin errores
-      en logs. Resultado → mismo flujo que el sandbox (FAIL → A6, agota → humano).
-- [ ] **D1.3 — Límites de recursos.** CPU/RAM/timeout/disco por entorno efímero (evita
-      que un feature roto tumbe el host).
+- [x] **D1.1 — `tools/ephemeral_env.py`.** Orquestación `docker compose` aislada por feature
+      (app + Postgres + Redis opcional), naming `fab-eph-{feature_id}`, teardown garantizado
+      (context manager try/finally) + `reap_orphans` por antigüedad. Lógica pura (compose_config/
+      select_orphans) verificada offline con docker mockeado. *Test:* `tests/test_ephemeral_env.py`
+      (21). *Nota:* el `compose up` real contra OmniERP requiere un host con daemon Docker.
+- [~] **D1.2 — Gates de runtime dentro del efímero.** B2.1 (`migrate`) y B2.4 (smoke HTTP)
+      implementados en `tools/runtime_gates.py` y **verificados en CI real** (Postgres service).
+      Falta cablearlos DENTRO del `ephemeral_env` (mismo flujo sandbox FAIL→A6) — requiere host
+      Docker para el e2e completo.
+- [x] **D1.3 — Límites de recursos.** `EPHEMERAL_MEM_LIMIT`/`EPHEMERAL_CPUS`/`EPHEMERAL_TIMEOUT_SECONDS`
+      aplicados por servicio en `compose_config` (mem_limit/cpus + deploy.resources.limits) y
+      timeout en `_run`. *Test:* `tests/test_ephemeral_env.py`.
 
 ### Fase D2 — Entorno de desarrollo estable (vida: días/semanas)
 - [ ] **D2.1 — Rama `develop` + deploy automático.** PR del feature: checks verdes
