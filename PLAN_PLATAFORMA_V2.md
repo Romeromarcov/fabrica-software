@@ -280,9 +280,15 @@ funcionalidad (todos los gates, modos completo/lite/lightning, checkpoints human
 - 🔴 Meta-pipeline: meta-conversación → Meta-A1 propone cambio → **diff mostrado al
   fundador** → aprobación explícita (nivel superior al normal) → Meta-A10 escribe → tests de
   la fábrica corren → deploy/rollback.
-- 🟢 Interfaz unificada en lenguaje natural: "modifica el prompt de A4", "añade un paso de
-  traducción antes de A1", "crea un agente de marketing" → enruta a Factory Modifier /
-  Agent Builder / Pipeline Builder.
+- ✅ Interfaz unificada en lenguaje natural: `tools/factory_router.py` (`route_request`)
+  clasifica la petición y la enruta a Agent Builder / Pipeline Builder / Factory Modifier con
+  reglas DETERMINISTAS (LLM opcional inyectable para casos ambiguos). `is_executable()` marca
+  que los builders son ejecutables y que el Factory Modifier NO lo es autónomamente. *Test:*
+  `tests/test_factory_router.py` (10). Suite 548. **IMPLEMENTADO 2026-06-18.**
+- ⏸️ Meta-pipeline de auto-modificación (Meta-A1→diff→aprobación→Meta-A10 escribe→tests→
+  deploy/rollback) — **ESCALADO**: la fábrica reescribiendo su propio código es autofagia de
+  máximo riesgo (hard-to-reverse, auto-modificación). Requiere diseño y sign-off humano
+  explícito antes de implementarse; no se construye autónomamente.
 
 ### FASE 8 — Orquestación entre pipelines (eventos) [C3] — EN PROGRESO
 - ✅ Pipeline Orchestrator (`tools/pipeline_orchestrator.py`): resuelve QUÉ pipelines dispara
