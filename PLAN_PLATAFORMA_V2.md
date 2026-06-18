@@ -240,6 +240,10 @@ funcionalidad (todos los gates, modos completo/lite/lightning, checkpoints human
 - ✅ Descubrimiento automático de `pipelines/*/pipeline.yaml` (`pipeline_loader.discover_pipelines`, Fase 0).
 - 🟡 State por pipeline (`MarketingState`, etc.) + gates y output handlers por dominio.
 - 🟢 CLI: `fabrica-cli run <pipeline> "<objetivo>"`; UI lista pipelines disponibles.
+  - ✅ **`fabrica-cli pipelines`** — lista los dominios descubiertos (nombre/descripción/entry/
+    nº agentes/modelo) vía `pipeline_loader.pipeline_summaries` (pure, no rompe ante YAML
+    inválido). *Test:* `test_pipeline_summaries.py` (4). **2026-06-18.** (El subcomando `run`
+    que EJECUTA el grafo del pipeline queda pendiente: requiere LLM en vivo.)
 - ✅ Output handlers pluggables: `tools/output_handlers.py` — `files` (real), `noop`/`log`, y
   `github_pr`/`notion`/`email`/`api_call` con estado honesto `not_configured` hasta cablear
   credenciales (no se finge éxito). *Test:* `test_output_handlers.py` (8). **2026-06-18.**

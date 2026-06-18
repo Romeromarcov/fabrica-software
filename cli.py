@@ -547,6 +547,37 @@ def cmd_list() -> None:
     console.print(table)
 
 
+# ── Fase 4: pipelines disponibles ────────────────────────────────────────────
+
+def cmd_pipelines() -> None:
+    """Lista los pipelines (dominios) descubiertos en `pipelines/*/pipeline.yaml`."""
+    from tools.pipeline_loader import pipeline_summaries
+
+    summaries = pipeline_summaries()
+    if not summaries:
+        console.print("[dim]No se descubrieron pipelines en pipelines/*/pipeline.yaml.[/dim]")
+        return
+
+    table = Table(title="Pipelines disponibles")
+    table.add_column("Pipeline", style="cyan", no_wrap=True)
+    table.add_column("Descripción")
+    table.add_column("Entry", style="dim")
+    table.add_column("Agentes", justify="right")
+    table.add_column("Modelo default", style="dim")
+    for s in summaries:
+        if not s["ok"]:
+            table.add_row(s["name"], f"[red]inválido: {s['error']}[/red]", "-", "-", "-")
+            continue
+        table.add_row(
+            s["name"],
+            (s["description"] or "")[:60],
+            s["entry"] or "-",
+            str(len(s["agents"])),
+            s["default_model"] or "-",
+        )
+    console.print(table)
+
+
 # ── M2: replay / debugging ──────────────────────────────────────────────────
 
 def cmd_replay(feature_id: str, from_node: str | None) -> None:
@@ -604,6 +635,7 @@ def main() -> None:
 
     sub.add_parser("list", help="Lista todos los features")
     sub.add_parser("repos", help="Lista los repositorios disponibles")
+    sub.add_parser("pipelines", help="Lista los pipelines (dominios) disponibles")
 
     p_proj = sub.add_parser("new-project", help="Crea un plan de proyecto y arranca el loop autónomo")
     p_proj.add_argument("name",  help="Nombre del proyecto")
@@ -642,6 +674,8 @@ def main() -> None:
         cmd_list()
     elif args.cmd == "repos":
         cmd_repos()
+    elif args.cmd == "pipelines":
+        cmd_pipelines()
     elif args.cmd == "new-project":
         cmd_new_project(args.name, args.brief, args.repo, args.new, audit=getattr(args, "audit", False))
     elif args.cmd == "resume-project":
