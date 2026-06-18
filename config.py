@@ -279,6 +279,12 @@ DYNAMIC_CONTEXT_ENABLED = os.getenv("DYNAMIC_CONTEXT_ENABLED", "false").lower() 
 # NO requiere chromadb (dependencia opcional: `pip install chromadb`). Default off.
 VECTOR_MEMORY_ENABLED = os.getenv("VECTOR_MEMORY_ENABLED", "false").lower() == "true"
 
+# M6 (PLAN_PLATAFORMA_V2 Fase 3) — A/B testing de modelos por agente. En AB_TESTING_PCT
+# de los features, el agente usa su modelo alternativo (model_fallbacks del registry) y se
+# registra el resultado para recomendar el óptimo por rol. Opt-in; default off → idéntico.
+AB_TESTING_ENABLED = os.getenv("AB_TESTING_ENABLED", "false").lower() == "true"
+AB_TESTING_PCT     = float(os.getenv("AB_TESTING_PCT", "0.2"))
+
 # A2.3 — CORS explícito. Allowlist de orígenes (separados por comas). Vacío = no se
 # añade middleware CORS (comportamiento por defecto: sin orígenes cruzados permitidos).
 CORS_ALLOWED_ORIGINS = [

@@ -371,6 +371,24 @@ def call_agent(
         except Exception:
             pass
 
+    # M6 (PLAN_PLATAFORMA_V2): A/B testing de modelos. En AB_TESTING_PCT de los features,
+    # el agente usa su modelo alternativo (model_fallbacks del registry). Opt-in; no-op si
+    # el flag está off o el agente no tiene alternativas declaradas.
+    try:
+        from config import AB_TESTING_ENABLED, AB_TESTING_PCT
+        if AB_TESTING_ENABLED and _fid:
+            from tools.agent_registry import all_agents
+            from tools.ab_testing import choose_model
+            _match = next((a for a in all_agents() if a.get("agent_key") == agent_key), None)
+            if _match and _match.get("model_fallbacks"):
+                model, _ab_variant = choose_model(
+                    _fid, _match["id"], model, _match["model_fallbacks"], AB_TESTING_PCT,
+                )
+                if _ab_variant:
+                    logger.info("%s: A/B testing → modelo variante %s", agent_label, model)
+    except Exception as _ab_exc:
+        logger.warning("A/B testing de modelos falló (ignorado): %s", _ab_exc)
+
     # R2 (PLAN_PLATAFORMA_V2): hook pre_agent. Sin hooks registrados es no-op
     # (comportamiento idéntico). Un hook puede devolver `model`/`task_content`
     # para influir en la llamada (opt-in, gobernado por quien lo registra).

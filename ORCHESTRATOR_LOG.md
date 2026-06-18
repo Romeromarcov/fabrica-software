@@ -237,3 +237,5 @@ Recorrido formal de la cola de prioridad sobre PLAN_BLINDAJE_TOTAL (items restan
     concurrencia en el núcleo sin sign-off E2E (langgraph + claves en vivo). Requiere humano.
     Fase 2 entregada salvo R3: M5✅(#22) M8✅(#23) R1✅(#24).
 [2026-06-18T20:28:51Z] 🔨 V2 Fase 3 M10 dry-run: dry_run.py + cli dry-run + 6 tests. Suite 414.
+[2026-06-18T20:30:59Z] ✅ V2 Fase 3 M10 dry-run PR#26 MERGEADO a main (squash 78513b5). CI 6/6 verde. Era MISSING.
+[2026-06-18T20:33:02Z] 🔨 V2 Fase 3 M6 A/B testing de modelos: ab_testing.py + wiring base.call_agent + 9 tests. Suite 423.
