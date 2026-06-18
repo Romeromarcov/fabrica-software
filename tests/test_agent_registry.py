@@ -50,8 +50,10 @@ def test_cascade_falls_back_to_pipeline_then_global(monkeypatch):
 
 
 def test_agent_model_overrides_pipeline_default():
-    # A4 tiene model explícito → la cascada NO lo degrada al default del pipeline.
-    assert ar.resolve_model("A4", pipeline_default="otro-modelo") == config.MODEL_A4
+    # A4 tiene model explícito en el registry → la cascada NO lo degrada al default del
+    # pipeline. Se compara contra la verdad del registry (no contra config.MODEL_A4) para
+    # que el test sea hermético a overrides de MODEL_* en el entorno (.env del operador).
+    assert ar.resolve_model("A4", pipeline_default="otro-modelo") == ar.get_agent("A4")["model"]
 
 
 def test_get_agent_unknown_raises():

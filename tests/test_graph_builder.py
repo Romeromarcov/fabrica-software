@@ -5,7 +5,7 @@ agente respeta la cascada, que el StateGraph se construye/compila, y la PARIDAD 
 el grafo de producción (`graph.py`): cada nodo de agente del registry existe como
 nodo real en build_graph().
 """
-import config
+import tools.agent_registry as ar
 
 import graph as production_graph
 import graph_builder as gb
@@ -23,9 +23,11 @@ def test_build_pipeline_spec_software():
 def test_spec_resolves_effective_models():
     spec = gb.build_pipeline_spec("software")
     by_id = {a["id"]: a for a in spec["agents"]}
-    assert by_id["A4"]["model"] == config.MODEL_A4       # model explícito
-    assert by_id["A9"]["model"] == "no-llm"              # sin LLM
-    assert by_id["A11"]["model"] == config.MODEL_A11
+    # Se compara contra la verdad del registry (no config.MODEL_A*) para ser hermético a
+    # overrides de MODEL_* en el entorno (.env del operador).
+    assert by_id["A4"]["model"] == ar.get_agent("A4")["model"]    # model explícito
+    assert by_id["A9"]["model"] == "no-llm"                       # sin LLM
+    assert by_id["A11"]["model"] == ar.get_agent("A11")["model"]
 
 
 def test_build_state_graph_compiles():
