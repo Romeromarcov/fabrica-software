@@ -295,6 +295,11 @@ AB_TESTING_PCT     = float(os.getenv("AB_TESTING_PCT", "0.2"))
 # PARALLEL_FEATURES_ENABLED (paralelismo a nivel feature, escalado a CTF-FABRICA-001, intocado).
 PARALLEL_AGENTS_ENABLED = os.getenv("PARALLEL_AGENTS_ENABLED", "false").lower() == "true"
 
+# Fase 5 (PLAN_PLATAFORMA_V2) — Agent Builder. Permite REGISTRAR agentes generados
+# conversacionalmente en el registry. Default off + aprobación explícita del fundador por
+# registro (doble gate): la fábrica no se auto-modifica sin intención humana.
+AGENT_BUILDER_ENABLED = os.getenv("AGENT_BUILDER_ENABLED", "false").lower() == "true"
+
 # M7 (PLAN_PLATAFORMA_V2 Fase 3) — Observabilidad OpenTelemetry. Spans por agente
 # (reusa trace_id de E1.1), export OTLP a Jaeger/Tempo si OTEL_EXPORTER_OTLP_ENDPOINT.
 # Opt-in; la fábrica NO requiere opentelemetry (dep opcional). Default off → no-op.

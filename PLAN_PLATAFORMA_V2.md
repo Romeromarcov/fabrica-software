@@ -251,11 +251,18 @@ funcionalidad (todos los gates, modos completo/lite/lightning, checkpoints human
   Diseño detallado en **`PLAN_PIPELINE_MARKETING.md`** (state, agentes M0–M10, gates de marca/
   compliance, modos campaña/post/lightning, autonomía graduada y handlers de publicación).
 
-### FASE 5 — Agentes dinámicos: Agent Builder [C2]
-- 🟡 Agente conversacional que, dado "quiero un agente de SEO que…", genera definición +
-  prompt + posición en pipeline + schema, y lo **registra** en el registry.
-- 🟢 Aprobación humana del fundador antes de activar el nuevo agente.
-- 🟢 Validación: el agente nuevo respeta resolución de modelo en cascada (opcional).
+### FASE 5 — Agentes dinámicos: Agent Builder [C2] — ✅ IMPLEMENTADA (2026-06-18)
+- ✅ Agente conversacional que, dado "quiero un agente de SEO que…", genera definición +
+  posición en pipeline + schema, y lo **registra** en el registry. `tools/agent_builder.py`:
+  `build_agent_definition` (LLM inyectable/mockeable; sin JSON válido → lanza, no finge éxito),
+  `validate_agent_definition`/`normalize_agent_definition` (puras), `register_agent` (persiste).
+- ✅ Aprobación humana del fundador antes de activar: **doble gate** en `register_agent` —
+  `AGENT_BUILDER_ENABLED` (config, default off) Y `approved=True`. Sin ambos → `PermissionError`.
+- ✅ Validación: el agente nuevo respeta la resolución de modelo en cascada (`model=None` →
+  pipeline default → GLOBAL_DEFAULT_MODEL), id único/formato, coherencia uses_llm/model.
+- *Test:* `tests/test_agent_builder.py` (17). Suite 502. **IMPLEMENTADO 2026-06-18.**
+  Nota: la conexión del Agent Builder a una UI conversacional en vivo usa el LLM ya cableado
+  (Gemini); aquí se entrega el núcleo verificable (generación+validación+registro con gates).
 
 ### FASE 6 — Pipeline Builder (crear pipelines conversacionalmente) [C3]
 - 🟡 Extiende Agent Builder: "crea un pipeline legal" → genera `pipeline.yaml` + prompts +
