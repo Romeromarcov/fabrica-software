@@ -234,11 +234,13 @@ funcionalidad (todos los gates, modos completo/lite/lightning, checkpoints human
   comprometer el pipeline. Comando `fabrica-cli dry-run "<brief>" [--project <id>]`.
   *Test:* `test_dry_run.py` (6). **IMPLEMENTADO 2026-06-18.**
 
-### FASE 4 — Runtime multi-pipeline (la separación por dominio) [C3]
-- 🟡 Descubrimiento automático de `pipelines/*/pipeline.yaml`.
+### FASE 4 — Runtime multi-pipeline (la separación por dominio) [C3] — EN PROGRESO
+- ✅ Descubrimiento automático de `pipelines/*/pipeline.yaml` (`pipeline_loader.discover_pipelines`, Fase 0).
 - 🟡 State por pipeline (`MarketingState`, etc.) + gates y output handlers por dominio.
 - 🟢 CLI: `fabrica-cli run <pipeline> "<objetivo>"`; UI lista pipelines disponibles.
-- 🟢 Output handlers pluggables: `github_pr`, `files`, `notion`, `email`, `api_call`.
+- ✅ Output handlers pluggables: `tools/output_handlers.py` — `files` (real), `noop`/`log`, y
+  `github_pr`/`notion`/`email`/`api_call` con estado honesto `not_configured` hasta cablear
+  credenciales (no se finge éxito). *Test:* `test_output_handlers.py` (8). **2026-06-18.**
 - ✅ **Entregable:** crear `pipelines/marketing/` como segundo dominio de referencia.
   Diseño detallado en **`PLAN_PIPELINE_MARKETING.md`** (state, agentes M0–M10, gates de marca/
   compliance, modos campaña/post/lightning, autonomía graduada y handlers de publicación).
