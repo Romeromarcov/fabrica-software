@@ -158,3 +158,61 @@ sigue en false (sign-off humano).
     · E3.1 (~180 except Exception) → auditoría amplia diferida por diseño (evita churn masivo).
     · E5.1 (worktrees → ThreadPoolExecutor) → ⛔ CTF-FABRICA-001: ESCALACIÓN (langgraph e2e + API keys + sign-off humano).
 - Conclusión: porción autónoma-verificable de los planes de autoridad = 100% verificada.
+
+## 2026-06-18T13:53:36Z — MERGE a main
+- PR #16 MERGEADO a main (squash, sha a7be532). 6/6 CI verde.
+- Contenido: +33 tests dedicados (quality_tracker, fewshot_builder, code_writer, stack_reader,
+  repo_scanner, feature_detail UI) + fix .env.example en code_writer + files_written en UI.
+  Reconcilia ROADMAP I-1..I-3 y PLAN.md 1.1-4.4 a [x] (eran CLAIMED/PARTIAL/MISSING).
+
+## 2026-06-18T13:54:46Z — ESTADO TERMINAL
+Planes de autoridad con porción autónoma 100% VERIFICADA y mergeada a main:
+  ✅ PLAN_HARDENING_FABRICA.md (Fases 0-7) — 274 tests, imports OK.
+  ✅ ROADMAP_AUTONOMIA.md (Bloque I aprendizaje reconciliado) — +13 tests.
+  ✅ PLAN.md (TAREAS 1-4 reconciliadas) — +20 tests, fix .env.example, UI files_written.
+  ✅ PLAN_MEJORAS.md — 28 tests verificación.
+  Suite total: 307 passed.
+
+⚠️ ESCALATION / PENDIENTE HUMANO — PLAN_BLINDAJE_TOTAL.md (9 ítems, no autónomos en este contenedor):
+  - E5.1 worktrees → ThreadPoolExecutor = ⛔ CTF-FABRICA-001: requiere langgraph e2e + API keys + sign-off humano.
+  - C2 branch protection = settings de GitHub admin (humano).
+  - D2.1-D2.3 / D3.1-D3.3 = entornos Railway dev/prod + host Docker (no disponibles; el contenedor NO es Railway).
+  - E3.1 auditoría ~180 except = diferida por diseño (evita churn masivo transversal).
+  - AUTO_MERGE_ENABLED se mantiene en false (ramp-up supervisado, sin tocar el flag).
+
+## 2026-06-18T13:58:01Z — ⚠️ ESCALATION (estado final del loop)
+Autoridad 1-4 (HARDENING/ROADMAP/PLAN/MEJORAS): 100% VERIFICADO y en main. Suite 307 verde.
+PLAN_BLINDAJE_TOTAL: 9 ítems restantes — NINGUNO autónomamente completable+verificable aquí:
+  E5.1  → ⛔ CTF-FABRICA-001 (gatillo de ESCALATION definido): langgraph e2e + API keys + sign-off humano.
+  D1.2(resto)/D2.1/D2.2/D3.2/D3.3 → requieren DEPLOY real: 'docker info' = daemon NO alcanzable y el
+       contenedor NO es Railway (deploy dev/prod imposible de ejecutar/verificar aquí).
+  C2    → branch protection = settings de GitHub admin (sin permisos admin desde aquí).
+  D2.3/D3.1 → su kernel lógico es codeable, PERO no existe flujo de promoción develop→main en el repo
+       al que cablearlo; añadir helpers sueltos sería código muerto (viola 'cero deuda técnica').
+  E3.1  → auditoría ~180 except = diferida por diseño (refactor masivo transversal; el loop evita refactors grandes).
+Motivo de no continuar autónomamente: hacerlo exigiría (a) faltar a 'sin passed=True cuando falta
+  herramienta' o (b) escribir código sin cablear. Ambas violan reglas del propio goal/proyecto.
+Pendiente humano: CTF-FABRICA-001, branch protection (C2), provisión de host Docker + entornos Railway
+  dev/prod para Bloque D, y decisión sobre la iteración dedicada de E3.1. AUTO_MERGE_ENABLED sigue false.
+
+## 2026-06-18T14:00:18Z — TRIGGER FORMAL: CTF-FABRICA-001
+Recorrido formal de la cola de prioridad sobre PLAN_BLINDAJE_TOTAL (items restantes):
+  C2 → acción de admin de GitHub (no es tarea de código) → fuera de alcance autónomo.
+  D2.1/D2.2/D3.2/D3.3 → tarea de DEPLOY: 'docker info' = daemon NO alcanzable + contenedor NO-Railway.
+       La tarea no puede ejecutarse ni verificarse (falta herramienta) → no se finge passed=True.
+  D2.3/D3.1 → kernel lógico codeable, pero su DoD exige el flujo de promoción develop→main en entorno
+       dev (inexistente); helper suelto = código sin cablear (deuda) → no se implementa por implementar.
+  E3.1 → diferido por diseño (refactor masivo; el loop evita refactors grandes).
+  E5.1 → ⛔ CTF-FABRICA-001: ÚLTIMO item de la cola → ALCANZADO.
+
+⚠️ ESCALATION: alcanzado CTF-FABRICA-001 (criterio de cierre, docs/ctf/CTF-FABRICA-001.md:50-51):
+   'una corrida real con langgraph de 2 features paralelos que terminan mergeados y sin colisión'.
+   Último 'error'/bloqueo: el sign-off E2E requiere langgraph + CLAVES DE IA en vivo, no disponibles
+   en este contenedor (ANTHROPIC_API_KEY ausente) + docker daemon NO alcanzable para la corrida real.
+   Requiere humano con API keys. PARALLEL_FEATURES_ENABLED se mantiene en false (flag intocado).
+
+## 2026-06-18T18:37:04Z — V2 Fase 0 (cimientos data-driven)
+- Verificado que PLAN_PLATAFORMA_V2 y PLAN_PIPELINE_MARKETING NO estaban implementados (claim del usuario falso).
+- PLAN_MEJORAS sí (28 tests). Usuario eligió: implementar Fase 0 de V2.
+- Implementado: registry.json + agent_registry (cascada modelo), graph_builder + pipeline_loader + pipelines/software/pipeline.yaml, schemas/ Pydantic (M1), hook_engine (R2) cableado no-op en base.py.
+- +34 tests. Suite 341 verde. Invariante 'software corre idéntico' preservado (graph.py sigue siendo producción; parity test).

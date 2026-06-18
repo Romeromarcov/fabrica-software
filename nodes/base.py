@@ -371,6 +371,21 @@ def call_agent(
         except Exception:
             pass
 
+    # R2 (PLAN_PLATAFORMA_V2): hook pre_agent. Sin hooks registrados es no-op
+    # (comportamiento idéntico). Un hook puede devolver `model`/`task_content`
+    # para influir en la llamada (opt-in, gobernado por quien lo registra).
+    try:
+        from tools.hook_engine import run_hooks
+        _pre = run_hooks("pre_agent", {
+            "agent_key": agent_key, "agent_label": agent_label,
+            "model": model, "task_content": task_content,
+            "feature_id": _fid, "repo_path": repo_path,
+        })
+        model = _pre.get("model", model)
+        task_content = _pre.get("task_content", task_content)
+    except Exception as _hook_exc:
+        logger.warning("hook pre_agent falló (ignorado): %s", _hook_exc)
+
     if USE_OPENCLAW:
         logger.info("→ %s [OpenClaw] | repo: %s", agent_label, repo_path or "—")
         text, cost_entry = _call_openclaw(
@@ -411,5 +426,16 @@ def call_agent(
             )
         except Exception:
             pass
+
+    # R2: hook post_agent (observacional por defecto; no-op sin hooks registrados).
+    try:
+        from tools.hook_engine import run_hooks
+        run_hooks("post_agent", {
+            "agent_key": agent_key, "agent_label": agent_label,
+            "model": model, "feature_id": _fid, "output_text": text,
+            "cost_usd": cost_entry.get("cost_usd", 0.0),
+        })
+    except Exception as _hook_exc:
+        logger.warning("hook post_agent falló (ignorado): %s", _hook_exc)
 
     return text, cost_entry

@@ -38,7 +38,7 @@ def test_record_appends_one_line_per_feature(runs_dir):
 
     path = runs_dir / "proj" / "quality_metrics.jsonl"
     assert path.exists()
-    lines = [l for l in path.read_text().splitlines() if l.strip()]
+    lines = [ln for ln in path.read_text().splitlines() if ln.strip()]
     assert len(lines) == 2
     rec = json.loads(lines[1])
     assert rec["feature_id"] == "feat-b"
@@ -53,7 +53,7 @@ def test_quality_score_penalizes_iterations_and_rollback(runs_dir):
             sandbox_passes=0, had_rollback=True)
 
     path = runs_dir / "proj" / "quality_metrics.jsonl"
-    recs = [json.loads(l) for l in path.read_text().splitlines() if l.strip()]
+    recs = [json.loads(ln) for ln in path.read_text().splitlines() if ln.strip()]
     assert recs[0]["quality_score"] == 100
     # 100 - (2*15) - (2*10) - 20 - 30 = 0
     assert recs[1]["quality_score"] == 0
