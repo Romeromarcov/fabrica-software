@@ -110,6 +110,19 @@ def a0_arquitecto(state: ProjectState) -> dict:
             import logging as _log
             _log.getLogger(__name__).warning("repo_scanner: %s", _scan_exc)
 
+        # M8 (PLAN_PLATAFORMA_V2): contexto dinámico — archivos relevantes a la tarea.
+        # Opt-in; se añade al snapshot estático. No-op si el flag está off.
+        try:
+            from config import DYNAMIC_CONTEXT_ENABLED
+            if DYNAMIC_CONTEXT_ENABLED:
+                from tools.context_selector import select_relevant_files
+                _dyn = select_relevant_files(repo_path, state.get("project_brief", ""))
+                if _dyn:
+                    repo_snapshot_block += "\n" + _dyn + "\n"
+        except Exception as _dyn_exc:
+            import logging as _log
+            _log.getLogger(__name__).warning("context_selector: %s", _dyn_exc)
+
     # ── II-3: Memoria de sesiones anteriores ──────────────────────────────────
     session_memory_block = ""
     if state.get("project_id"):

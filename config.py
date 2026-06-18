@@ -269,6 +269,11 @@ LLM_JUDGE_MIN_SCORE = int(os.getenv("LLM_JUDGE_MIN_SCORE", "60"))
 SEMANTIC_CACHE_ENABLED     = os.getenv("SEMANTIC_CACHE_ENABLED", "false").lower() == "true"
 SEMANTIC_CACHE_TTL_SECONDS = int(os.getenv("SEMANTIC_CACHE_TTL_SECONDS", "86400"))
 
+# M8 (PLAN_PLATAFORMA_V2 Fase 2) — Contexto dinámico: en A0 (continuar proyecto),
+# añade los archivos más relevantes a la tarea por keywords, además del snapshot.
+# Opt-in; default off → comportamiento idéntico.
+DYNAMIC_CONTEXT_ENABLED = os.getenv("DYNAMIC_CONTEXT_ENABLED", "false").lower() == "true"
+
 # A2.3 — CORS explícito. Allowlist de orígenes (separados por comas). Vacío = no se
 # añade middleware CORS (comportamiento por defecto: sin orígenes cruzados permitidos).
 CORS_ALLOWED_ORIGINS = [

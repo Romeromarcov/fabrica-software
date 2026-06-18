@@ -200,8 +200,11 @@ funcionalidad (todos los gates, modos completo/lite/lightning, checkpoints human
   (ya cachea). Cableada en `base.call_agent` bajo `SEMANTIC_CACHE_ENABLED` (opt-in, default off
   → idéntico). *Test:* `test_prompt_cache.py` (7, incl. integración: 2ª llamada sin LLM).
   **IMPLEMENTADO 2026-06-18.**
-- 🔴 [M8] Contexto dinámico: seleccionar archivos relevantes del repo por
-  imports/módulos/keywords en vez del fingerprint estático completo.
+- ✅ [M8] Contexto dinámico: `tools/context_selector.py` selecciona los archivos del repo
+  más relevantes a la tarea (keywords en ruta+contenido, densidad, recencia) en vez del
+  fingerprint estático. Cableado en `a0_arquitecto` (modo continuar) bajo
+  `DYNAMIC_CONTEXT_ENABLED` (opt-in, default off). *Test:* `test_context_selector.py` (8).
+  **IMPLEMENTADO 2026-06-18.**
 - 🟡 [R1] Memoria vectorial (ChromaDB): reemplaza/complementa `learning_memory.py` y
   `fewshot_builder.py`. Query semántico de planes/soluciones pasadas para A1/A4/A5.
   Namespaces por pipeline y por repo.
