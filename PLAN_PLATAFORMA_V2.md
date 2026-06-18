@@ -219,9 +219,12 @@ funcionalidad (todos los gates, modos completo/lite/lightning, checkpoints human
 ### FASE 3 — Observabilidad y optimización basada en datos
 - 🟡 [M7] OpenTelemetry → Jaeger/Grafana Tempo. Timeline por agente, latencia por modelo,
   tokens/s, cuellos de botella. Reusa los trace IDs (E1.1) existentes.
-- 🟡 [M6] A/B testing de modelos por agente: en X% de features, agente usa modelo
-  alternativo; `quality_tracker.py` registra iteraciones/costo → recomienda modelo óptimo
-  por rol. (Explota directamente la ventaja de "modelo por agente".)
+- ✅ [M6] A/B testing de modelos por agente (`tools/ab_testing.py`): bucketing determinista
+  por `hash(feature+agente)`; en `AB_TESTING_PCT` de features el agente usa su modelo
+  alternativo (`model_fallbacks` del registry). `record_result`/`recommend_model` comparan
+  score/costo/iteraciones y recomiendan el óptimo por rol. Cableado en `base.call_agent`
+  (opt-in `AB_TESTING_ENABLED`, no-op sin alternativas). *Test:* `test_ab_testing.py` (9).
+  **IMPLEMENTADO 2026-06-18.**
 - ✅ [M10] Dry run: `tools/dry_run.py` proyecta tiempo/costo/riesgo/iteraciones esperadas
   desde el riesgo del plan (`risk_classifier`) + historial (`quality_tracker`), antes de
   comprometer el pipeline. Comando `fabrica-cli dry-run "<brief>" [--project <id>]`.
