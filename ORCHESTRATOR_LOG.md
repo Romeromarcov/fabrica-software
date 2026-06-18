@@ -239,3 +239,5 @@ Recorrido formal de la cola de prioridad sobre PLAN_BLINDAJE_TOTAL (items restan
 [2026-06-18T20:28:51Z] 🔨 V2 Fase 3 M10 dry-run: dry_run.py + cli dry-run + 6 tests. Suite 414.
 [2026-06-18T20:30:59Z] ✅ V2 Fase 3 M10 dry-run PR#26 MERGEADO a main (squash 78513b5). CI 6/6 verde. Era MISSING.
 [2026-06-18T20:33:02Z] 🔨 V2 Fase 3 M6 A/B testing de modelos: ab_testing.py + wiring base.call_agent + 9 tests. Suite 423.
+[2026-06-18T20:35:00Z] ✅ V2 Fase 3 M6 A/B testing PR#27 MERGEADO a main (squash 70e2b39). CI 6/6 verde. Era MISSING.
+[2026-06-18T20:37:18Z] 🔨 V2 Fase 3 M7 OpenTelemetry: otel_tracing.py (dep opcional + no-op) + span en base.call_agent + 6 tests. Suite 429. FASE 3 COMPLETA (M7/M6/M10).

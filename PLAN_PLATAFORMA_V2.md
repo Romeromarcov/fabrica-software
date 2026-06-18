@@ -217,8 +217,12 @@ funcionalidad (todos los gates, modos completo/lite/lightning, checkpoints human
   ejercitan el fallback). **IMPLEMENTADO 2026-06-18.**
 
 ### FASE 3 — Observabilidad y optimización basada en datos
-- 🟡 [M7] OpenTelemetry → Jaeger/Grafana Tempo. Timeline por agente, latencia por modelo,
-  tokens/s, cuellos de botella. Reusa los trace IDs (E1.1) existentes.
+- ✅ [M7] OpenTelemetry (`tools/otel_tracing.py`): spans por agente cableados en
+  `base.call_agent` (reusa el trace_id de E1.1); export OTLP a Jaeger/Tempo si hay endpoint.
+  Dep OPCIONAL (no-op si opentelemetry no está instalado o `OTEL_ENABLED=false`). *Test:*
+  `test_otel_tracing.py` (6, ejercitan el no-op). **IMPLEMENTADO 2026-06-18.**
+
+### FASE 3 — COMPLETA ✅ (M7 · M6 · M10) — 2026-06-18
 - ✅ [M6] A/B testing de modelos por agente (`tools/ab_testing.py`): bucketing determinista
   por `hash(feature+agente)`; en `AB_TESTING_PCT` de features el agente usa su modelo
   alternativo (`model_fallbacks` del registry). `record_result`/`recommend_model` comparan
