@@ -73,15 +73,15 @@ Feature 4 → A7: 0 iteraciones QA por esos patrones
 ```
 
 **Archivos a crear/modificar:**
-- [ ] `tools/learning_memory.py` — clase `LearningMemory` con métodos:
+- [x] `tools/learning_memory.py` — funciones (API equivalente a la clase planeada):
   - `extract_patterns(qa_report: str, secops_report: str) -> list[str]`
   - `append_to_lessons(repo_path: str, patterns: list[str], feature_name: str)`
   - `load_lessons(repo_path: str) -> str`
-- [ ] `nodes/a7_qa.py` — llamar `LearningMemory.extract_patterns()` tras el reporte final
-- [ ] `nodes/a8_secops.py` — ídem para vulnerabilidades
-- [ ] `nodes/a4_backend.py` — inyectar `LESSONS_LEARNED.md` en el contexto
-- [ ] `nodes/a5_frontend.py` — ídem
-- [ ] Formato de `agents/LESSONS_LEARNED.md`:
+- [x] `nodes/a7_qa.py` — llama a `extract_patterns()` tras el reporte final
+- [x] `nodes/a8_secops.py` — ídem para vulnerabilidades
+- [x] `nodes/a4_backend.py` — inyecta `LESSONS_LEARNED.md` en el contexto (`load_lessons`)
+- [x] `nodes/a5_frontend.py` — ídem
+- [x] Formato de `agents/LESSONS_LEARNED.md`: *(verificado: `test_preventive_learning.py`, 8 tests)*
 
 ```markdown
 # Lessons Learned — [Proyecto]
@@ -120,13 +120,15 @@ Feature 4 → A7: 0 iteraciones QA por esos patrones
 - Si después de N features el mismo bug pattern aparece, el sistema propone actualizar `CODING_STANDARDS.md`
 
 **Archivos a crear/modificar:**
-- [ ] `tools/quality_tracker.py` — clase `QualityTracker`:
-  - `record_feature_metrics(feature_id, qa_iters, secops_iters, bug_categories, sandbox_passes)`
-  - `compute_trend(repo_path, last_n=5) -> dict` — promedio y dirección
-  - `propose_standards_update(trend_data) -> str | None` — retorna sugerencia si hay patrón recurrente
-- [ ] `nodes/a1_pr_final.py` — llamar `QualityTracker.record_feature_metrics()` al cerrar el feature
-- [ ] `nodes/pm_evaluador.py` — incluir métricas de calidad en el informe de evaluación
-- [ ] `ui/server.py` + `ui/templates/` — panel de métricas de calidad (ver Bloque IV-3)
+- [x] `tools/quality_tracker.py` — funciones (API equivalente a la clase planeada):
+  - `record_feature_metrics(project_id, feature_id, ..., bug_categories, sandbox_passes)`
+  - `compute_trend(project_id, last_n=10) -> dict` — promedio y dirección
+  - `propose_standards_update(project_id) -> str | None` — sugerencia si hay patrón recurrente
+- [x] `nodes/a1_pr_final.py` — llama a `record_feature_metrics()` al cerrar el feature
+- [x] `nodes/pm_evaluador.py` — incluye métricas de calidad en el informe de evaluación
+- [x] `ui/server.py` + `ui/templates/` — panel de métricas de calidad (ver Bloque IV-3)
+
+*(verificado: `test_quality_tracker.py`, 8 tests — registro, score, tendencia y propuesta de estándares)*
 
 **Formato de métricas en `data/runs/[project_id]/quality_metrics.jsonl`:**
 ```json
@@ -155,9 +157,11 @@ Feature 4 → A7: 0 iteraciones QA por esos patrones
 - El sistema se auto-documenta sus mejores prácticas
 
 **Archivos a crear:**
-- [ ] `tools/fewshot_builder.py` — selecciona los N mejores features (menor QA iters, sandbox pass al primer intento)
-  y construye ejemplos few-shot comprimidos para inyección en prompts
-- [ ] Integración en `nodes/a1_planificador.py` y `nodes/a4_backend.py`
+- [x] `tools/fewshot_builder.py` — selecciona los N mejores features (mayor quality_score, sandbox pass al primer intento)
+  y construye ejemplos few-shot comprimidos (≤2000 tokens) para inyección en prompts
+- [x] Integración en `nodes/a1_planificador.py` y `nodes/a4_backend.py`
+
+*(verificado: `test_fewshot_builder.py`, 5 tests — umbral ≥20 features, selección y límite de tamaño)*
 
 **DoD:**
 - Sólo activo cuando `completed_features >= 20`
