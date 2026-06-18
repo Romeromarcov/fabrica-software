@@ -300,6 +300,10 @@ PARALLEL_AGENTS_ENABLED = os.getenv("PARALLEL_AGENTS_ENABLED", "false").lower() 
 # registro (doble gate): la fábrica no se auto-modifica sin intención humana.
 AGENT_BUILDER_ENABLED = os.getenv("AGENT_BUILDER_ENABLED", "false").lower() == "true"
 
+# Fase 6 (PLAN_PLATAFORMA_V2) — Pipeline Builder. Permite ESCRIBIR pipelines generados
+# conversacionalmente (pipelines/<name>/pipeline.yaml). Mismo doble gate que Agent Builder.
+PIPELINE_BUILDER_ENABLED = os.getenv("PIPELINE_BUILDER_ENABLED", "false").lower() == "true"
+
 # M7 (PLAN_PLATAFORMA_V2 Fase 3) — Observabilidad OpenTelemetry. Spans por agente
 # (reusa trace_id de E1.1), export OTLP a Jaeger/Tempo si OTEL_EXPORTER_OTLP_ENDPOINT.
 # Opt-in; la fábrica NO requiere opentelemetry (dep opcional). Default off → no-op.
