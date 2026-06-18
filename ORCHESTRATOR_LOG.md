@@ -250,3 +250,4 @@ Recorrido formal de la cola de prioridad sobre PLAN_BLINDAJE_TOTAL (items restan
 [2026-06-18T20:49:42Z] ✅ V2 Fase 10 M12 issue trackers PR#31 MERGEADO a main (squash 16b1015). CI 6/6. FASE 10 COMPLETA. → Fase 8 orquestación (trigger logic, offline-verificable).
 [2026-06-18T20:51:36Z] 🔨 V2 Fase 8 (slice) orquestación: pipeline_orchestrator.py (triggers_for_event + map_event_to_input + on_event; fix quirk YAML on:->bool) + 6 tests. Suite 461.
 [2026-06-18T20:53:29Z] ✅ V2 Fase 8 (slice) orquestación PR#32 MERGEADO a main (squash ce38fb9). CI 6/6 verde. Era MISSING. Límite autónomo offline alcanzado.
+[2026-06-18T21:02:11Z] 🔨 V2 Fase 2 R3 paralelismo A4+A5 (AUTORIZADO por founder): a45_parallel.py (ThreadPoolExecutor + copy_context, state aislado) + rewire graph.py (3 ramas guarded por PARALLEL_AGENTS_ENABLED) + 11 tests. Suite 472. Fase 2 COMPLETA.
