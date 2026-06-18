@@ -225,3 +225,5 @@ Recorrido formal de la cola de prioridad sobre PLAN_BLINDAJE_TOTAL (items restan
 [2026-06-18T19:39:24Z] 🔨 V2 Fase 1 M2 replay: tools/replay.py + cli replay + 9 tests. Suite 386. FASE 1 COMPLETA (R4/M4/M3/M2).
 [2026-06-18T19:41:27Z] ✅ V2 Fase 1 M2 replay PR#21 MERGEADO a main (squash 36a90ca). CI 6/6 verde. FASE 1 COMPLETA. Hito: V2 Fase 0+1 entregadas (PRs #17-#21, 5 merges, suite 386).
 [2026-06-18T19:47:53Z] 🔨 V2 Fase 2 M5 caché de prompts: prompt_cache.py + wiring base.call_agent (skip anthropic) + 7 tests. Suite 393.
+[2026-06-18T19:49:51Z] ✅ V2 Fase 2 M5 caché PR#22 MERGEADO a main (squash 38b7739). CI 6/6 verde. Era MISSING.
+[2026-06-18T19:51:54Z] 🔨 V2 Fase 2 M8 contexto dinámico: context_selector.py + wiring a0 + 8 tests. Suite 401.
