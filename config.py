@@ -84,24 +84,28 @@ OPENAI_API_KEY    = os.getenv("OPENAI_API_KEY",    "")
 NVIDIA_API_KEY    = os.getenv("NVIDIA_API_KEY",    "")   # build.nvidia.com (Nemotron)
 
 # ── Modelo por agente ─────────────────────────────────────────────────────────
-MODEL_A0 = os.getenv("MODEL_A0", "gemini-3.5-flash")   # A0 Arquitecto de Proyecto
-MODEL_A1 = os.getenv("MODEL_A1", "gemini-3.5-flash")   # A1 PM / Planificador
-MODEL_A2 = os.getenv("MODEL_A2", "claude-sonnet-4-6") # A2 DB Architect
-MODEL_A3 = os.getenv("MODEL_A3", "claude-sonnet-4-6") # A3 MCP Toolsmith
-MODEL_A4 = os.getenv("MODEL_A4", "glm-5.1")           # A4 Backend Developer
-MODEL_A5 = os.getenv("MODEL_A5", "kimi-k2.6")         # A5 Frontend Developer
-MODEL_A6 = os.getenv("MODEL_A6", "claude-sonnet-4-6") # A6 Revisor / Refactor
-MODEL_A7 = os.getenv("MODEL_A7", "gpt-5.5")           # A7 QA Test — OpenAI
-MODEL_A8 = os.getenv("MODEL_A8", "gpt-5.5")           # A8 SecOps — OpenAI
+# Default unificado: todos los agentes con LLM apuntan al modelo más económico disponible
+# (Google Gemini flash-lite). Cada uno sigue siendo overridable por env (MODEL_A*) y la
+# clave del proveedor va en GOOGLE_API_KEY (.env, nunca commiteada).
+_DEFAULT_AGENT_MODEL = "gemini-2.5-flash-lite"
+MODEL_A0 = os.getenv("MODEL_A0", _DEFAULT_AGENT_MODEL)   # A0 Arquitecto de Proyecto
+MODEL_A1 = os.getenv("MODEL_A1", _DEFAULT_AGENT_MODEL)   # A1 PM / Planificador
+MODEL_A2 = os.getenv("MODEL_A2", _DEFAULT_AGENT_MODEL)   # A2 DB Architect
+MODEL_A3 = os.getenv("MODEL_A3", _DEFAULT_AGENT_MODEL)   # A3 MCP Toolsmith
+MODEL_A4 = os.getenv("MODEL_A4", _DEFAULT_AGENT_MODEL)   # A4 Backend Developer
+MODEL_A5 = os.getenv("MODEL_A5", _DEFAULT_AGENT_MODEL)   # A5 Frontend Developer
+MODEL_A6 = os.getenv("MODEL_A6", _DEFAULT_AGENT_MODEL)   # A6 Revisor / Refactor
+MODEL_A7 = os.getenv("MODEL_A7", _DEFAULT_AGENT_MODEL)   # A7 QA Test
+MODEL_A8 = os.getenv("MODEL_A8", _DEFAULT_AGENT_MODEL)   # A8 SecOps
 
 MODEL_A9  = "no-llm"                                         # A9 Sandbox — sin LLM
 MODEL_A10 = "no-llm"                                         # A10 Code Writer — sin LLM
-MODEL_A11 = os.getenv("MODEL_A11", "claude-sonnet-4-6")     # A11 DevOps — Anthropic
+MODEL_A11 = os.getenv("MODEL_A11", _DEFAULT_AGENT_MODEL)    # A11 DevOps
 MODEL_A0_REVISOR = MODEL_A0                                  # A0 Revisor usa el mismo modelo que A0
 
 MODEL_PM       = MODEL_A1
-MODEL_STANDARD = "claude-sonnet-4-6"
-MODEL_FAST     = os.getenv("MODEL_FAST", "claude-haiku-4-5-20251001")
+MODEL_STANDARD = _DEFAULT_AGENT_MODEL
+MODEL_FAST     = os.getenv("MODEL_FAST", _DEFAULT_AGENT_MODEL)
 
 # ── V2 Fase 0: modelo por defecto global (último escalón de la cascada) ────────
 # Resolución de modelo por agente: agent.model → pipeline.default_model → GLOBAL_DEFAULT_MODEL.
@@ -410,6 +414,8 @@ PRICES = {
     "claude-haiku-4-5-20251001": {"input":  0.80, "output":  4.00, "cache_read": 0.08},
     # Google
     "gemini-3.5-flash":          {"input":  0.30, "output":  2.50, "cache_read": 0.00},
+    "gemini-2.5-flash-lite":     {"input":  0.10, "output":  0.40, "cache_read": 0.00},
+    "gemini-2.5-flash":          {"input":  0.30, "output":  2.50, "cache_read": 0.00},
     "gemini-3.1-pro-preview":    {"input":  2.50, "output": 15.00, "cache_read": 0.00},
     "gemini-2.5-pro":            {"input":  1.25, "output": 10.00, "cache_read": 0.00},
     # OpenAI
