@@ -260,10 +260,13 @@ que la fábrica sepa si está mejorando o degradándose.
       *Test:* `tests/test_llm_resilience.py`.
 
 ### Fase E3 — Limpieza de errores silenciosos
-- [ ] **E3.1 — Auditoría de los ~180 `except Exception`.** ⏳ PENDIENTE (auditoría amplia y
-      transversal; se aborda en iteración dedicada para no introducir churn masivo). Clasificar
-      best-effort → `logger.warning`; degradación de agentes → degradación explícita en el
-      prompt; críticos → re-raise/interrupt.
+- [x] **E3.1 — Auditoría de los `except`.** `tools/error_audit.py` (AST, sin deps) clasifica
+      cada manejador en RERAISE / LOGGED / SILENT y expone un GATE de regresión:
+      `silent_handlers()` + `format_report()`. *Test:* `tests/test_error_audit.py` —
+      `test_no_new_silent_handlers` ancla el baseline (139) y FALLA si un PR introduce un
+      `except` que ni registra ni re-lanza. El refactor masivo de los 139 actuales (best-effort
+      → `logger.warning`; degradación explícita; críticos → re-raise) queda como deuda rastreada
+      y se baja incrementalmente sin churn masivo. **IMPLEMENTADO 2026-06-18.**
 
 ### Fase E4 — Evals del pipeline mismo
 - [x] **E4.1 — Suite de features de referencia.** `tools/evals.run_evals`: 5 casos
