@@ -194,3 +194,19 @@ Motivo de no continuar autónomamente: hacerlo exigiría (a) faltar a 'sin passe
   herramienta' o (b) escribir código sin cablear. Ambas violan reglas del propio goal/proyecto.
 Pendiente humano: CTF-FABRICA-001, branch protection (C2), provisión de host Docker + entornos Railway
   dev/prod para Bloque D, y decisión sobre la iteración dedicada de E3.1. AUTO_MERGE_ENABLED sigue false.
+
+## 2026-06-18T14:00:18Z — TRIGGER FORMAL: CTF-FABRICA-001
+Recorrido formal de la cola de prioridad sobre PLAN_BLINDAJE_TOTAL (items restantes):
+  C2 → acción de admin de GitHub (no es tarea de código) → fuera de alcance autónomo.
+  D2.1/D2.2/D3.2/D3.3 → tarea de DEPLOY: 'docker info' = daemon NO alcanzable + contenedor NO-Railway.
+       La tarea no puede ejecutarse ni verificarse (falta herramienta) → no se finge passed=True.
+  D2.3/D3.1 → kernel lógico codeable, pero su DoD exige el flujo de promoción develop→main en entorno
+       dev (inexistente); helper suelto = código sin cablear (deuda) → no se implementa por implementar.
+  E3.1 → diferido por diseño (refactor masivo; el loop evita refactors grandes).
+  E5.1 → ⛔ CTF-FABRICA-001: ÚLTIMO item de la cola → ALCANZADO.
+
+⚠️ ESCALATION: alcanzado CTF-FABRICA-001 (criterio de cierre, docs/ctf/CTF-FABRICA-001.md:50-51):
+   'una corrida real con langgraph de 2 features paralelos que terminan mergeados y sin colisión'.
+   Último 'error'/bloqueo: el sign-off E2E requiere langgraph + CLAVES DE IA en vivo, no disponibles
+   en este contenedor (ANTHROPIC_API_KEY ausente) + docker daemon NO alcanzable para la corrida real.
+   Requiere humano con API keys. PARALLEL_FEATURES_ENABLED se mantiene en false (flag intocado).
