@@ -288,8 +288,13 @@ funcionalidad (todos los gates, modos completo/lite/lightning, checkpoints human
   Cableado en `a1_pr_final` (changelog en el cuerpo del PR). *Test:* `test_doc_generator.py`
   (8). **IMPLEMENTADO 2026-06-18.** *(El pulido con LLM barato es opt-in futuro; la estructura
   sale del tool, no se inventa.)*
-- 🟡 [M12] Integración con issue trackers (Linear/Jira/GitHub Issues): feature desde issue,
-  cierre automático al merge, sub-issues por agente, trazabilidad requisito→PR.
+- ✅ [M12] Integración con issue trackers (`tools/issue_tracker.py`): parseo issue→feature
+  spec, extracción de criterios de aceptación, keyword `Closes #N` (auto-cierre al merge),
+  bloque de trazabilidad requisito→PR. Las APIs de red (`fetch_issue`/`create_subissues`)
+  reportan `not_configured` hasta cablear credenciales (no se finge). *Test:*
+  `test_issue_tracker.py` (10). **IMPLEMENTADO 2026-06-18.**
+
+### FASE 10 — COMPLETA ✅ (M11 · M12) — 2026-06-18
 
 ### FUTURO (no priorizado)
 - 🔴 [R6] Federation (mTLS + ed25519): agentes distribuidos en varias máquinas. Solo si se
