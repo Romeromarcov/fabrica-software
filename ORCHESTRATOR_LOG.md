@@ -145,3 +145,16 @@ openclaw intacto (su check propio ya cubre; cambiarlo regresaba un test). Tests:
 (10). Suite: 274 passed. Sin nueva deuda de lint.
 CTF: mecánica verificada en vivo; un re-run sería robusto a baches 5xx. PARALLEL_FEATURES_ENABLED
 sigue en false (sign-off humano).
+
+## 2026-06-18T12:34:09Z — Sesión de verificación autónoma
+- PLAN_HARDENING_FABRICA.md: 100% VERIFICADO (274 tests, imports OK).
+- ROADMAP I-1/I-2/I-3 (aprendizaje): eran ⚠️ CLAIMED (código sin tests dedicados) → +13 tests, reconciliados [x].
+- PLAN.md TAREAS 1-4: eran 🔄 PARTIAL/MISSING (1.5 UI faltaba) → +20 tests, fix .env.example, files_written en UI, reconciliados [x].
+- PR #16 (draft) abierto desde claude/cool-feynman-wgwbi9 → main. 307 tests verdes local.
+- CI PR #16: ✅ VERDE (6/6 checks: revisor independiente, pytest, runtime-gates postgres, gitleaks).
+- Items restantes en planes de autoridad = bloqueados por humano/infra/escalación:
+    · C2 (branch protection) → settings de GitHub admin (humano).
+    · D2.1-D2.3 / D3.1-D3.3 → requieren Railway dev/prod + host Docker (no disponible en contenedor).
+    · E3.1 (~180 except Exception) → auditoría amplia diferida por diseño (evita churn masivo).
+    · E5.1 (worktrees → ThreadPoolExecutor) → ⛔ CTF-FABRICA-001: ESCALACIÓN (langgraph e2e + API keys + sign-off humano).
+- Conclusión: porción autónoma-verificable de los planes de autoridad = 100% verificada.
