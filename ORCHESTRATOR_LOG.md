@@ -252,3 +252,4 @@ Recorrido formal de la cola de prioridad sobre PLAN_BLINDAJE_TOTAL (items restan
 [2026-06-18T20:53:29Z] ✅ V2 Fase 8 (slice) orquestación PR#32 MERGEADO a main (squash ce38fb9). CI 6/6 verde. Era MISSING. Límite autónomo offline alcanzado.
 [2026-06-18T21:02:11Z] 🔨 V2 Fase 2 R3 paralelismo A4+A5 (AUTORIZADO por founder): a45_parallel.py (ThreadPoolExecutor + copy_context, state aislado) + rewire graph.py (3 ramas guarded por PARALLEL_AGENTS_ENABLED) + 11 tests. Suite 472. Fase 2 COMPLETA.
 [2026-06-18T21:04:17Z] ✅ V2 Fase 2 R3 paralelismo A4+A5 PR#33 MERGEADO a main (squash 378bf05). CI 6/6 verde. FASE 2 COMPLETA (M5/M8/R1/R3).
+[2026-06-18T21:41:26Z] 🔨 BLINDAJE E3.1 GATE: tools/error_audit.py (AST clasifica RERAISE/LOGGED/SILENT) + test_error_audit.py gate baseline=139 silent. Suite 481. Era PARTIAL→VERIFIED (gate).
