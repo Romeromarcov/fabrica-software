@@ -452,7 +452,11 @@ def call_agent(
             text = _hit
             cost_entry = make_cost_entry(agent_label, model, _FakeUsage(0, 0))
         else:
-            text, cost_entry = retry_sync(_dispatch, label=agent_label)
+            # M7 (PLAN_PLATAFORMA_V2): span OTel por agente (no-op si OTEL_ENABLED=false
+            # o el SDK no está instalado). Reusa el trace_id de E1.1.
+            from tools.otel_tracing import span as _otel_span
+            with _otel_span(f"agent.{agent_key}", **{"agent.label": agent_label, "llm.model": model}):
+                text, cost_entry = retry_sync(_dispatch, label=agent_label)
             if _cache_key is not None:
                 try:
                     from tools import prompt_cache
