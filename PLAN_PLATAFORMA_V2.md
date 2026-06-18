@@ -295,9 +295,13 @@ funcionalidad (todos los gates, modos completo/lite/lightning, checkpoints human
   marketing **propone automáticamente** el contenido para anunciarlo.
 
 ### FASE 9 — Auto-mejora y trazabilidad
-- 🔴 [M9] Meta-agente de auto-mejora: analiza historial (iteraciones QA, rollbacks,
-  escalaciones) y propone mejoras a los **prompts de los agentes**. Se ejecuta a través del
-  Factory Modifier (Fase 7) con aprobación. Cierra el ciclo: la fábrica que se mejora sola.
+- ✅ [M9] Meta-agente de auto-mejora: `tools/self_improvement.py` agrega señales reales
+  (quality_tracker.compute_trend + evals.eval_trend + learning_memory.recurring_error_patterns)
+  y propone mejoras **priorizadas** con un motor de reglas DETERMINISTA (verificable sin LLM):
+  `gather_signals` / `propose_improvements` / `format_improvement_report`. *Test:*
+  `tests/test_self_improvement.py` (11). Suite 527. **IMPLEMENTADO 2026-06-18.**
+  Nota: la *aplicación* de las propuestas a los prompts pasa por el Factory Modifier (Fase 7,
+  alto riesgo) con aprobación; M9 entrega el análisis y las acciones priorizadas.
 - 🔴 [R5] Trazabilidad objetivo→backlog→código: validar que el backlog cubre el objetivo
   (apoyado en el dependency graph de `branch_manager.py`); planificación con búsqueda sobre
   espacio de estados para garantizar completitud.
