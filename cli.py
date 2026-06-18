@@ -570,6 +570,14 @@ def cmd_replay(feature_id: str, from_node: str | None) -> None:
     console.print(format_replay_plan(feature_id, from_node))
 
 
+# ── M10: dry run ─────────────────────────────────────────────────────────────
+
+def cmd_dry_run(brief: str, project_id: str) -> None:
+    """Proyecta costo/tiempo/riesgo/iteraciones de un feature antes de ejecutarlo."""
+    from tools.dry_run import format_estimate
+    console.print(format_estimate(project_id, brief))
+
+
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 def main() -> None:
@@ -616,6 +624,12 @@ def main() -> None:
                           help="Nodo desde el que re-ejecutar (ej: a6_refactor). "
                                "Sin valor → lista los checkpoints disponibles.")
 
+    # M10 (PLAN_PLATAFORMA_V2) — dry run: proyecta costo/tiempo/riesgo/iteraciones.
+    p_dry = sub.add_parser("dry-run", help="Estima esfuerzo de un feature (riesgo + historial)")
+    p_dry.add_argument("brief", help="Brief / MASTER_PLAN del feature (entre comillas)")
+    p_dry.add_argument("--project", dest="project_id", default="",
+                       help="project_id para proyectar desde el historial de calidad")
+
     args = parser.parse_args()
 
     if args.cmd == "new-feature":
@@ -634,6 +648,8 @@ def main() -> None:
         cmd_resume_project(args.project_id)
     elif args.cmd == "replay":
         cmd_replay(args.feature_id, args.from_node)
+    elif args.cmd == "dry-run":
+        cmd_dry_run(args.brief, args.project_id)
 
 
 if __name__ == "__main__":
