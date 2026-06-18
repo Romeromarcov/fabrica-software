@@ -346,6 +346,264 @@
         "enabled": false,
         "model": null
       }
+    },
+    {
+      "id": "M0",
+      "agent_key": "m0",
+      "role": "Brief & Research",
+      "pipeline": "marketing",
+      "uses_llm": true,
+      "model": "gemini-2.5-flash-lite",
+      "model_fallbacks": [],
+      "node_name": null,
+      "output_schema": null,
+      "prompt_file": null,
+      "depends_on": [],
+      "hooks": [
+        "pre_agent",
+        "post_agent"
+      ],
+      "activation_flags": [],
+      "judge": {
+        "enabled": false,
+        "model": null
+      }
+    },
+    {
+      "id": "M1",
+      "agent_key": "m1",
+      "role": "Estratega",
+      "pipeline": "marketing",
+      "uses_llm": true,
+      "model": "gemini-2.5-flash-lite",
+      "model_fallbacks": [],
+      "node_name": null,
+      "output_schema": null,
+      "prompt_file": null,
+      "depends_on": [],
+      "hooks": [
+        "pre_agent",
+        "post_agent"
+      ],
+      "activation_flags": [],
+      "judge": {
+        "enabled": false,
+        "model": null
+      }
+    },
+    {
+      "id": "M2",
+      "agent_key": "m2",
+      "role": "Copywriter",
+      "pipeline": "marketing",
+      "uses_llm": true,
+      "model": "gemini-2.5-flash-lite",
+      "model_fallbacks": [],
+      "node_name": null,
+      "output_schema": null,
+      "prompt_file": null,
+      "depends_on": [],
+      "hooks": [
+        "pre_agent",
+        "post_agent"
+      ],
+      "activation_flags": [],
+      "judge": {
+        "enabled": false,
+        "model": null
+      }
+    },
+    {
+      "id": "M3",
+      "agent_key": "m3",
+      "role": "Director de Arte",
+      "pipeline": "marketing",
+      "uses_llm": true,
+      "model": "gemini-2.5-flash-lite",
+      "model_fallbacks": [],
+      "node_name": null,
+      "output_schema": null,
+      "prompt_file": null,
+      "depends_on": [],
+      "hooks": [
+        "pre_agent",
+        "post_agent"
+      ],
+      "activation_flags": [],
+      "judge": {
+        "enabled": false,
+        "model": null
+      }
+    },
+    {
+      "id": "M4",
+      "agent_key": "m4",
+      "role": "Editor / Ensamblador",
+      "pipeline": "marketing",
+      "uses_llm": true,
+      "model": "gemini-2.5-flash-lite",
+      "model_fallbacks": [],
+      "node_name": null,
+      "output_schema": null,
+      "prompt_file": null,
+      "depends_on": [],
+      "hooks": [
+        "pre_agent",
+        "post_agent"
+      ],
+      "activation_flags": [],
+      "judge": {
+        "enabled": false,
+        "model": null
+      }
+    },
+    {
+      "id": "M5",
+      "agent_key": "m5",
+      "role": "QA de Marca",
+      "pipeline": "marketing",
+      "uses_llm": true,
+      "model": "gemini-2.5-flash-lite",
+      "model_fallbacks": [],
+      "node_name": null,
+      "output_schema": null,
+      "prompt_file": null,
+      "depends_on": [],
+      "hooks": [
+        "pre_agent",
+        "post_agent"
+      ],
+      "activation_flags": [],
+      "judge": {
+        "enabled": false,
+        "model": null
+      }
+    },
+    {
+      "id": "M6",
+      "agent_key": "m6",
+      "role": "Compliance & Brand Safety",
+      "pipeline": "marketing",
+      "uses_llm": true,
+      "model": "gemini-2.5-flash-lite",
+      "model_fallbacks": [],
+      "node_name": null,
+      "output_schema": null,
+      "prompt_file": null,
+      "depends_on": [],
+      "hooks": [
+        "pre_agent",
+        "post_agent"
+      ],
+      "activation_flags": [],
+      "judge": {
+        "enabled": false,
+        "model": null
+      }
+    },
+    {
+      "id": "M6_5",
+      "agent_key": "m6_5",
+      "role": "Adversarial",
+      "pipeline": "marketing",
+      "uses_llm": true,
+      "model": "gemini-2.5-flash-lite",
+      "model_fallbacks": [],
+      "node_name": null,
+      "output_schema": null,
+      "prompt_file": null,
+      "depends_on": [],
+      "hooks": [
+        "pre_agent",
+        "post_agent"
+      ],
+      "activation_flags": [],
+      "judge": {
+        "enabled": false,
+        "model": null
+      }
+    },
+    {
+      "id": "M7",
+      "agent_key": "m7",
+      "role": "Preview / Sandbox",
+      "pipeline": "marketing",
+      "uses_llm": false,
+      "model": null,
+      "model_fallbacks": [],
+      "node_name": null,
+      "output_schema": null,
+      "prompt_file": null,
+      "depends_on": [],
+      "hooks": [],
+      "activation_flags": [],
+      "judge": {
+        "enabled": false,
+        "model": null
+      }
+    },
+    {
+      "id": "M8",
+      "agent_key": "m8",
+      "role": "Publisher",
+      "pipeline": "marketing",
+      "uses_llm": false,
+      "model": null,
+      "model_fallbacks": [],
+      "node_name": null,
+      "output_schema": null,
+      "prompt_file": null,
+      "depends_on": [],
+      "hooks": [],
+      "activation_flags": [],
+      "judge": {
+        "enabled": false,
+        "model": null
+      }
+    },
+    {
+      "id": "M9",
+      "agent_key": "m9",
+      "role": "Analista (async/cron)",
+      "pipeline": "marketing",
+      "uses_llm": true,
+      "model": "gemini-2.5-flash-lite",
+      "model_fallbacks": [],
+      "node_name": null,
+      "output_schema": null,
+      "prompt_file": null,
+      "depends_on": [],
+      "hooks": [
+        "pre_agent",
+        "post_agent"
+      ],
+      "activation_flags": [],
+      "judge": {
+        "enabled": false,
+        "model": null
+      }
+    },
+    {
+      "id": "M10",
+      "agent_key": "m10",
+      "role": "Documentador",
+      "pipeline": "marketing",
+      "uses_llm": true,
+      "model": "gemini-2.5-flash-lite",
+      "model_fallbacks": [],
+      "node_name": null,
+      "output_schema": null,
+      "prompt_file": null,
+      "depends_on": [],
+      "hooks": [
+        "pre_agent",
+        "post_agent"
+      ],
+      "activation_flags": [],
+      "judge": {
+        "enabled": false,
+        "model": null
+      }
     }
   ]
 }

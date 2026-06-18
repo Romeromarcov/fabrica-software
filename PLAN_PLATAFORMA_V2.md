@@ -247,9 +247,14 @@ funcionalidad (todos los gates, modos completo/lite/lightning, checkpoints human
 - ✅ Output handlers pluggables: `tools/output_handlers.py` — `files` (real), `noop`/`log`, y
   `github_pr`/`notion`/`email`/`api_call` con estado honesto `not_configured` hasta cablear
   credenciales (no se finge éxito). *Test:* `test_output_handlers.py` (8). **2026-06-18.**
-- ✅ **Entregable:** crear `pipelines/marketing/` como segundo dominio de referencia.
-  Diseño detallado en **`PLAN_PIPELINE_MARKETING.md`** (state, agentes M0–M10, gates de marca/
-  compliance, modos campaña/post/lightning, autonomía graduada y handlers de publicación).
+- ✅ **Entregable:** `pipelines/marketing/` EXISTE como segundo dominio de referencia
+  (antes era un claim; ahora real en disco): `pipelines/marketing/pipeline.yaml` (M0–M8+M6_5,
+  modos campaña/post/lightning, gates brand/specs/compliance/adversarial, trigger
+  software.feature_merged), 12 agentes marketing en `agents/registry.json` (M7/M8 deterministas
+  = no-llm, espejo de A9/A10), y `MarketingState` en `state.py`. Discovery + `build_pipeline_spec`
+  resuelven el dominio sin tocar `software`. Diseño en **`PLAN_PIPELINE_MARKETING.md`**.
+  *Test:* `tests/test_marketing_pipeline.py` (11). Suite 559. **IMPLEMENTADO 2026-06-18.**
+  (La EJECUCIÓN del grafo marketing —LLM por agente— la hace el runtime, fuera de alcance offline.)
 
 ### FASE 5 — Agentes dinámicos: Agent Builder [C2] — ✅ IMPLEMENTADA (2026-06-18)
 - ✅ Agente conversacional que, dado "quiero un agente de SEO que…", genera definición +

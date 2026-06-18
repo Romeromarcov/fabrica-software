@@ -1,0 +1,41 @@
+# PLAN_PIPELINE_MARKETING §5 — dominio `marketing` de la Plataforma V2.
+# Segundo dominio de referencia: demuestra que el núcleo (registry + graph_builder + gates +
+# output handlers + orquestación) se reutiliza sin reescribirlo. La EJECUCIÓN del grafo
+# (llamadas LLM por agente) la hace el runtime; aquí vive la definición data-driven.
+#
+# Nota: el id "M6.5" del plan se escribe "M6_5" (alfanumérico/_), igual que A8.5 → A8_5 en el
+# pipeline `software`, para que sea un id válido del registry y resoluble por graph_builder.
+name: marketing
+description: Pipeline de marketing (brief→estrategia→copy+arte→ensamble→QA marca/compliance→publicación).
+default_model: gemini-2.5-flash-lite
+state_schema: MarketingState
+entry: M0
+agents: [M0, M1, M2, M3, M4, M5, M6, M6_5, M7, M8]   # M9 (analista) corre por cron, fuera del grafo
+
+human_checkpoints:
+  - { after: M1, type: approval, policy: risk_based }            # plan (auto/veto/human según riesgo)
+  - { after: M1, type: asset_wait, when: needs_human_asset }     # D1: espera de contenido físico
+  - { before: M8, type: publish_gate, policy: never_full_auto }  # D3: último gate, nunca 100% auto
+
+gates:
+  - brand_check        # M5
+  - specs_check        # M5 (dimensiones/longitud/formato por canal)
+  - compliance_check   # M6
+  - adversarial_check  # M6_5 (solo risk_level=HIGH)
+
+modes:
+  campaña:   { agents: all,                             max_brand_iter: 3 }
+  post:      { agents: [M1, M2, M3, M4, M5, M6, M7, M8], max_brand_iter: 2 }
+  lightning: { agents: [M1, M4, M8],                    skip_gates: true }   # < 90s
+
+output:
+  handlers:
+    - { id: instagram_graph, type: social, channel: instagram }
+    - { id: scheduler,       type: schedule }
+    - { id: notion,          type: doc, when: documentador }
+  destination_default: scheduler
+
+triggers:
+  - on: "software.feature_merged"
+    map: { pieza_nombre: input.title, brief: input.changelog, marca: "omni_erp" }
+    mode: post
