@@ -256,6 +256,13 @@ def a1_pr_final(state: FabricaState) -> dict:
     files_list_md = ""
     if files_written:
         files_list_md = "\n**Archivos escritos al repo:**\n" + "\n".join(f"- `{f}`" for f in sorted(files_written))
+        # M11 (PLAN_PLATAFORMA_V2): changelog humano determinista agrupado por capa.
+        try:
+            from tools.doc_generator import build_changelog
+            files_list_md += "\n\n" + build_changelog(state.get("feature_name", ""), files_written)
+        except Exception as _doc_exc:
+            import logging as _doc_log
+            _doc_log.getLogger(__name__).warning("doc_generator falló (ignorado): %s", _doc_exc)
 
     migration_section = ""
     if migration_note:

@@ -244,3 +244,4 @@ Recorrido formal de la cola de prioridad sobre PLAN_BLINDAJE_TOTAL (items restan
 [2026-06-18T20:39:11Z] ✅ V2 Fase 3 M7 OpenTelemetry PR#28 MERGEADO a main (squash c4c260b). CI 6/6. FASE 3 COMPLETA. → Fase 4 (runtime multi-pipeline).
 [2026-06-18T20:40:24Z] 🔨 V2 Fase 4 (slice) output handlers: output_handlers.py (files real + not_configured honesto) + 8 tests. Suite 437.
 [2026-06-18T20:42:13Z] ✅ V2 Fase 4 (slice) output handlers PR#29 MERGEADO a main (squash 96060d4). CI 6/6 verde.
+[2026-06-18T20:44:49Z] 🔨 V2 Fase 10 M11 documentador A12: doc_generator.py (changelog + Mermaid endpoints/ER) + wiring a1_pr_final + 8 tests. Suite 445.

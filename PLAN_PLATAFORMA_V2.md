@@ -283,8 +283,11 @@ funcionalidad (todos los gates, modos completo/lite/lightning, checkpoints human
   espacio de estados para garantizar completitud.
 
 ### FASE 10 — Extensiones de valor
-- 🟢 [M11] Agente documentador A12 (modelo barato): changelog humano, README, diagramas
-  Mermaid de endpoints, actualización de DECISION_LOG.md. Entregable: código **+** docs.
+- ✅ [M11] Documentador A12: `tools/doc_generator.py` genera (determinista, sin LLM)
+  changelog humano agrupado por capa + diagramas Mermaid de endpoints y ER de modelos.
+  Cableado en `a1_pr_final` (changelog en el cuerpo del PR). *Test:* `test_doc_generator.py`
+  (8). **IMPLEMENTADO 2026-06-18.** *(El pulido con LLM barato es opt-in futuro; la estructura
+  sale del tool, no se inventa.)*
 - 🟡 [M12] Integración con issue trackers (Linear/Jira/GitHub Issues): feature desde issue,
   cierre automático al merge, sub-issues por agente, trazabilidad requisito→PR.
 
