@@ -264,6 +264,11 @@ LLM_JUDGE_ENABLED   = os.getenv("LLM_JUDGE_ENABLED", "false").lower() == "true"
 LLM_JUDGE_MODEL     = os.getenv("LLM_JUDGE_MODEL", MODEL_FAST)
 LLM_JUDGE_MIN_SCORE = int(os.getenv("LLM_JUDGE_MIN_SCORE", "60"))
 
+# M5 (PLAN_PLATAFORMA_V2 Fase 2) — Caché local de prompts para proveedores sin caché
+# nativa (Anthropic ya cachea → se salta). Opt-in; default off → comportamiento idéntico.
+SEMANTIC_CACHE_ENABLED     = os.getenv("SEMANTIC_CACHE_ENABLED", "false").lower() == "true"
+SEMANTIC_CACHE_TTL_SECONDS = int(os.getenv("SEMANTIC_CACHE_TTL_SECONDS", "86400"))
+
 # A2.3 — CORS explícito. Allowlist de orígenes (separados por comas). Vacío = no se
 # añade middleware CORS (comportamiento por defecto: sin orígenes cruzados permitidos).
 CORS_ALLOWED_ORIGINS = [

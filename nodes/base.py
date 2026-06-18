@@ -411,7 +411,36 @@ def call_agent(
                 return _call_google_native(**kwargs)
             return _call_openai_compat(provider=provider, **kwargs)
 
-        text, cost_entry = retry_sync(_dispatch, label=agent_label)
+        # M5 (PLAN_PLATAFORMA_V2): caché local para proveedores SIN caché nativa.
+        # Anthropic ya cachea → se salta. Opt-in; default off → comportamiento idéntico.
+        _cache_key = None
+        try:
+            from config import SEMANTIC_CACHE_ENABLED, SEMANTIC_CACHE_TTL_SECONDS
+            if SEMANTIC_CACHE_ENABLED and provider != "anthropic":
+                from tools import prompt_cache
+                _ctx_blob = "".join(f"{k}={v}" for k, v in sorted(resolved_extra.items()))
+                _cache_key = prompt_cache.make_key(
+                    model, read_system_prompt(agent_key), task_content, _ctx_blob,
+                )
+                _hit = prompt_cache.get(_cache_key, ttl_seconds=SEMANTIC_CACHE_TTL_SECONDS)
+            else:
+                _hit = None
+        except Exception as _cache_exc:
+            logger.warning("prompt_cache lookup falló (ignorado): %s", _cache_exc)
+            _cache_key, _hit = None, None
+
+        if _hit is not None:
+            logger.info("→ %s [caché] | modelo: %s (sin llamada al LLM)", agent_label, model)
+            text = _hit
+            cost_entry = make_cost_entry(agent_label, model, _FakeUsage(0, 0))
+        else:
+            text, cost_entry = retry_sync(_dispatch, label=agent_label)
+            if _cache_key is not None:
+                try:
+                    from tools import prompt_cache
+                    prompt_cache.set(_cache_key, text)
+                except Exception as _cache_exc:
+                    logger.warning("prompt_cache store falló (ignorado): %s", _cache_exc)
 
     # VII-2: señal de fin con métricas reales
     if _fid:
