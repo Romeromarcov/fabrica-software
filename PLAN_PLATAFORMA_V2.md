@@ -181,8 +181,13 @@ funcionalidad (todos los gates, modos completo/lite/lightning, checkpoints human
   difflib + diff unificado recortado) cableado en `a6_refactor` (gate `INTELLIGENT_DIFF_GATE`):
   registra `refactor_change_ratio` en el state y escala si supera el umbral (sobre-refactor).
   *Test:* `test_code_diff.py` (8) + `test_a6_intelligent_diff.py` (3). **IMPLEMENTADO 2026-06-18.**
-- 🟡 [M2] Replay/debugging: persistir checkpoints navegables + comando
-  `fabrica-cli replay <feature> --from A6`. UI para reanudar desde cualquier nodo.
+- ✅ [M2] Replay/debugging: `tools/replay.py` (checkpoints desde `output_<nodo>.md`,
+  `load_run_state`, `replay_plan` desde un nodo reutilizando checkpoints previos) + comando
+  `fabrica-cli replay <feature> [--from <nodo>]`. *Test:* `test_replay.py` (9).
+  **IMPLEMENTADO 2026-06-18.** (La re-ejecución real desde el nodo y la UI de reanudar quedan
+  para un incremento posterior; hoy se inspecciona y se calcula el plan.)
+
+### FASE 1 — COMPLETA ✅ (R4 #18 · M4 #19 · M3 #20 · M2) — 2026-06-18
 - ✅ [R4] Validador de input (AIDefence lite): `tools/input_validator.py` cableado en
   `a0_arquitecto` (gate `INPUT_VALIDATION_GATE`) — detecta inyección de prompt (es/en),
   PII (email/tarjeta/teléfono) y secretos (reusa `log_sanitizer`); neutraliza el brief

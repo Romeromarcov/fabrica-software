@@ -547,6 +547,29 @@ def cmd_list() -> None:
     console.print(table)
 
 
+# ── M2: replay / debugging ──────────────────────────────────────────────────
+
+def cmd_replay(feature_id: str, from_node: str | None) -> None:
+    """Inspecciona los checkpoints de un feature o muestra el plan de replay."""
+    from tools.replay import list_checkpoints, format_replay_plan
+
+    checkpoints = list_checkpoints(feature_id)
+    if not checkpoints:
+        console.print(f"[yellow]Sin checkpoints para '{feature_id}' "
+                      f"(¿feature inexistente o sin salidas guardadas?).[/yellow]")
+        return
+
+    if not from_node:
+        console.print(Panel(
+            "\n".join(f"• {c}" for c in checkpoints),
+            title=f"Checkpoints de {feature_id}",
+            subtitle="usa --from <nodo> para ver el plan de replay",
+        ))
+        return
+
+    console.print(format_replay_plan(feature_id, from_node))
+
+
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 def main() -> None:
@@ -586,6 +609,13 @@ def main() -> None:
     p_rp = sub.add_parser("resume-project", help="Reanuda un Project Loop pausado")
     p_rp.add_argument("project_id")
 
+    # M2 (PLAN_PLATAFORMA_V2) — replay/debugging: inspecciona checkpoints y plan de replay.
+    p_replay = sub.add_parser("replay", help="Muestra el plan de replay de un feature desde un nodo")
+    p_replay.add_argument("feature_id")
+    p_replay.add_argument("--from", dest="from_node", default=None,
+                          help="Nodo desde el que re-ejecutar (ej: a6_refactor). "
+                               "Sin valor → lista los checkpoints disponibles.")
+
     args = parser.parse_args()
 
     if args.cmd == "new-feature":
@@ -602,6 +632,8 @@ def main() -> None:
         cmd_new_project(args.name, args.brief, args.repo, args.new, audit=getattr(args, "audit", False))
     elif args.cmd == "resume-project":
         cmd_resume_project(args.project_id)
+    elif args.cmd == "replay":
+        cmd_replay(args.feature_id, args.from_node)
 
 
 if __name__ == "__main__":
