@@ -164,3 +164,18 @@ sigue en false (sign-off humano).
 - Contenido: +33 tests dedicados (quality_tracker, fewshot_builder, code_writer, stack_reader,
   repo_scanner, feature_detail UI) + fix .env.example en code_writer + files_written en UI.
   Reconcilia ROADMAP I-1..I-3 y PLAN.md 1.1-4.4 a [x] (eran CLAIMED/PARTIAL/MISSING).
+
+## 2026-06-18T13:54:46Z — ESTADO TERMINAL
+Planes de autoridad con porción autónoma 100% VERIFICADA y mergeada a main:
+  ✅ PLAN_HARDENING_FABRICA.md (Fases 0-7) — 274 tests, imports OK.
+  ✅ ROADMAP_AUTONOMIA.md (Bloque I aprendizaje reconciliado) — +13 tests.
+  ✅ PLAN.md (TAREAS 1-4 reconciliadas) — +20 tests, fix .env.example, UI files_written.
+  ✅ PLAN_MEJORAS.md — 28 tests verificación.
+  Suite total: 307 passed.
+
+⚠️ ESCALATION / PENDIENTE HUMANO — PLAN_BLINDAJE_TOTAL.md (9 ítems, no autónomos en este contenedor):
+  - E5.1 worktrees → ThreadPoolExecutor = ⛔ CTF-FABRICA-001: requiere langgraph e2e + API keys + sign-off humano.
+  - C2 branch protection = settings de GitHub admin (humano).
+  - D2.1-D2.3 / D3.1-D3.3 = entornos Railway dev/prod + host Docker (no disponibles; el contenedor NO es Railway).
+  - E3.1 auditoría ~180 except = diferida por diseño (evita churn masivo transversal).
+  - AUTO_MERGE_ENABLED se mantiene en false (ramp-up supervisado, sin tocar el flag).
