@@ -245,6 +245,12 @@ UI_ALLOW_NO_AUTH = os.getenv("UI_ALLOW_NO_AUTH", "false").lower() == "true"
 # en los archivos generados, el gate FALLA (no depende de que el LLM de A8 lo note).
 SECRET_SCAN_GATE = os.getenv("SECRET_SCAN_GATE", "true").lower() == "true"
 
+# R4 (PLAN_PLATAFORMA_V2 Fase 1) — Validador de input (AIDefence lite) antes de A0.
+# INPUT_VALIDATION_GATE: si true, el brief se valida (inyección de prompt → bloqueo;
+# PII/secretos → sanitización). INPUT_VALIDATION_STRICT: PII/secretos también bloquean.
+INPUT_VALIDATION_GATE   = os.getenv("INPUT_VALIDATION_GATE", "true").lower() == "true"
+INPUT_VALIDATION_STRICT = os.getenv("INPUT_VALIDATION_STRICT", "false").lower() == "true"
+
 # A2.3 — CORS explícito. Allowlist de orígenes (separados por comas). Vacío = no se
 # añade middleware CORS (comportamiento por defecto: sin orígenes cruzados permitidos).
 CORS_ALLOWED_ORIGINS = [
