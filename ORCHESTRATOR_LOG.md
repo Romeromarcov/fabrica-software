@@ -223,3 +223,4 @@ Recorrido formal de la cola de prioridad sobre PLAN_BLINDAJE_TOTAL (items restan
 [2026-06-18T18:52:45Z] 🔨 V2 Fase 1 M3 LLM-as-judge: llm_judge.py + hook post_agent + wiring en build_graph + 13 tests. Suite 377.
 [2026-06-18T18:54:36Z] ✅ V2 Fase 1 M3 LLM-as-judge PR#20 MERGEADO a main (squash 91bc72e). CI 6/6 verde. Era MISSING. Fase 1: R4✅ M4✅ M3✅, falta M2 (replay).
 [2026-06-18T19:39:24Z] 🔨 V2 Fase 1 M2 replay: tools/replay.py + cli replay + 9 tests. Suite 386. FASE 1 COMPLETA (R4/M4/M3/M2).
+[2026-06-18T19:41:27Z] ✅ V2 Fase 1 M2 replay PR#21 MERGEADO a main (squash 36a90ca). CI 6/6 verde. FASE 1 COMPLETA. Hito: V2 Fase 0+1 entregadas (PRs #17-#21, 5 merges, suite 386).
