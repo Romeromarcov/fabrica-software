@@ -205,9 +205,11 @@ funcionalidad (todos los gates, modos completo/lite/lightning, checkpoints human
   fingerprint estático. Cableado en `a0_arquitecto` (modo continuar) bajo
   `DYNAMIC_CONTEXT_ENABLED` (opt-in, default off). *Test:* `test_context_selector.py` (8).
   **IMPLEMENTADO 2026-06-18.**
-- 🟡 [R1] Memoria vectorial (ChromaDB): reemplaza/complementa `learning_memory.py` y
-  `fewshot_builder.py`. Query semántico de planes/soluciones pasadas para A1/A4/A5.
-  Namespaces por pipeline y por repo.
+- ✅ [R1] Memoria vectorial (`tools/vector_memory.py`): query semántico de planes/soluciones
+  pasadas con namespaces por pipeline+repo. Backend ChromaDB si está instalado y
+  `VECTOR_MEMORY_ENABLED=true`; si no, **fallback** por solapamiento de keywords sobre JSONL.
+  La fábrica NO requiere chromadb (dependencia opcional). *Test:* `test_vector_memory.py` (7,
+  ejercitan el fallback). **IMPLEMENTADO 2026-06-18.**
 
 ### FASE 3 — Observabilidad y optimización basada en datos
 - 🟡 [M7] OpenTelemetry → Jaeger/Grafana Tempo. Timeline por agente, latencia por modelo,

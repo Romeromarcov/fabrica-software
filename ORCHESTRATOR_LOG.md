@@ -227,3 +227,5 @@ Recorrido formal de la cola de prioridad sobre PLAN_BLINDAJE_TOTAL (items restan
 [2026-06-18T19:47:53Z] 🔨 V2 Fase 2 M5 caché de prompts: prompt_cache.py + wiring base.call_agent (skip anthropic) + 7 tests. Suite 393.
 [2026-06-18T19:49:51Z] ✅ V2 Fase 2 M5 caché PR#22 MERGEADO a main (squash 38b7739). CI 6/6 verde. Era MISSING.
 [2026-06-18T19:51:54Z] 🔨 V2 Fase 2 M8 contexto dinámico: context_selector.py + wiring a0 + 8 tests. Suite 401.
+[2026-06-18T19:53:58Z] ✅ V2 Fase 2 M8 contexto dinámico PR#23 MERGEADO a main (squash 44466ed). CI 6/6 verde. Era MISSING.
+[2026-06-18T19:55:37Z] 🔨 V2 Fase 2 R1 memoria vectorial: vector_memory.py (chromadb opcional + fallback keywords) + 7 tests. Suite 408.
