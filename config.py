@@ -285,6 +285,12 @@ VECTOR_MEMORY_ENABLED = os.getenv("VECTOR_MEMORY_ENABLED", "false").lower() == "
 AB_TESTING_ENABLED = os.getenv("AB_TESTING_ENABLED", "false").lower() == "true"
 AB_TESTING_PCT     = float(os.getenv("AB_TESTING_PCT", "0.2"))
 
+# R3 (PLAN_PLATAFORMA_V2 Fase 2) — Paralelismo INTRA-feature A4+A5. Cuando ambos agentes
+# están activos (no skip), corren concurrentes (ThreadPoolExecutor con contexto aislado por
+# hilo) y A6 unifica. Opt-in; default off → ruta secuencial idéntica. NO confundir con
+# PARALLEL_FEATURES_ENABLED (paralelismo a nivel feature, escalado a CTF-FABRICA-001, intocado).
+PARALLEL_AGENTS_ENABLED = os.getenv("PARALLEL_AGENTS_ENABLED", "false").lower() == "true"
+
 # M7 (PLAN_PLATAFORMA_V2 Fase 3) — Observabilidad OpenTelemetry. Spans por agente
 # (reusa trace_id de E1.1), export OTLP a Jaeger/Tempo si OTEL_EXPORTER_OTLP_ENDPOINT.
 # Opt-in; la fábrica NO requiere opentelemetry (dep opcional). Default off → no-op.

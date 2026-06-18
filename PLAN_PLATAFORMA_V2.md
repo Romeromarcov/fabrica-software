@@ -194,12 +194,14 @@ funcionalidad (todos los gates, modos completo/lite/lightning, checkpoints human
   antes de que llegue al LLM. *Test:* `test_input_validator.py` (14). **IMPLEMENTADO 2026-06-18.**
 
 ### FASE 2 — Rendimiento y costo
-- ⏸️ [R3] Paralelismo A4+A5 en worktrees aislados — **DIFERIDO / ESCALACIÓN (clase CTF-FABRICA-001).**
-  Introduce concurrencia real en el grafo (dos `call_agent` simultáneos). `call_agent` usa
-  `trace_id` (contextvar) + emisiones al event_bus cuya seguridad bajo hilos NO está verificada;
-  es la misma clase de riesgo que `PARALLEL_FEATURES_ENABLED` (intocable hasta el sign-off de
-  CTF-FABRICA-001). No se shippea concurrencia en el núcleo sin esa verificación E2E con
-  langgraph + claves en vivo. Requiere humano. *(El resto de Fase 2 — M5/M8/R1 — está hecho.)*
+- ✅ [R3] Paralelismo INTRA-feature A4+A5 (autorizado por el founder, rewire del grafo).
+  `nodes/a45_parallel.py` corre A4 y A5 concurrentes (`ThreadPoolExecutor` + `copy_context()`
+  por hilo → `trace_id` aislado; cada agente recibe copia del state) y A6 unifica. Routing del
+  grafo cableado (`_use_parallel_agents` + ramas en `_route_after_db`/`_route_after_mcp`/
+  `_route_after_approval`) bajo `PARALLEL_AGENTS_ENABLED` (opt-in, default off → ruta secuencial
+  idéntica; parity preservada). *Test:* `test_parallel_agents.py` (11). **IMPLEMENTADO 2026-06-18.**
+  NOTA: es intra-feature; NO es `PARALLEL_FEATURES_ENABLED` (paralelismo a nivel feature,
+  sigue en false / CTF-FABRICA-001). *(Con esto Fase 2 — M5/M8/R1/R3 — queda completa.)*
 - ✅ [M5] Caché local de prompts (`tools/prompt_cache.py`, content-addressed: hash de
   modelo+system prompt+tarea+contexto) para proveedores sin caché nativa; Anthropic se salta
   (ya cachea). Cableada en `base.call_agent` bajo `SEMANTIC_CACHE_ENABLED` (opt-in, default off

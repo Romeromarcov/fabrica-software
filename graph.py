@@ -56,6 +56,7 @@ from nodes.a7_qa           import a7_qa
 from nodes.a8_secops       import a8_secops
 from nodes.a9_sandbox      import a9_sandbox
 from nodes.a85_adversarial import a85_adversarial
+from nodes.a45_parallel import a45_parallel
 from nodes.a10_code_writer import a10_code_writer
 from nodes.a11_devops      import a11_devops
 
@@ -129,25 +130,48 @@ def _route_after_approval(state: FabricaState) -> str:
     # G5: si solo hay cambios de frontend y el modo es lite, saltar A4
     if mode == "lite" and state.get("skip_backend"):
         return "frontend_only"
+    # R3: lite con A4+A5 en paralelo → a45_parallel (completo paraleliza tras A2/A3).
+    if mode == "lite" and _use_parallel_agents(state):
+        return "parallel_agents"
     return mode if mode in ("completo", "lite") else "completo"
+
+
+def _use_parallel_agents(state: FabricaState) -> bool:
+    """
+    R3: ¿corre A4+A5 en paralelo? Solo si PARALLEL_AGENTS_ENABLED, el modo no es
+    lightning, y ambos agentes aplican (ni skip_backend ni skip_frontend). El flag se
+    lee dinámicamente (runtime/tests). Default off → ruta secuencial idéntica.
+    """
+    import config
+    if not getattr(config, "PARALLEL_AGENTS_ENABLED", False):
+        return False
+    if state.get("mode") not in ("completo", "lite"):
+        return False
+    return not state.get("skip_backend") and not state.get("skip_frontend")
 
 
 def _route_after_db(state: FabricaState) -> str:
     """
     G4: A2 DB → A3 MCP solo si needs_mcp=True.
     Si needs_mcp=False, salta directamente a A4 Backend (o A5 si skip_backend).
+    R3: si A4+A5 corren en paralelo → a45_parallel.
     """
     if not state.get("needs_mcp", True):
         # Sin MCP: ir a backend o saltarlo si es skip_backend
-        return "a5_frontend" if state.get("skip_backend") else "a4_backend"
+        if state.get("skip_backend"):
+            return "a5_frontend"
+        return "a45_parallel" if _use_parallel_agents(state) else "a4_backend"
     return "a3_mcp"
 
 
 def _route_after_mcp(state: FabricaState) -> str:
     """
     G5 (modo completo): A3 MCP → A4 Backend | saltar si skip_backend=True.
+    R3: si A4+A5 corren en paralelo → a45_parallel.
     """
-    return "a5_frontend" if state.get("skip_backend") else "a4_backend"
+    if state.get("skip_backend"):
+        return "a5_frontend"
+    return "a45_parallel" if _use_parallel_agents(state) else "a4_backend"
 
 
 def _route_after_backend(state: FabricaState) -> str:
@@ -450,6 +474,7 @@ def build_graph() -> StateGraph:
     g.add_node("a3_mcp",            a3_mcp)              # condicional: needs_mcp=True
     g.add_node("a4_backend",        a4_backend)          # condicional: skip_backend=False
     g.add_node("a5_frontend",       a5_frontend)         # condicional: skip_frontend=False
+    g.add_node("a45_parallel",      a45_parallel)        # R3: A4+A5 concurrentes (opt-in)
     g.add_node("a6_refactor",       a6_refactor)         # pre-QA: revisa+corrige+unifica
     g.add_node("a7_qa",             a7_qa)
     g.add_node("qa_escalation",     qa_escalation)       # ⚠️ escala humano (QA o SecOps)
@@ -491,11 +516,12 @@ def build_graph() -> StateGraph:
 
     # ── Mapa compartido de salidas post-aprobación ────────────────────────────
     _approval_targets = {
-        "completo":      "a2_db",
-        "lite":          "a4_backend",
-        "lightning":     "a4_backend",   # ⚡ lightning: salta A2/A3; diverge en downstream
-        "frontend_only": "a5_frontend",  # lite/lightning + skip_backend
-        "rechazado":     "pipeline_detenido",
+        "completo":        "a2_db",
+        "lite":            "a4_backend",
+        "lightning":       "a4_backend",   # ⚡ lightning: salta A2/A3; diverge en downstream
+        "frontend_only":   "a5_frontend",  # lite/lightning + skip_backend
+        "parallel_agents": "a45_parallel", # R3: lite con A4+A5 en paralelo
+        "rechazado":       "pipeline_detenido",
     }
 
     # 1b. Los tres caminos convergen en _route_after_approval
@@ -513,6 +539,7 @@ def build_graph() -> StateGraph:
             "a3_mcp":       "a3_mcp",
             "a4_backend":   "a4_backend",
             "a5_frontend":  "a5_frontend",  # needs_mcp=False + skip_backend=True
+            "a45_parallel": "a45_parallel", # R3: A4+A5 en paralelo
         },
     )
 
@@ -523,6 +550,7 @@ def build_graph() -> StateGraph:
         {
             "a4_backend":  "a4_backend",
             "a5_frontend": "a5_frontend",  # skip_backend en completo
+            "a45_parallel": "a45_parallel", # R3: A4+A5 en paralelo
         },
     )
 
@@ -546,6 +574,9 @@ def build_graph() -> StateGraph:
             "a10_code_writer": "a10_code_writer",  # ⚡ lightning
         },
     )
+
+    # R3: A4+A5 en paralelo → A6 unifica (no aplica en lightning).
+    g.add_edge("a45_parallel", "a6_refactor")
 
     # 5. A6 → QA (aprobado) | detener (bloqueante crítico)
     g.add_conditional_edges(
