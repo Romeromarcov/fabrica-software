@@ -195,8 +195,11 @@ funcionalidad (todos los gates, modos completo/lite/lightning, checkpoints human
 
 ### FASE 2 — Rendimiento y costo
 - 🟢 [R3] Paralelismo A4+A5 en worktrees aislados cuando ambos están activos; A6 unifica.
-- 🟡 [M5] Caché semántica local (hash de system prompt + fingerprint del repo) para
-  proveedores sin cache nativa (Google/OpenAI). Anthropic ya cacheado.
+- ✅ [M5] Caché local de prompts (`tools/prompt_cache.py`, content-addressed: hash de
+  modelo+system prompt+tarea+contexto) para proveedores sin caché nativa; Anthropic se salta
+  (ya cachea). Cableada en `base.call_agent` bajo `SEMANTIC_CACHE_ENABLED` (opt-in, default off
+  → idéntico). *Test:* `test_prompt_cache.py` (7, incl. integración: 2ª llamada sin LLM).
+  **IMPLEMENTADO 2026-06-18.**
 - 🔴 [M8] Contexto dinámico: seleccionar archivos relevantes del repo por
   imports/módulos/keywords en vez del fingerprint estático completo.
 - 🟡 [R1] Memoria vectorial (ChromaDB): reemplaza/complementa `learning_memory.py` y
