@@ -179,3 +179,18 @@ Planes de autoridad con porción autónoma 100% VERIFICADA y mergeada a main:
   - D2.1-D2.3 / D3.1-D3.3 = entornos Railway dev/prod + host Docker (no disponibles; el contenedor NO es Railway).
   - E3.1 auditoría ~180 except = diferida por diseño (evita churn masivo transversal).
   - AUTO_MERGE_ENABLED se mantiene en false (ramp-up supervisado, sin tocar el flag).
+
+## 2026-06-18T13:58:01Z — ⚠️ ESCALATION (estado final del loop)
+Autoridad 1-4 (HARDENING/ROADMAP/PLAN/MEJORAS): 100% VERIFICADO y en main. Suite 307 verde.
+PLAN_BLINDAJE_TOTAL: 9 ítems restantes — NINGUNO autónomamente completable+verificable aquí:
+  E5.1  → ⛔ CTF-FABRICA-001 (gatillo de ESCALATION definido): langgraph e2e + API keys + sign-off humano.
+  D1.2(resto)/D2.1/D2.2/D3.2/D3.3 → requieren DEPLOY real: 'docker info' = daemon NO alcanzable y el
+       contenedor NO es Railway (deploy dev/prod imposible de ejecutar/verificar aquí).
+  C2    → branch protection = settings de GitHub admin (sin permisos admin desde aquí).
+  D2.3/D3.1 → su kernel lógico es codeable, PERO no existe flujo de promoción develop→main en el repo
+       al que cablearlo; añadir helpers sueltos sería código muerto (viola 'cero deuda técnica').
+  E3.1  → auditoría ~180 except = diferida por diseño (refactor masivo transversal; el loop evita refactors grandes).
+Motivo de no continuar autónomamente: hacerlo exigiría (a) faltar a 'sin passed=True cuando falta
+  herramienta' o (b) escribir código sin cablear. Ambas violan reglas del propio goal/proyecto.
+Pendiente humano: CTF-FABRICA-001, branch protection (C2), provisión de host Docker + entornos Railway
+  dev/prod para Bloque D, y decisión sobre la iteración dedicada de E3.1. AUTO_MERGE_ENABLED sigue false.
