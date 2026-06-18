@@ -274,6 +274,11 @@ SEMANTIC_CACHE_TTL_SECONDS = int(os.getenv("SEMANTIC_CACHE_TTL_SECONDS", "86400"
 # Opt-in; default off → comportamiento idéntico.
 DYNAMIC_CONTEXT_ENABLED = os.getenv("DYNAMIC_CONTEXT_ENABLED", "false").lower() == "true"
 
+# R1 (PLAN_PLATAFORMA_V2 Fase 2) — Memoria vectorial. Si está habilitado Y chromadb
+# instalado → búsqueda semántica; si no, fallback por keywords sobre JSONL. La fábrica
+# NO requiere chromadb (dependencia opcional: `pip install chromadb`). Default off.
+VECTOR_MEMORY_ENABLED = os.getenv("VECTOR_MEMORY_ENABLED", "false").lower() == "true"
+
 # A2.3 — CORS explícito. Allowlist de orígenes (separados por comas). Vacío = no se
 # añade middleware CORS (comportamiento por defecto: sin orígenes cruzados permitidos).
 CORS_ALLOWED_ORIGINS = [
