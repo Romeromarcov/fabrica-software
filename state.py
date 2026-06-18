@@ -66,6 +66,7 @@ class FabricaState(TypedDict):
     # ── Revisión y unificación de código (pre-QA) ────────────────────────────
     refactor_doc_output: Optional[str]   # Agente 5 (Revisor/Unificador — corre antes de QA)
     refactor_doc_approved: bool          # True = "✅ LISTO PARA QA" emitido
+    refactor_change_ratio: float         # M4: ratio de cambio entrada↔salida de A6 (0..1)
 
     # ── PR Final ──────────────────────────────────────────────────────────────
     pr_message: Optional[str]
@@ -161,6 +162,7 @@ def initial_state(
         sandbox_iterations=0,
         refactor_doc_output=None,
         refactor_doc_approved=False,
+        refactor_change_ratio=0.0,
         pr_message=None,
         needs_mcp=True,
         skip_backend=False,

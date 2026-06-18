@@ -173,8 +173,10 @@ funcionalidad (todos los gates, modos completo/lite/lightning, checkpoints human
 ### FASE 1 — Calidad y confiabilidad (gana robustez ya)
 - 🟡 [M3] LLM-as-judge: evaluador ligero (modelo barato) puntúa cada output antes de pasar
   al siguiente agente; bajo umbral → reintento o escalación.
-- 🟢 [M4] Diff inteligente en A6: diff input↔output, justificación por cambio, escalación si
-  cambia > umbral (p.ej. 30%).
+- ✅ [M4] Diff inteligente en A6: `tools/code_diff.py` (ratio de cambio entrada↔salida vía
+  difflib + diff unificado recortado) cableado en `a6_refactor` (gate `INTELLIGENT_DIFF_GATE`):
+  registra `refactor_change_ratio` en el state y escala si supera el umbral (sobre-refactor).
+  *Test:* `test_code_diff.py` (8) + `test_a6_intelligent_diff.py` (3). **IMPLEMENTADO 2026-06-18.**
 - 🟡 [M2] Replay/debugging: persistir checkpoints navegables + comando
   `fabrica-cli replay <feature> --from A6`. UI para reanudar desde cualquier nodo.
 - ✅ [R4] Validador de input (AIDefence lite): `tools/input_validator.py` cableado en

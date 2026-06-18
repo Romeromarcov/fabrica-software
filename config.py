@@ -251,6 +251,12 @@ SECRET_SCAN_GATE = os.getenv("SECRET_SCAN_GATE", "true").lower() == "true"
 INPUT_VALIDATION_GATE   = os.getenv("INPUT_VALIDATION_GATE", "true").lower() == "true"
 INPUT_VALIDATION_STRICT = os.getenv("INPUT_VALIDATION_STRICT", "false").lower() == "true"
 
+# M4 (PLAN_PLATAFORMA_V2 Fase 1) — Diff inteligente en A6. Mide cuánto reescribió A6
+# el código (ratio entrada↔salida); si supera el umbral, escala (sobre-refactor).
+# Opt-in: observacional por defecto (registra el ratio); el aviso solo dispara con gate on.
+INTELLIGENT_DIFF_GATE      = os.getenv("INTELLIGENT_DIFF_GATE", "false").lower() == "true"
+INTELLIGENT_DIFF_THRESHOLD = float(os.getenv("INTELLIGENT_DIFF_THRESHOLD", "0.85"))
+
 # A2.3 — CORS explícito. Allowlist de orígenes (separados por comas). Vacío = no se
 # añade middleware CORS (comportamiento por defecto: sin orígenes cruzados permitidos).
 CORS_ALLOWED_ORIGINS = [
