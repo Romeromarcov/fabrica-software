@@ -219,3 +219,5 @@ Recorrido formal de la cola de prioridad sobre PLAN_BLINDAJE_TOTAL (items restan
 [2026-06-18T18:39:21Z] ✅ V2 Fase 0 cimientos PR#17 MERGEADO a main (squash 40af6f4). CI 6/6 verde. Era MISSING (plan no implementado).
 [2026-06-18T18:44:44Z] ✅ V2 Fase 1 R4 input_validator PR#18 MERGEADO a main (squash 46b95c4). CI 6/6 verde. Era MISSING.
 [2026-06-18T18:47:40Z] 🔨 V2 Fase 1 M4 diff inteligente A6: code_diff.py + wiring + 11 tests. Suite 366.
+[2026-06-18T18:50:02Z] ✅ V2 Fase 1 M4 diff inteligente PR#19 MERGEADO a main (squash f8cc1fa). CI 6/6 verde. Era MISSING.
+[2026-06-18T18:52:45Z] 🔨 V2 Fase 1 M3 LLM-as-judge: llm_judge.py + hook post_agent + wiring en build_graph + 13 tests. Suite 377.
