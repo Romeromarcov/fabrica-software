@@ -302,9 +302,11 @@ funcionalidad (todos los gates, modos completo/lite/lightning, checkpoints human
   `tests/test_self_improvement.py` (11). Suite 527. **IMPLEMENTADO 2026-06-18.**
   Nota: la *aplicación* de las propuestas a los prompts pasa por el Factory Modifier (Fase 7,
   alto riesgo) con aprobación; M9 entrega el análisis y las acciones priorizadas.
-- 🔴 [R5] Trazabilidad objetivo→backlog→código: validar que el backlog cubre el objetivo
-  (apoyado en el dependency graph de `branch_manager.py`); planificación con búsqueda sobre
-  espacio de estados para garantizar completitud.
+- ✅ [R5] Trazabilidad objetivo→backlog: `tools/traceability.py` valida que el backlog
+  cubre el objetivo con un motor DETERMINISTA de cobertura por solapamiento de términos
+  (`extract_requirements` con LLM inyectable/fallback, `coverage`, `is_complete`,
+  `format_traceability_report`): reporta requisitos cubiertos vs gaps + % de cobertura.
+  *Test:* `tests/test_traceability.py` (11). Suite 538. **IMPLEMENTADO 2026-06-18.**
 
 ### FASE 10 — Extensiones de valor
 - ✅ [M11] Documentador A12: `tools/doc_generator.py` genera (determinista, sin LLM)
