@@ -222,8 +222,10 @@ funcionalidad (todos los gates, modos completo/lite/lightning, checkpoints human
 - 🟡 [M6] A/B testing de modelos por agente: en X% de features, agente usa modelo
   alternativo; `quality_tracker.py` registra iteraciones/costo → recomienda modelo óptimo
   por rol. (Explota directamente la ventaja de "modelo por agente".)
-- 🟢 [M10] Dry run: correr solo A0+A1 y proyectar tiempo/costo/riesgo/iteraciones esperadas
-  (usando memoria vectorial de features similares) antes de comprometer el pipeline.
+- ✅ [M10] Dry run: `tools/dry_run.py` proyecta tiempo/costo/riesgo/iteraciones esperadas
+  desde el riesgo del plan (`risk_classifier`) + historial (`quality_tracker`), antes de
+  comprometer el pipeline. Comando `fabrica-cli dry-run "<brief>" [--project <id>]`.
+  *Test:* `test_dry_run.py` (6). **IMPLEMENTADO 2026-06-18.**
 
 ### FASE 4 — Runtime multi-pipeline (la separación por dominio) [C3]
 - 🟡 Descubrimiento automático de `pipelines/*/pipeline.yaml`.
