@@ -217,3 +217,5 @@ Recorrido formal de la cola de prioridad sobre PLAN_BLINDAJE_TOTAL (items restan
 - Implementado: registry.json + agent_registry (cascada modelo), graph_builder + pipeline_loader + pipelines/software/pipeline.yaml, schemas/ Pydantic (M1), hook_engine (R2) cableado no-op en base.py.
 - +34 tests. Suite 341 verde. Invariante 'software corre idéntico' preservado (graph.py sigue siendo producción; parity test).
 [2026-06-18T18:39:21Z] ✅ V2 Fase 0 cimientos PR#17 MERGEADO a main (squash 40af6f4). CI 6/6 verde. Era MISSING (plan no implementado).
+[2026-06-18T18:44:44Z] ✅ V2 Fase 1 R4 input_validator PR#18 MERGEADO a main (squash 46b95c4). CI 6/6 verde. Era MISSING.
+[2026-06-18T18:47:40Z] 🔨 V2 Fase 1 M4 diff inteligente A6: code_diff.py + wiring + 11 tests. Suite 366.
