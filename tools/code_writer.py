@@ -90,13 +90,14 @@ def _is_valid_path(path: str, repo: Path) -> bool:
     except (ValueError, RuntimeError):
         return False
 
+    # .env.example es siempre permitido (plantilla sin secretos) — se evalúa
+    # ANTES del bloqueo de sensibles porque `_NEVER_RE` también casa `.env.<sufijo>`.
+    if path.endswith(".env.example"):
+        return True
+
     # Nunca sobreescribir archivos sensibles
     if _NEVER_RE.search(path):
         return False
-
-    # .env.example es siempre permitido
-    if path.endswith(".env.example"):
-        return True
 
     p = Path(path)
     if p.name in ALLOWED_NAMES:

@@ -356,6 +356,8 @@ Al final escribe: `✅ CICLO COMPLETADO`
         "completed_at":   datetime.utcnow().isoformat(),
         "total_cost_usd": final_cost,
         "status":         "completado",
+        # PLAN.md 1.5: exponer los archivos escritos al repo en el panel de la UI.
+        "files_written":  sorted(files_written),
     })
 
     # ── Sistema de aprendizaje: registrar métricas de calidad ─────────────────

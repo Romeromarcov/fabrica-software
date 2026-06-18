@@ -167,6 +167,24 @@
     </div>
     {% endif %}
 
+    <!-- Files written to repo (PLAN.md 1.5) -->
+    {% if meta.get("files_written") %}
+    <div class="card mb-3">
+      <div class="card-header">
+        <span class="card-header-title"><i class="bi bi-file-earmark-code me-1"></i>Archivos escritos al repo
+          <span class="badge badge-completado">{{ meta.get("files_written")|length }}</span>
+        </span>
+      </div>
+      <div class="card-body">
+        <ul style="max-height:240px;overflow-y:auto;margin:0;padding-left:1.1rem;font-size:12px">
+          {% for f in meta.get("files_written") %}
+          <li><code>{{ f }}</code></li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+    {% endif %}
+
     <!-- Agent outputs -->
     {% if outputs %}
     <div class="card">

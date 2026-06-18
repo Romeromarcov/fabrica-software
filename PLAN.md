@@ -25,12 +25,12 @@
 **No usa LLM** — es lógica Python pura de parsing + escritura.
 
 **Subtareas:**
-- [ ] 1.1 Crear `tools/code_writer.py` — parser de bloques de código y escritor de archivos
-- [ ] 1.2 Crear `nodes/a10_code_writer.py` — nodo del pipeline
-- [ ] 1.3 Actualizar `graph.py` — insertar A10 entre A9 y A1
-- [ ] 1.4 Actualizar `state.py` — añadir campo `files_written: list[str]`
-- [ ] 1.5 Actualizar `ui/server.py` — mostrar archivos escritos en el panel de resultados
-- [ ] 1.6 Actualizar `config.py` — constante `WRITE_TO_REPO` (on/off como safety switch)
+- [x] 1.1 Crear `tools/code_writer.py` — parser de bloques de código y escritor de archivos
+- [x] 1.2 Crear `nodes/a10_code_writer.py` — nodo del pipeline
+- [x] 1.3 Actualizar `graph.py` — insertar A10 entre A9 y A1
+- [x] 1.4 Actualizar `state.py` — añadir campo `files_written: list[str]`
+- [x] 1.5 Actualizar `ui/server.py` — mostrar archivos escritos en el panel de resultados
+- [x] 1.6 Actualizar `config.py` — constante `WRITE_TO_REPO` (on/off como safety switch)
 
 **Formato que parsea:**
 ```
@@ -55,11 +55,11 @@
 **Condicional:** solo se activa si `needs_devops=True` (detectado por A1 PM al planificar).
 
 **Subtareas:**
-- [ ] 2.1 Crear `nodes/a11_devops.py` — nodo del pipeline
-- [ ] 2.2 Actualizar `graph.py` — insertar A11 condicional entre A10 y A1
-- [ ] 2.3 Actualizar `state.py` — añadir campo `needs_devops: bool`
-- [ ] 2.4 Actualizar `nodes/human_nodes.py` — A1 PM detecta si el feature necesita DevOps
-- [ ] 2.5 Añadir `MODEL_A11` a `config.py` y `.env.example`
+- [x] 2.1 Crear `nodes/a11_devops.py` — nodo del pipeline
+- [x] 2.2 Actualizar `graph.py` — insertar A11 condicional entre A10 y A1
+- [x] 2.3 Actualizar `state.py` — añadir campo `needs_devops: bool`
+- [x] 2.4 Actualizar `nodes/human_nodes.py` — A1 PM detecta si el feature necesita DevOps
+- [x] 2.5 Añadir `MODEL_A11` a `config.py` y `.env.example`
 
 **Responsabilidades de A11:**
 - Lee `requirements.txt` / `package.json` actuales
@@ -78,13 +78,13 @@
 **Objetivo:** Los agentes A4, A5 y A7 deben adaptarse al stack real del proyecto en lugar de asumir siempre Django + React.
 
 **Subtareas:**
-- [ ] 3.1 Definir formato `STACK.md` — documento que describe el stack del proyecto
-- [ ] 3.2 Crear `tools/stack_reader.py` — lee y parsea `STACK.md` del repo
-- [ ] 3.3 Modificar `nodes/a4_backend.py` — inyectar instrucciones de stack en el prompt
-- [ ] 3.4 Modificar `nodes/a5_frontend.py` — ídem para frontend
-- [ ] 3.5 Modificar `nodes/a7_qa.py` — inyectar framework de testing correcto
-- [ ] 3.6 Modificar `nodes/a0_arquitecto.py` — generar `STACK.md` al planificar nuevo proyecto
-- [ ] 3.7 Actualizar UI — input para stack en la pantalla de nuevo proyecto (si no hay `STACK.md`)
+- [x] 3.1 Definir formato `STACK.md` — documento que describe el stack del proyecto
+- [x] 3.2 Crear `tools/stack_reader.py` — lee y parsea `STACK.md` del repo
+- [x] 3.3 Modificar `nodes/a4_backend.py` — inyectar instrucciones de stack en el prompt
+- [x] 3.4 Modificar `nodes/a5_frontend.py` — ídem para frontend
+- [x] 3.5 Modificar `nodes/a7_qa.py` — inyectar framework de testing correcto
+- [x] 3.6 Modificar `nodes/a0_arquitecto.py` — generar `STACK.md` al planificar nuevo proyecto
+- [x] 3.7 Actualizar UI — input para stack en la pantalla de nuevo proyecto (si no hay `STACK.md`)
 
 **Stacks soportados inicialmente:**
 - Backend: Django/DRF, FastAPI, Express/Node, Laravel
@@ -97,16 +97,26 @@
 **Objetivo:** Cuando OpenClaw no está disponible y el modo es `is_new=False`, darle a A0 un snapshot real del código del repositorio.
 
 **Subtareas:**
-- [ ] 4.1 Crear `tools/repo_scanner.py` — escanea el repo e indexa archivos clave
-- [ ] 4.2 Modificar `nodes/a0_arquitecto.py` — en modo `is_new=False`, inyectar snapshot del repo
-- [ ] 4.3 Definir qué archivos indexar por stack (models.py, urls.py, package.json, etc.)
-- [ ] 4.4 Limitar el contexto para no exceder el token budget (top 30 archivos por tamaño + relevancia)
+- [x] 4.1 Crear `tools/repo_scanner.py` — escanea el repo e indexa archivos clave
+- [x] 4.2 Modificar `nodes/a0_arquitecto.py` — en modo `is_new=False`, inyectar snapshot del repo
+- [x] 4.3 Definir qué archivos indexar por stack (models.py, urls.py, package.json, etc.)
+- [x] 4.4 Limitar el contexto para no exceder el token budget (top 30 archivos por tamaño + relevancia)
 
 **Archivos que indexa `repo_scanner.py`:**
 - Siempre: `README.md`, `ARCHITECTURE.md`, `DECISION_LOG.md`, `package.json`, `requirements.txt`
 - Django: `models.py` de cada app, `urls.py` raíz, `settings.py`
 - React: `src/types/*.ts`, rutas, servicios
 - Cualquier stack: archivos modificados recientemente (git log --since=30 days)
+
+---
+
+> **Verificación (2026-06-18):** TAREAS 1–4 implementadas y verificadas contra código:
+> `tools/code_writer.py`, `nodes/a10_code_writer.py`, `nodes/a11_devops.py`,
+> `tools/stack_reader.py`, `tools/repo_scanner.py` existen, importan y están cableados en
+> `graph.py`/`state.py`/`config.py`/`nodes/a0_arquitecto.py`/`ui/`. Tests dedicados:
+> `tests/test_code_writer.py`, `tests/test_stack_reader.py`, `tests/test_repo_scanner.py`,
+> `tests/test_feature_detail_files.py` (1.5). Se corrigió un bug en `code_writer`: `.env.example`
+> quedaba bloqueado por `_NEVER_RE` antes de su regla de permiso (ahora se evalúa primero).
 
 ---
 
