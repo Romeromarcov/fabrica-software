@@ -257,6 +257,13 @@ INPUT_VALIDATION_STRICT = os.getenv("INPUT_VALIDATION_STRICT", "false").lower() 
 INTELLIGENT_DIFF_GATE      = os.getenv("INTELLIGENT_DIFF_GATE", "false").lower() == "true"
 INTELLIGENT_DIFF_THRESHOLD = float(os.getenv("INTELLIGENT_DIFF_THRESHOLD", "0.85"))
 
+# M3 (PLAN_PLATAFORMA_V2 Fase 1) — LLM-as-judge: evaluador ligero puntúa la salida de
+# cada agente (post_agent). Opt-in (añade ~1 llamada LLM barata por agente). Por debajo
+# de LLM_JUDGE_MIN_SCORE se registra/escala. Default off → comportamiento idéntico.
+LLM_JUDGE_ENABLED   = os.getenv("LLM_JUDGE_ENABLED", "false").lower() == "true"
+LLM_JUDGE_MODEL     = os.getenv("LLM_JUDGE_MODEL", MODEL_FAST)
+LLM_JUDGE_MIN_SCORE = int(os.getenv("LLM_JUDGE_MIN_SCORE", "60"))
+
 # A2.3 — CORS explícito. Allowlist de orígenes (separados por comas). Vacío = no se
 # añade middleware CORS (comportamiento por defecto: sin orígenes cruzados permitidos).
 CORS_ALLOWED_ORIGINS = [

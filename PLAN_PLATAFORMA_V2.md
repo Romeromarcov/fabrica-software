@@ -171,8 +171,12 @@ funcionalidad (todos los gates, modos completo/lite/lightning, checkpoints human
 > siguiente. Fase 0 entrega el cimiento data-driven sin tocar el comportamiento de producción.
 
 ### FASE 1 — Calidad y confiabilidad (gana robustez ya)
-- 🟡 [M3] LLM-as-judge: evaluador ligero (modelo barato) puntúa cada output antes de pasar
-  al siguiente agente; bajo umbral → reintento o escalación.
+- ✅ [M3] LLM-as-judge: `tools/llm_judge.py` (evaluador ligero, modelo barato) puntúa la
+  salida de cada agente vía hook `post_agent` (R2), reentrante-seguro (no se juzga a sí
+  mismo). Bajo `LLM_JUDGE_MIN_SCORE` → registra/escala. Gate `LLM_JUDGE_ENABLED` (opt-in);
+  el hook se registra en `build_graph()` (no-op si off). *Test:* `test_llm_judge.py` (13).
+  **IMPLEMENTADO 2026-06-18.** (El reintento automático por routing del grafo queda para
+  un incremento posterior — hoy se registra/escala.)
 - ✅ [M4] Diff inteligente en A6: `tools/code_diff.py` (ratio de cambio entrada↔salida vía
   difflib + diff unificado recortado) cableado en `a6_refactor` (gate `INTELLIGENT_DIFF_GATE`):
   registra `refactor_change_ratio` en el state y escala si supera el umbral (sobre-refactor).

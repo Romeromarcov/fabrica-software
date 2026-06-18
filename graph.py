@@ -424,6 +424,21 @@ def _rollback_files(
 # ── Construcción del grafo ────────────────────────────────────────────────────
 
 def build_graph() -> StateGraph:
+    # M3 (PLAN_PLATAFORMA_V2): registra el hook LLM-as-judge si está habilitado.
+    # En build (no en import) → sin side effects al importar; no-op si el flag está off.
+    import logging as _judge_log
+    _judge_logger = _judge_log.getLogger(__name__)
+    try:
+        from config import LLM_JUDGE_ENABLED, LLM_JUDGE_MODEL, LLM_JUDGE_MIN_SCORE
+        if LLM_JUDGE_ENABLED:
+            from tools.hook_engine import register, registered
+            from tools.llm_judge import make_judge_hook
+            if not any(getattr(h, "__name__", "") == "_hook" for h in registered("post_agent")):
+                register("post_agent", make_judge_hook(LLM_JUDGE_MODEL, LLM_JUDGE_MIN_SCORE))
+    except Exception as _judge_exc:
+        from tools.degradation import best_effort_log
+        best_effort_log("Registro del hook LLM-as-judge", _judge_exc, _judge_logger)
+
     g = StateGraph(FabricaState)
 
     # ── Nodos ─────────────────────────────────────────────────────────────────
