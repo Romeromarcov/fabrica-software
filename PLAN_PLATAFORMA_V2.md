@@ -267,10 +267,13 @@ funcionalidad (todos los gates, modos completo/lite/lightning, checkpoints human
   traducción antes de A1", "crea un agente de marketing" → enruta a Factory Modifier /
   Agent Builder / Pipeline Builder.
 
-### FASE 8 — Orquestación entre pipelines (eventos) [C3]
-- 🟡 Pipeline Orchestrator: bus de eventos desacoplado.
-  `software.feature_merged` → dispara `marketing` con el changelog mapeado.
-- 🟢 Triggers configurables por el fundador en `pipeline.yaml`.
+### FASE 8 — Orquestación entre pipelines (eventos) [C3] — EN PROGRESO
+- ✅ Pipeline Orchestrator (`tools/pipeline_orchestrator.py`): resuelve QUÉ pipelines dispara
+  un evento (`triggers_for_event`) y CÓMO se mapea el payload al input (`map_event_to_input`,
+  resuelve `input.*`). `on_event` devuelve el PLAN de despacho (la ejecución del pipeline
+  destino, que requiere LLM, la hace el runtime). Maneja el quirk YAML 1.1 `on:`→bool.
+  *Test:* `test_pipeline_orchestrator.py` (6). **2026-06-18.**
+- ✅ Triggers configurables por el fundador en `pipeline.yaml` (campo `triggers`, ya en el schema).
 - 📎 Caso estrella detallado en `PLAN_PIPELINE_MARKETING.md` §8: al mergear un feature del ERP,
   marketing **propone automáticamente** el contenido para anunciarlo.
 
