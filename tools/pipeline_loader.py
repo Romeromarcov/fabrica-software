@@ -50,6 +50,33 @@ def load_pipeline(name: str) -> dict:
     return data
 
 
+def pipeline_summaries() -> list[dict]:
+    """
+    Resumen de cada pipeline descubierto para `fabrica-cli pipelines` (Fase 4, slice CLI).
+    Pure: no lanza — un pipeline.yaml inválido se reporta con ok=False + error, para que
+    el listado nunca rompa por un dominio mal formado.
+    """
+    out: list[dict] = []
+    for name in discover_pipelines():
+        try:
+            d = load_pipeline(name)
+        except (FileNotFoundError, ValueError) as exc:
+            logger.warning("pipeline '%s' inválido, se omite del listado: %s", name, exc)
+            out.append({"name": name, "ok": False, "error": str(exc),
+                        "description": "", "agents": [], "entry": "", "default_model": ""})
+            continue
+        out.append({
+            "name": d.get("name", name),
+            "ok": True,
+            "error": "",
+            "description": d.get("description", ""),
+            "agents": list(d.get("agents", [])),
+            "entry": d.get("entry", ""),
+            "default_model": d.get("default_model", ""),
+        })
+    return out
+
+
 def clear_cache() -> None:
     """Limpia el cache de pipelines (para tests)."""
     load_pipeline.cache_clear()
