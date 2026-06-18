@@ -158,3 +158,9 @@ sigue en false (sign-off humano).
     · E3.1 (~180 except Exception) → auditoría amplia diferida por diseño (evita churn masivo).
     · E5.1 (worktrees → ThreadPoolExecutor) → ⛔ CTF-FABRICA-001: ESCALACIÓN (langgraph e2e + API keys + sign-off humano).
 - Conclusión: porción autónoma-verificable de los planes de autoridad = 100% verificada.
+
+## 2026-06-18T13:53:36Z — MERGE a main
+- PR #16 MERGEADO a main (squash, sha a7be532). 6/6 CI verde.
+- Contenido: +33 tests dedicados (quality_tracker, fewshot_builder, code_writer, stack_reader,
+  repo_scanner, feature_detail UI) + fix .env.example en code_writer + files_written en UI.
+  Reconcilia ROADMAP I-1..I-3 y PLAN.md 1.1-4.4 a [x] (eran CLAIMED/PARTIAL/MISSING).
