@@ -210,3 +210,9 @@ Recorrido formal de la cola de prioridad sobre PLAN_BLINDAJE_TOTAL (items restan
    Último 'error'/bloqueo: el sign-off E2E requiere langgraph + CLAVES DE IA en vivo, no disponibles
    en este contenedor (ANTHROPIC_API_KEY ausente) + docker daemon NO alcanzable para la corrida real.
    Requiere humano con API keys. PARALLEL_FEATURES_ENABLED se mantiene en false (flag intocado).
+
+## 2026-06-18T18:37:04Z — V2 Fase 0 (cimientos data-driven)
+- Verificado que PLAN_PLATAFORMA_V2 y PLAN_PIPELINE_MARKETING NO estaban implementados (claim del usuario falso).
+- PLAN_MEJORAS sí (28 tests). Usuario eligió: implementar Fase 0 de V2.
+- Implementado: registry.json + agent_registry (cascada modelo), graph_builder + pipeline_loader + pipelines/software/pipeline.yaml, schemas/ Pydantic (M1), hook_engine (R2) cableado no-op en base.py.
+- +34 tests. Suite 341 verde. Invariante 'software corre idéntico' preservado (graph.py sigue siendo producción; parity test).
