@@ -71,6 +71,28 @@ def a0_arquitecto(state: ProjectState) -> dict:
     is_new     = state["is_new_project"]
     audit_mode = state.get("audit_mode", False)
 
+    # ── R4 (PLAN_PLATAFORMA_V2): validar el brief del Founder ANTES de planificar ──
+    # Neutraliza inyección de prompt y redacta secretos antes de que el brief llegue
+    # al LLM. No-op si INPUT_VALIDATION_GATE=false. Best-effort: nunca rompe el run.
+    import logging as _iv_log
+    _iv_logger = _iv_log.getLogger(__name__)
+    try:
+        from config import INPUT_VALIDATION_GATE, INPUT_VALIDATION_STRICT
+        if INPUT_VALIDATION_GATE and state.get("project_brief"):
+            from tools.input_validator import guard_brief
+            safe_brief, _report = guard_brief(
+                state["project_brief"], strict=INPUT_VALIDATION_STRICT,
+            )
+            if safe_brief != state["project_brief"]:
+                _iv_logger.warning(
+                    "A0: brief del Founder neutralizado por input_validator "
+                    "(inyección=%s, secretos=%s, pii=%s)",
+                    _report.injection_findings, _report.secret_findings, _report.pii_findings,
+                )
+                state["project_brief"] = safe_brief
+    except Exception as _iv_exc:
+        _iv_logger.warning("input_validator falló (ignorado): %s", _iv_exc)
+
     # ── Leer archivos subidos por el Founder ──────────────────────────────────
     uploads_block = uploads_as_context(state["project_id"])
 

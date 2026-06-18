@@ -177,8 +177,10 @@ funcionalidad (todos los gates, modos completo/lite/lightning, checkpoints human
   cambia > umbral (p.ej. 30%).
 - 🟡 [M2] Replay/debugging: persistir checkpoints navegables + comando
   `fabrica-cli replay <feature> --from A6`. UI para reanudar desde cualquier nodo.
-- 🟢 [R4] Validador de input (AIDefence lite): `tools/input_validator.py` antes de A0 —
-  prompt injection, PII/credenciales, instrucciones maliciosas.
+- ✅ [R4] Validador de input (AIDefence lite): `tools/input_validator.py` cableado en
+  `a0_arquitecto` (gate `INPUT_VALIDATION_GATE`) — detecta inyección de prompt (es/en),
+  PII (email/tarjeta/teléfono) y secretos (reusa `log_sanitizer`); neutraliza el brief
+  antes de que llegue al LLM. *Test:* `test_input_validator.py` (14). **IMPLEMENTADO 2026-06-18.**
 
 ### FASE 2 — Rendimiento y costo
 - 🟢 [R3] Paralelismo A4+A5 en worktrees aislados cuando ambos están activos; A6 unifica.
