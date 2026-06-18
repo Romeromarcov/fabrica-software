@@ -255,3 +255,4 @@ Recorrido formal de la cola de prioridad sobre PLAN_BLINDAJE_TOTAL (items restan
 [2026-06-18T21:41:26Z] 🔨 BLINDAJE E3.1 GATE: tools/error_audit.py (AST clasifica RERAISE/LOGGED/SILENT) + test_error_audit.py gate baseline=139 silent. Suite 481. Era PARTIAL→VERIFIED (gate).
 [2026-06-18T21:45:53Z] 🔨 V2 Fase 4 slice CLI: 'fabrica-cli pipelines' + pipeline_summaries() (pure) + 4 tests. Suite 485. Era PARTIAL (🟢 listado).
 [2026-06-18T21:55:03Z] 🔧 CONFIG: todos los agentes → gemini-2.5-flash-lite (modelo más económico) por pedido del founder. config.py defaults + registry.json + precios; key en .env (gitignored, no commiteada). Tests de modelo desacoplados del MODEL_* del entorno. Suite 485.
+[2026-06-18T22:00:39Z] 🔨 V2 Fase 5 Agent Builder: tools/agent_builder.py (build/validate/normalize/register) + flag AGENT_BUILDER_ENABLED (doble gate) + 17 tests (LLM mockeado). Suite 502. Era MISSING.
