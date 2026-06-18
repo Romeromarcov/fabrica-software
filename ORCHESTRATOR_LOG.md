@@ -245,3 +245,5 @@ Recorrido formal de la cola de prioridad sobre PLAN_BLINDAJE_TOTAL (items restan
 [2026-06-18T20:40:24Z] 🔨 V2 Fase 4 (slice) output handlers: output_handlers.py (files real + not_configured honesto) + 8 tests. Suite 437.
 [2026-06-18T20:42:13Z] ✅ V2 Fase 4 (slice) output handlers PR#29 MERGEADO a main (squash 96060d4). CI 6/6 verde.
 [2026-06-18T20:44:49Z] 🔨 V2 Fase 10 M11 documentador A12: doc_generator.py (changelog + Mermaid endpoints/ER) + wiring a1_pr_final + 8 tests. Suite 445.
+[2026-06-18T20:46:34Z] ✅ V2 Fase 10 M11 documentador PR#30 MERGEADO a main (squash 4a9a85f). CI 6/6 verde. Era MISSING.
+[2026-06-18T20:47:41Z] 🔨 V2 Fase 10 M12 issue trackers: issue_tracker.py (parseo/trazabilidad pura + not_configured honesto) + 10 tests. Suite 455. FASE 10 COMPLETA (M11/M12).
