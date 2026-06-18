@@ -264,9 +264,13 @@ funcionalidad (todos los gates, modos completo/lite/lightning, checkpoints human
   Nota: la conexión del Agent Builder a una UI conversacional en vivo usa el LLM ya cableado
   (Gemini); aquí se entrega el núcleo verificable (generación+validación+registro con gates).
 
-### FASE 6 — Pipeline Builder (crear pipelines conversacionalmente) [C3]
-- 🟡 Extiende Agent Builder: "crea un pipeline legal" → genera `pipeline.yaml` + prompts +
-  state + gates base, listo para iterar.
+### FASE 6 — Pipeline Builder (crear pipelines conversacionalmente) [C3] — ✅ IMPLEMENTADA (2026-06-18)
+- ✅ Extiende Agent Builder: "crea un pipeline legal" → genera `pipeline.yaml` (name, agents,
+  entry, gates, state, output), lo valida y lo escribe en `pipelines/<name>/pipeline.yaml`.
+  `tools/pipeline_builder.py`: `build_pipeline_definition` (LLM inyectable/mockeable; sin JSON
+  válido → lanza), `validate`/`normalize` (puras), `register_pipeline` (escribe el YAML).
+  Doble gate: `PIPELINE_BUILDER_ENABLED` (default off) + `approved=True`. *Test:*
+  `tests/test_pipeline_builder.py` (14). Suite 516. **IMPLEMENTADO 2026-06-18.**
 
 ### FASE 7 — Meta-capa conversacional: Factory Modifier [C1]
 > La fábrica modificándose a sí misma = **autofagia controlada**. Requiere los gates más
