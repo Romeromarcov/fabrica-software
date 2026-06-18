@@ -103,6 +103,11 @@ MODEL_PM       = MODEL_A1
 MODEL_STANDARD = "claude-sonnet-4-6"
 MODEL_FAST     = os.getenv("MODEL_FAST", "claude-haiku-4-5-20251001")
 
+# ── V2 Fase 0: modelo por defecto global (último escalón de la cascada) ────────
+# Resolución de modelo por agente: agent.model → pipeline.default_model → GLOBAL_DEFAULT_MODEL.
+# El modelo por agente sigue siendo OPCIONAL (invariante del PLAN_PLATAFORMA_V2).
+GLOBAL_DEFAULT_MODEL = os.getenv("GLOBAL_DEFAULT_MODEL", MODEL_STANDARD)
+
 # ── Flags de comportamiento del pipeline ──────────────────────────────────────
 # WRITE_TO_REPO: si False, A10 hace dry-run (loguea sin escribir)
 WRITE_TO_REPO = os.getenv("WRITE_TO_REPO", "true").lower() == "true"

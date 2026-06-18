@@ -1,0 +1,48 @@
+# PLAN_PLATAFORMA_V2 Fase 0/4 — definición data-driven del pipeline `software`.
+#
+# Este YAML + agents/registry.json son la fuente de verdad desde la que
+# graph_builder.py arma el grafo. El pipeline `software` es la migración 1:1 del
+# A0–A11 que vivía hardcodeado en graph.py (que sigue siendo el path de producción
+# hasta completar la migración del routing condicional en una fase posterior).
+name: software
+description: Pipeline de construcción de software (feature único A1→A11).
+
+# default_model: segundo escalón de la cascada de modelo por agente
+# (agente.model → pipeline.default_model → config.GLOBAL_DEFAULT_MODEL).
+default_model: claude-sonnet-4-6
+
+state_schema: PipelineState
+entry: A1
+
+# Agentes que participan, en orden lógico. Referencian al registry por id.
+agents:
+  - A1   # PM / Planificador (entry)
+  - A2   # DB Architect (solo modo completo)
+  - A3   # MCP Toolsmith (condicional: needs_mcp)
+  - A4   # Backend Developer (condicional: !skip_backend)
+  - A5   # Frontend Developer (condicional: !skip_frontend)
+  - A6   # Revisor / Refactor
+  - A7   # QA
+  - A8   # SecOps
+  - A10  # Code Writer (escribe archivos al repo)
+  - A9   # Sandbox / Gates
+  - A8_5 # Adversarial Reviewer (repo)
+  - A11  # DevOps (condicional: needs_devops)
+
+# Puntos de aprobación humana (gobernados por tier de riesgo).
+human_checkpoints:
+  - after: A1
+
+# Gates de calidad propios del dominio software (los implementa code_sandbox).
+gates:
+  - tenant_isolation
+  - makemigrations_drift
+  - pytest
+  - coverage
+  - eslint
+  - tsc
+  - build
+
+# Handler de salida por defecto del pipeline.
+output:
+  type: github_pr

@@ -147,15 +147,28 @@ funcionalidad (todos los gates, modos completo/lite/lightning, checkpoints human
 > Orden = dependencias técnicas. Cada fase entrega valor por sí sola y deja la base para la
 > siguiente. Esfuerzo: 🟢 bajo · 🟡 medio · 🔴 alto.
 
-### FASE 0 — Cimientos del refactor (prerequisito de todo)
+### FASE 0 — Cimientos del refactor (prerequisito de todo) — ✅ IMPLEMENTADA (2026-06-18)
 **Objetivo:** desacoplar agentes del grafo sin cambiar comportamiento observable.
-- 🟡 [C2-base] Crear `agents/registry.json` y migrar A0–A11 a ese formato.
-- 🟡 [C3-base] `graph_builder.py`: construir el grafo desde registry + pipeline.yaml.
-- 🟢 [M1] Schemas Pydantic por salida de agente (`schemas/`), validación en `base.py`.
-- 🟢 [R2] Hook engine: puntos `pre_agent`, `post_agent`, `pre_write`, `post_qa`,
-  `on_approval`, `on_error`, `pre_pr`. Registrables desde `config.py`/pipeline.yaml.
-- ✅ **Gate de la fase:** el pipeline `software` corre idéntico a hoy, ahora data-driven.
-- ✅ **Invariante verificada:** `model` por agente sigue funcionando vía resolución en cascada.
+- ✅ [C2-base] `agents/registry.json` (14 agentes A0–A11 + A0_revisor + A8.5) +
+  `tools/agent_registry.py` (loader + `resolve_model` cascada). *Test:* `test_agent_registry.py` (8).
+- ✅ [C3-base] `graph_builder.py` + `tools/pipeline_loader.py` + `pipelines/software/pipeline.yaml`:
+  arma la spec data-driven y un StateGraph desde registry + yaml. *Tests:* `test_graph_builder.py` (5),
+  `test_pipeline_loader.py` (4).
+- ✅ [M1] Schemas Pydantic por salida de agente (`schemas/agent_outputs.py`: BackendCode,
+  QAReport, SecOpsReport, …) + `validate_output`. *Test:* `test_schemas.py` (7).
+- ✅ [R2] Hook engine (`tools/hook_engine.py`): puntos `pre_agent`, `post_agent`, `pre_write`,
+  `post_qa`, `on_approval`, `on_error`, `pre_pr`. Cableado **no-op-by-default** en
+  `base.call_agent`. *Tests:* `test_hook_engine.py` (7), `test_hook_integration.py` (3).
+- ✅ **Gate de la fase:** el pipeline `software` corre idéntico a hoy. `graph.py` sigue siendo
+  el path de producción (con su routing condicional); el builder es el cimiento data-driven,
+  validado por **parity test** (cada `node_name` del registry existe en `build_graph()`).
+- ✅ **Invariante verificada:** `model` por agente sigue funcionando vía resolución en cascada
+  (`agente.model → pipeline.default_model → config.GLOBAL_DEFAULT_MODEL`); test confirma fidelidad
+  a `config.MODEL_Ax`.
+
+> **Nota de alcance:** la migración del *routing condicional* completo de `graph.py` al
+> `graph_builder` (modos completo/lite/lightning, checkpoints, escalaciones) es el incremento
+> siguiente. Fase 0 entrega el cimiento data-driven sin tocar el comportamiento de producción.
 
 ### FASE 1 — Calidad y confiabilidad (gana robustez ya)
 - 🟡 [M3] LLM-as-judge: evaluador ligero (modelo barato) puntúa cada output antes de pasar
