@@ -230,3 +230,9 @@ Recorrido formal de la cola de prioridad sobre PLAN_BLINDAJE_TOTAL (items restan
 [2026-06-18T19:53:58Z] ✅ V2 Fase 2 M8 contexto dinámico PR#23 MERGEADO a main (squash 44466ed). CI 6/6 verde. Era MISSING.
 [2026-06-18T19:55:37Z] 🔨 V2 Fase 2 R1 memoria vectorial: vector_memory.py (chromadb opcional + fallback keywords) + 7 tests. Suite 408.
 [2026-06-18T19:57:39Z] ✅ V2 Fase 2 R1 memoria vectorial PR#24 MERGEADO a main (squash a7f0dc6). CI 6/6 verde. Fase 2: M5✅ M8✅ R1✅, falta R3 (paralelismo A4+A5, graph-routing).
+[2026-06-18T20:23:57Z] ⚠️ ESCALATION (clase CTF-FABRICA-001): R3 paralelismo A4+A5 DIFERIDO.
+    Razón: introduce concurrencia real (2x call_agent en hilos) en el núcleo del grafo.
+    call_agent usa trace_id (contextvar) + event_bus sin seguridad-de-hilos verificada → misma
+    clase de riesgo que PARALLEL_FEATURES_ENABLED (escalado a CTF-FABRICA-001). No se shippea
+    concurrencia en el núcleo sin sign-off E2E (langgraph + claves en vivo). Requiere humano.
+    Fase 2 entregada salvo R3: M5✅(#22) M8✅(#23) R1✅(#24).
