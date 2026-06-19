@@ -212,9 +212,16 @@ acumulada**; prod requiere **promoción humana con evidencia**.
 ### Fase D2 — Entorno de desarrollo estable (vida: días/semanas)
 - [ ] **D2.1 — Rama `develop` + deploy automático.** PR del feature: checks verdes
       (internos + revisor C) → merge a `develop` → deploy a entorno Railway `dev`.
-- [ ] **D2.2 — Pruebas de largo plazo y uso real.** El `codebase_auditor` corre también
+- [~] **D2.2 — Pruebas de largo plazo y uso real.** El `codebase_auditor` corre también
       contra la app VIVA en dev (endpoints, no solo código). Captura de errores de runtime
-      (Sentry o logging estructurado) alimenta el backlog vía `audit_backlog`.
+      (Sentry o logging estructurado) alimenta el backlog vía `audit_backlog`. Núcleo PURO
+      en `tools/runtime_errors.py`: `group_events` deduplica por firma (tipo+mensaje
+      normalizado+path) sumando frecuencia; `severity_tier` asigna tier por severidad y
+      recurrencia (flag `RUNTIME_ERROR_HIGH_THRESHOLD`); `runtime_errors_to_backlog` emite
+      items con el MISMO schema que `audit_backlog`; `has_blocking_errors` alimenta la señal
+      `runtime_errors_clean` de D2.3. *Test:* `tests/test_runtime_errors.py` (12).
+      **IMPLEMENTADO 2026-06-18.** La CAPTURA viva (Sentry/logs del servicio en Railway dev)
+      y el auditor contra endpoints vivos requieren red/credenciales (infra D2.1).
 - [~] **D2.3 — Maduración por riesgo.** Núcleo PURO en `tools/promotion_policy.py`
       (`is_promotable`/`required_maturation_days`): LOW 1d, MEDIUM 3d, HIGH 7d + uso real
       verificado; tier desconocido → HIGH (conservador). *Test:* `tests/test_promotion_policy.py`

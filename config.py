@@ -345,6 +345,11 @@ EPHEMERAL_TIMEOUT_SECONDS = int(os.getenv("EPHEMERAL_TIMEOUT_SECONDS", "300"))
 # Antigüedad máxima (s) antes de que el reaper coseche un entorno huérfano.
 EPHEMERAL_MAX_AGE_SECONDS = int(os.getenv("EPHEMERAL_MAX_AGE_SECONDS", "3600"))
 
+# ── PLAN_BLINDAJE_TOTAL — Bloque D2.2: errores de runtime en dev ───────────────
+# Recurrencias de un error de nivel `error` en dev que lo escalan a tier HIGH
+# (un error que se repite en la app viva es crítico, no ruido).
+RUNTIME_ERROR_HIGH_THRESHOLD = int(os.getenv("RUNTIME_ERROR_HIGH_THRESHOLD", "10"))
+
 # ── PLAN_BLINDAJE_TOTAL — Bloque D3.2: promoción a producción ──────────────────
 # Deploy a prod SOLO desde esta rama (invariante: nunca desde un feature/branch).
 PROD_DEPLOY_BRANCH = os.getenv("PROD_DEPLOY_BRANCH", "main")
