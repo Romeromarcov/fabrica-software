@@ -215,15 +215,20 @@ acumulada**; prod requiere **promoción humana con evidencia**.
 - [ ] **D2.2 — Pruebas de largo plazo y uso real.** El `codebase_auditor` corre también
       contra la app VIVA en dev (endpoints, no solo código). Captura de errores de runtime
       (Sentry o logging estructurado) alimenta el backlog vía `audit_backlog`.
-- [ ] **D2.3 — Maduración por riesgo.** Tiempo mínimo en dev antes de ser promovible,
-      según `risk_classifier`: LOW 1 día, MEDIUM 3 días, HIGH 7 días + uso real verificado.
-      El `reconciler` valida contra dev: "el plan dice que X funciona → ¿el endpoint
-      responde en dev?".
+- [~] **D2.3 — Maduración por riesgo.** Núcleo PURO en `tools/promotion_policy.py`
+      (`is_promotable`/`required_maturation_days`): LOW 1d, MEDIUM 3d, HIGH 7d + uso real
+      verificado; tier desconocido → HIGH (conservador). *Test:* `tests/test_promotion_policy.py`
+      (10). **IMPLEMENTADO 2026-06-19.** Falta la SEÑAL viva (días reales en dev, errores de
+      runtime, validación del `reconciler` contra el endpoint en dev) → requiere host Docker +
+      Railway dev (D2.1/D2.2).
 
 ### Fase D3 — Promoción a producción (humano en el loop)
-- [ ] **D3.1 — PR de release `develop` → `main`** generado por la fábrica con reporte:
-      features incluidos, `governance_report` de cada uno, días en dev, errores de runtime
-      observados, hallazgos abiertos del auditor. El Founder aprueba o rechaza.
+- [~] **D3.1 — PR de release `develop` → `main`.** Núcleo PURO en `tools/release_report.py`
+      (`build_release_report`/`format_release_md`): arma el cuerpo del PR con features, gobernanza,
+      días en dev, errores de runtime, hallazgos abiertos del auditor y veredicto de promovibilidad
+      por tier (reusa D2.3); `ready` solo si TODOS promovibles y sin hallazgos. *Test:*
+      `tests/test_release_report.py` (7). **IMPLEMENTADO 2026-06-19.** La CREACIÓN real del PR en
+      GitHub y la recolección de señales vivas requieren acceso GitHub/Railway (D2.x).
 - [ ] **D3.2 — Deploy a prod solo desde `main`**, con tag/release por promoción →
       rollback inmediato = redeploy del tag anterior.
 - [ ] **D3.3 — Post-deploy check.** Smoke automático contra prod tras cada promoción;
