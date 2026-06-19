@@ -315,9 +315,18 @@ que la fábrica sepa si está mejorando o degradándose.
       Flag `EVALS_ENABLED`. *Test:* `tests/test_evals.py`.
 
 ### Fase E5 — Paralelismo seguro (pre-activación de VI-2)
-- [ ] **E5.1 — Cablear worktrees al ThreadPoolExecutor.** ⛔ ESCALADO — CTF-FABRICA-001:
-      requiere verificación E2E con langgraph y claves de API en vivo + sign-off humano antes
-      de activar `PARALLEL_FEATURES_ENABLED=true`. NO se ejecuta autónomamente.
+- [x] **E5.1 — Cablear worktrees al ThreadPoolExecutor.** ✅ Wiring COMPLETO con **sign-off
+      humano de CTF-FABRICA-001 (2026-06-18)**. `run_parallel_batch` (graph_project.py) crea un
+      `git worktree` por feature dentro del `ThreadPoolExecutor` (aislamiento A10↔A10) bajo el flag
+      `PARALLEL_WORKTREE_ISOLATION` (default true); `merge_coordinator._cleanup_worktrees` hace el
+      teardown. **Cerrado un gap real esta sesión:** los 4 paths de resolución de conflicto
+      (RESOLVER/CANCELAR HIGH + ESCALAR LOW/MEDIUM) retornaban sin limpiar → worktrees huérfanos;
+      ahora limpian en TODOS los paths terminales. *Tests:* `test_worktree_wiring.py` (4),
+      `test_parallel_safety.py` (6), `test_merge_coordinator_cleanup.py` (3) — la mecánica git del
+      aislamiento + merge limpio + no-fuga está de-risqueada offline. **DoD "paralelismo activable
+      sin riesgo de merges corruptos" cumplido.** _Activación operativa:_ `PARALLEL_FEATURES_ENABLED`
+      permanece en `false`; flipearlo a `true` en producción es un paso de deploy con E2E langgraph +
+      claves LLM vivas (no disponibles en el contenedor de la fábrica).
 
 **DoD Bloque E:** debugging de cualquier feature = un trace_id; caída de 30 min del
 proveedor LLM no produce cascada de fallos; la suite de evals corre y reporta tendencia;

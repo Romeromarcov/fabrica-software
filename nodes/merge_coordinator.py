@@ -159,6 +159,7 @@ def merge_coordinator(state: ProjectState) -> dict:
         save_run_metadata(state["project_id"], {"merge_conflict_decision": decision})
 
         if decision == "RESOLVER":
+            _cleanup_worktrees(repo_path, batch_feature_ids)
             return {"merge_conflict_resolved": True}
 
         # CANCELAR: marcar las ramas conflictivas como fallidas
@@ -171,6 +172,7 @@ def merge_coordinator(state: ProjectState) -> dict:
                     **{**f, "status": "failed",
                        "evaluation_notes": "Descartado — conflicto de merge HIGH sin resolver"}
                 )
+        _cleanup_worktrees(repo_path, batch_feature_ids)
         return {"backlog": updated_backlog, "merge_conflict_resolved": False}
 
     # ══════════════════════════════════════════════════════════════════════════
@@ -249,7 +251,9 @@ Al final escribe EXACTAMENTE una de:
                         **{**f, "status": "failed",
                            "evaluation_notes": "Descartado — conflicto escalado"}
                     )
+            _cleanup_worktrees(repo_path, batch_feature_ids)
             return {"backlog": updated, "merge_conflict_resolved": False, "cost_entries": [cost]}
+        _cleanup_worktrees(repo_path, batch_feature_ids)
         return {"merge_conflict_resolved": True, "cost_entries": [cost]}
 
     # SECUENCIAL o SELECTIVO: intentar merge en orden

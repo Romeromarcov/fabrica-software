@@ -34,10 +34,12 @@ y el DoD del Bloque C se cumplen. **Residual de hardening (decisión humana, res
 safety gate):** activar `enforce_admins=true` para que el control resista una fábrica comprometida
 (que posee token admin). Esta sesión NO modificó settings de protección.
 
-### ESCALADO — requiere sign-off humano (no abrir sin autorización explícita)
-- **E5.1 / CTF-FABRICA-001** — cablear worktrees al `ThreadPoolExecutor` (paralelismo a nivel
-  feature). Concurrencia real en el núcleo; `PARALLEL_FEATURES_ENABLED` permanece en `false`.
-  Requiere verificación E2E con langgraph + claves API en vivo + sign-off humano.
+### E5.1 / CTF-FABRICA-001 — wiring COMPLETO (sign-off humano 2026-06-18)
+Con autorización humana explícita: worktree por feature dentro del `ThreadPoolExecutor`
+(`run_parallel_batch`) + teardown en TODOS los paths del `merge_coordinator` (se cerró la fuga de
+worktrees en los paths de conflicto). De-risqueado offline (24 tests: aislamiento git + merge limpio
++ no-fuga). **Activación operativa pendiente (deploy):** `PARALLEL_FEATURES_ENABLED` sigue en `false`;
+flipearlo a `true` requiere E2E langgraph + claves LLM vivas, fuera del contenedor.
 
 ### Señales vivas diferidas (núcleo PURO ya hecho; falta solo la infra)
 Estos NO son trabajo de código pendiente — el núcleo está listo y testeado. Falta alimentarlos
