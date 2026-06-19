@@ -265,3 +265,4 @@ Recorrido formal de la cola de prioridad sobre PLAN_BLINDAJE_TOTAL (items restan
 [2026-06-19T00:39:05Z] ✅ BLINDAJE D2.3 promotion_policy.py + D3.1 release_report.py (núcleos puros, infra-edge a Docker/Railway) +17 tests. Suite 589. STATUS_HANDOFF.md para continuar con Docker. PRs eran [MISSING].
 [2026-06-18] ✅ fix(agent-registry): registry fiel a config con overrides MODEL_* — PR#45 merged. Suite 589 verde.
 [2026-06-18] 🔄 feat(deploy-release): D3.2 núcleo PURO promoción a prod (deploy solo desde main + tag/release + rollback por tag anterior). tools/deploy_release.py + 17 tests. Pendiente señal viva (Railway deploy).
+[2026-06-18] 🔄 feat(post-deploy): D3.3 núcleo PURO smoke post-deploy + alerta Telegram + rollback en un comando. tools/post_deploy.py + 13 tests. Pendiente señal viva (HTTP smoke + envío Telegram).
