@@ -345,6 +345,13 @@ EPHEMERAL_TIMEOUT_SECONDS = int(os.getenv("EPHEMERAL_TIMEOUT_SECONDS", "300"))
 # Antigüedad máxima (s) antes de que el reaper coseche un entorno huérfano.
 EPHEMERAL_MAX_AGE_SECONDS = int(os.getenv("EPHEMERAL_MAX_AGE_SECONDS", "3600"))
 
+# ── PLAN_BLINDAJE_TOTAL — Bloque D3.2: promoción a producción ──────────────────
+# Deploy a prod SOLO desde esta rama (invariante: nunca desde un feature/branch).
+PROD_DEPLOY_BRANCH = os.getenv("PROD_DEPLOY_BRANCH", "main")
+# Prefijo de los tags de release por promoción → `{prefix}-YYYYMMDD-NN`.
+# El rollback inmediato = redeploy del tag de release anterior (D3.2).
+RELEASE_TAG_PREFIX = os.getenv("RELEASE_TAG_PREFIX", "release")
+
 # ── PLAN_BLINDAJE_TOTAL — Bloque E: resiliencia LLM (E2) ──────────────────────
 # E2.1 — Backoff exponencial + manejo de 429. Reintentos máximos y delay base
 # (segundos) usados por el backoff exponencial (base * 2**intento, con tope y jitter).
