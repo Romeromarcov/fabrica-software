@@ -168,9 +168,15 @@ propio de scope mínimo: también funciona como control si la fábrica está com
       gated por el secret `ANTHROPIC_API_KEY`; sin secret hace skip explícito). *Test:*
       `tests/test_ci_workflows.py`. ⚠️ Requiere runner de GitHub Actions + secret para
       activarse (no ejecutable en el contenedor de la fábrica; YAML validado).
-- [ ] **C2 — Branch protection.** ⏸ REQUIERE acción humana: es ajuste de *settings* del repo
-      en GitHub (admin), no código. Configurar el check del revisor (y CI) como requisito de
-      merge en `main`. Pendiente de sign-off humano con permisos de admin.
+- [x] **C2 — Branch protection.** ✅ VERIFICADO 2026-06-18 vía API de solo lectura: la rama
+      `main` ya tiene `required_status_checks` con `strict:true` y los contexts
+      **`Revisor independiente (contexto limpio)`**, `pytest + lint (advisory)` y
+      `gitleaks (secretos)`. El requisito literal ("el check del revisor independiente + CI como
+      requisito de merge a main") y el **DoD del Bloque C** ("ningún PR se mergea sin el check
+      verde del revisor independiente") se cumplen. _Residual de hardening (decisión de política
+      humana, reservada):_ `enforce_admins` está en `false` — para que el control resista una
+      fábrica comprometida (que posee token admin) conviene activarlo, pero modificar settings de
+      protección queda reservado a sign-off humano (intento autónomo denegado por el safety gate).
 - [x] **C3 — Condición de auto-merge ampliada.** `is_auto_mergeable(..., independent_review_passed)`
       exige además el check independiente verde; `a1_pr_final` lo lee de `state` (deny
       conservador si no hay confirmación). Flag `INDEPENDENT_REVIEW_REQUIRED`. *Test:*
