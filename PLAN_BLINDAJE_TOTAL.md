@@ -229,8 +229,15 @@ acumulada**; prod requiere **promoción humana con evidencia**.
       por tier (reusa D2.3); `ready` solo si TODOS promovibles y sin hallazgos. *Test:*
       `tests/test_release_report.py` (7). **IMPLEMENTADO 2026-06-19.** La CREACIÓN real del PR en
       GitHub y la recolección de señales vivas requieren acceso GitHub/Railway (D2.x).
-- [ ] **D3.2 — Deploy a prod solo desde `main`**, con tag/release por promoción →
-      rollback inmediato = redeploy del tag anterior.
+- [~] **D3.2 — Deploy a prod solo desde `main`**, con tag/release por promoción →
+      rollback inmediato = redeploy del tag anterior. Núcleo PURO en
+      `tools/deploy_release.py` (`assert_prod_deployable` impone deploy solo desde la
+      rama de prod; `next_release_tag` acuña `release-YYYYMMDD-NN` con secuencia por día;
+      `build_rollback_plan` identifica el tag anterior y arma el comando de un paso;
+      `build_release_record` valida la rama al promover). Flags `PROD_DEPLOY_BRANCH`/
+      `RELEASE_TAG_PREFIX`. *Test:* `tests/test_deploy_release.py` (17). **IMPLEMENTADO
+      2026-06-18.** El DISPARO real del deploy/redeploy en Railway y la lectura de tags
+      vivos del repo requieren credenciales de deploy (infra D2.x).
 - [ ] **D3.3 — Post-deploy check.** Smoke automático contra prod tras cada promoción;
       fallo → alerta Telegram + instrucción de rollback en un comando.
 
