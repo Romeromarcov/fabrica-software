@@ -25,14 +25,16 @@ _Actualizado 2026-06-18 (sesión orquestador autónoma) · para continuar en un 
 Con esto, **todos los ítems `[~]` del Bloque D tienen su núcleo puro implementado y testeado**;
 lo único pendiente en cada uno es la SEÑAL VIVA (deploy/HTTP/credenciales reales).
 
-## Pendiente — solo 2 ítems, ambos fuera del alcance autónomo
+## Pendiente — 1 ítem (escalado) + 1 residual de política humana
 
-### A) Requiere acción humana con permisos de admin GitHub
-- **C2 — Branch protection.** Ajuste de *settings* del repo (admin GitHub): exigir el check del
-  revisor independiente + CI como requisito de merge a `main`. NO es código. Pendiente de
-  sign-off humano. Por seguridad, esta sesión NO modificó settings de protección del repo.
+### C2 — Branch protection: VERIFICADO (requisito cumplido)
+La protección de `main` YA exige (vía `required_status_checks`, `strict:true`) los contexts
+`Revisor independiente (contexto limpio)` + CI (`pytest + lint`, `gitleaks`). El requisito de C2
+y el DoD del Bloque C se cumplen. **Residual de hardening (decisión humana, reservada por el
+safety gate):** activar `enforce_admins=true` para que el control resista una fábrica comprometida
+(que posee token admin). Esta sesión NO modificó settings de protección.
 
-### B) ESCALADO — requiere sign-off humano (no abrir sin autorización explícita)
+### ESCALADO — requiere sign-off humano (no abrir sin autorización explícita)
 - **E5.1 / CTF-FABRICA-001** — cablear worktrees al `ThreadPoolExecutor` (paralelismo a nivel
   feature). Concurrencia real en el núcleo; `PARALLEL_FEATURES_ENABLED` permanece en `false`.
   Requiere verificación E2E con langgraph + claves API en vivo + sign-off humano.
