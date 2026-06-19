@@ -210,8 +210,14 @@ acumulada**; prod requiere **promoción humana con evidencia**.
       timeout en `_run`. *Test:* `tests/test_ephemeral_env.py`.
 
 ### Fase D2 — Entorno de desarrollo estable (vida: días/semanas)
-- [ ] **D2.1 — Rama `develop` + deploy automático.** PR del feature: checks verdes
-      (internos + revisor C) → merge a `develop` → deploy a entorno Railway `dev`.
+- [~] **D2.1 — Rama `develop` + deploy automático.** PR del feature: checks verdes
+      (internos + revisor C) → merge a `develop` → deploy a entorno Railway `dev`. Núcleo
+      PURO en `tools/develop_gate.py`: `is_mergeable_to_develop` decide la compuerta
+      efímero→develop (exige ephemeral_passed + gates internos verdes + revisor independiente
+      verde; tier-agnóstico, dev es donde madura el riesgo); `build_dev_deploy_plan` arma el
+      input exacto de `railway_client.trigger_deploy` para dev. *Test:*
+      `tests/test_develop_gate.py` (9). **IMPLEMENTADO 2026-06-18.** El merge git real y el
+      deploy a Railway `dev` requieren acceso al repo + Railway token de deploy (infra).
 - [~] **D2.2 — Pruebas de largo plazo y uso real.** El `codebase_auditor` corre también
       contra la app VIVA en dev (endpoints, no solo código). Captura de errores de runtime
       (Sentry o logging estructurado) alimenta el backlog vía `audit_backlog`. Núcleo PURO
