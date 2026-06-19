@@ -33,6 +33,32 @@ def _registry_path() -> Path:
         return _REGISTRY_REL
 
 
+def _apply_config_model_overrides(data: dict) -> dict:
+    """Sobrescribe el `model` de cada agente con su override por-agente de config.
+
+    El registry.json declara un modelo por agente, pero la fuente de verdad
+    operacional es `config.MODEL_<ID>` (env-overridable vía `.env` del operador).
+    Sin este overlay el registry queda desfasado en cuanto el operador cambia un
+    `MODEL_A*` y deja de ser fiel a config (cf. `test_model_is_faithful_to_config`).
+
+    Se respeta el valor del registry para agentes que config no declara, de modo
+    que registries temporales (tests) con ids propios no se ven afectados.
+    """
+    try:
+        import config
+    except ImportError:
+        logger.warning("config no importable; registry conserva sus modelos declarados")
+        return data
+    for agent in data.get("agents", []):
+        agent_id = agent.get("id")
+        if not agent_id:
+            continue
+        override = getattr(config, f"MODEL_{agent_id}", None)
+        if override:
+            agent["model"] = override
+    return data
+
+
 @lru_cache(maxsize=1)
 def load_registry() -> dict:
     """Carga `agents/registry.json` (cacheado). Lanza si no existe o es inválido."""
@@ -42,7 +68,7 @@ def load_registry() -> dict:
     data = json.loads(path.read_text(encoding="utf-8"))
     if "agents" not in data or not isinstance(data["agents"], list):
         raise ValueError("registry.json inválido: falta la lista 'agents'")
-    return data
+    return _apply_config_model_overrides(data)
 
 
 def clear_cache() -> None:
