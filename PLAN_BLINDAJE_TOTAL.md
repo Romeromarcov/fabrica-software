@@ -238,8 +238,15 @@ acumulada**; prod requiere **promoción humana con evidencia**.
       `RELEASE_TAG_PREFIX`. *Test:* `tests/test_deploy_release.py` (17). **IMPLEMENTADO
       2026-06-18.** El DISPARO real del deploy/redeploy en Railway y la lectura de tags
       vivos del repo requieren credenciales de deploy (infra D2.x).
-- [ ] **D3.3 — Post-deploy check.** Smoke automático contra prod tras cada promoción;
-      fallo → alerta Telegram + instrucción de rollback en un comando.
+- [~] **D3.3 — Post-deploy check.** Smoke automático contra prod tras cada promoción;
+      fallo → alerta Telegram + instrucción de rollback en un comando. Núcleo PURO en
+      `tools/post_deploy.py` (`SmokeCheck`/`default_smoke_checks` declarativos;
+      `evaluate_check`/`evaluate_smoke` evalúan el resultado HTTP ya obtenido;
+      `build_smoke_alert` arma el mensaje Telegram con el comando de rollback;
+      `post_deploy_decision` orquesta y reusa `deploy_release.build_rollback_plan` D3.2).
+      *Test:* `tests/test_post_deploy.py` (13). **IMPLEMENTADO 2026-06-18.** La ejecución
+      HTTP del smoke contra el endpoint vivo y el envío real a Telegram requieren
+      red/credenciales (infra D2.x).
 
 **DoD Bloque D:** un feature solo llega a `main` habiendo (1) pasado gates en entorno
 efímero con DB real, (2) madurado en dev el tiempo de su tier sin errores de runtime,
