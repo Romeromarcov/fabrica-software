@@ -304,6 +304,12 @@ AGENT_BUILDER_ENABLED = os.getenv("AGENT_BUILDER_ENABLED", "false").lower() == "
 # conversacionalmente (pipelines/<name>/pipeline.yaml). Mismo doble gate que Agent Builder.
 PIPELINE_BUILDER_ENABLED = os.getenv("PIPELINE_BUILDER_ENABLED", "false").lower() == "true"
 
+# Fase 7 (PLAN_PLATAFORMA_V2) — Factory Modifier. AUTO-MODIFICACIÓN de la fábrica (prompts y
+# campos no-estructurales del registry). Es el ítem de mayor riesgo (autofagia): doble gate
+# (flag + aprobación), deny-list dura (jamás .github/, config, grafo, flags intocables ni los
+# revisores A8/A8.5) y ruteo obligatorio por PR (nunca escribe sobre main). Default off.
+FACTORY_MODIFIER_ENABLED = os.getenv("FACTORY_MODIFIER_ENABLED", "false").lower() == "true"
+
 # M7 (PLAN_PLATAFORMA_V2 Fase 3) — Observabilidad OpenTelemetry. Spans por agente
 # (reusa trace_id de E1.1), export OTLP a Jaeger/Tempo si OTEL_EXPORTER_OTLP_ENDPOINT.
 # Opt-in; la fábrica NO requiere opentelemetry (dep opcional). Default off → no-op.

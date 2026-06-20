@@ -4,8 +4,9 @@ tools/factory_router.py — Router NL unificado de la meta-capa (PLAN_PLATAFORMA
 Enruta una petición en lenguaje natural del fundador a la capacidad correcta:
   - "crea un agente de SEO que…"            → agent_builder   (Fase 5)
   - "crea un pipeline legal"                → pipeline_builder (Fase 6)
-  - "modifica el prompt de A4", "añade un   → factory_modifier (Fase 7, 🔴 auto-modificación;
-     paso antes de A1"                         NO implementado: requiere diseño/sign-off humano)
+  - "modifica el prompt de A4", "añade un   → factory_modifier (Fase 7, auto-modificación;
+     paso antes de A1"                         IMPLEMENTADO pero GATED: doble gate + PR-only,
+                                               el router NO lo ejecuta autónomamente)
 
 Solo DECIDE el destino (no ejecuta la acción peligrosa). La clasificación es DETERMINISTA
 (reglas de palabras clave, verificable sin LLM) con un LLM opcional inyectable para casos
@@ -65,11 +66,30 @@ def route_request(text: str, llm: Optional[Callable[[str], object]] = None) -> d
     return {"target": UNKNOWN, "request": text, "method": "rules"}
 
 
-# Capacidades implementadas vs. escaladas (para que el llamador no asuma ejecución).
+# Capacidades del llamador, en tres niveles de autonomía:
+#   - IMPLEMENTED: implementadas y seguras de ejecutar tras la aprobación normal.
+#   - GATED: implementadas pero de ALTO riesgo (auto-modificación). El router NO las ejecuta
+#     autónomamente; requieren doble gate (flag + aprobación del fundador) y ruteo por PR.
+#   - ESCALATED: sin implementación; requieren diseño/sign-off humano.
 IMPLEMENTED_TARGETS = {AGENT_BUILDER, PIPELINE_BUILDER}
-ESCALATED_TARGETS = {FACTORY_MODIFIER}  # Fase 7 🔴 — auto-modificación, requiere humano.
+GATED_TARGETS = {FACTORY_MODIFIER}   # Fase 7 — factory_modifier: implementado, doble gate + PR-only.
+ESCALATED_TARGETS: set = set()       # ya no queda nada sin implementar en la meta-capa.
 
 
 def is_executable(target: str) -> bool:
-    """True si el destino tiene una capacidad implementada y segura para ejecutar."""
+    """
+    True si el router puede dispararlo AUTÓNOMAMENTE (tras la aprobación normal).
+    `factory_modifier` queda fuera a propósito: por su riesgo (autofagia) nunca se ejecuta
+    sin el doble gate explícito del fundador, aunque esté implementado (ver is_implemented).
+    """
     return target in IMPLEMENTED_TARGETS
+
+
+def is_implemented(target: str) -> bool:
+    """True si el destino tiene una capacidad implementada (ejecutable o gated)."""
+    return target in IMPLEMENTED_TARGETS or target in GATED_TARGETS
+
+
+def is_gated(target: str) -> bool:
+    """True si el destino existe pero exige doble gate + ruteo por PR (no auto-ejecutable)."""
+    return target in GATED_TARGETS
