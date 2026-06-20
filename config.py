@@ -304,6 +304,11 @@ AGENT_BUILDER_ENABLED = os.getenv("AGENT_BUILDER_ENABLED", "false").lower() == "
 # conversacionalmente (pipelines/<name>/pipeline.yaml). Mismo doble gate que Agent Builder.
 PIPELINE_BUILDER_ENABLED = os.getenv("PIPELINE_BUILDER_ENABLED", "false").lower() == "true"
 
+# PLAN_PIPELINE_MARKETING — Publicación real del pipeline marketing. Default false → M8 hace
+# dry-run (decide y registra publish_ref 'dryrun:' sin llamar a la API del canal). El push
+# real a Instagram/etc. (credenciales vivas) es arista de infra, gated por este flag.
+MARKETING_PUBLISH_ENABLED = os.getenv("MARKETING_PUBLISH_ENABLED", "false").lower() == "true"
+
 # Fase 7 (PLAN_PLATAFORMA_V2) — Factory Modifier. AUTO-MODIFICACIÓN de la fábrica (prompts y
 # campos no-estructurales del registry). Es el ítem de mayor riesgo (autofagia): doble gate
 # (flag + aprobación), deny-list dura (jamás .github/, config, grafo, flags intocables ni los

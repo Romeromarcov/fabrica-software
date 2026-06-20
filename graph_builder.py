@@ -89,6 +89,7 @@ def _passthrough(name: str) -> Callable[[dict], dict]:
 def build_state_graph(
     name: str,
     node_resolver: Optional[Callable[[dict], Callable]] = None,
+    state_schema: type = dict,
 ):
     """
     Construye un StateGraph LINEAL desde la spec del pipeline.
@@ -97,13 +98,16 @@ def build_state_graph(
         name: nombre del pipeline.
         node_resolver: función `agent_spec -> callable(state)->state`. Si es None,
             usa nodos passthrough (permite validar el cableado sin side effects).
+        state_schema: esquema del estado del grafo. Default `dict` (validación de
+            cableado). Pasar el TypedDict del dominio (p.ej. MarketingState) activa sus
+            reducers (operator.add en errors/cost_entries).
 
     Devuelve el `StateGraph` SIN compilar (el caller decide checkpointer/compile).
     """
     from langgraph.graph import StateGraph, END
 
     spec = build_pipeline_spec(name)
-    g = StateGraph(dict)
+    g = StateGraph(state_schema)
 
     ordered = spec["agents"]
     if not ordered:
