@@ -48,8 +48,18 @@ def test_llm_invalid_label_stays_unknown():
 def test_is_executable_gating():
     assert fr.is_executable(fr.AGENT_BUILDER) is True
     assert fr.is_executable(fr.PIPELINE_BUILDER) is True
-    # factory_modifier (auto-modificación) NO es ejecutable autónomamente.
+    # factory_modifier (auto-modificación) NO es ejecutable autónomamente por el router.
     assert fr.is_executable(fr.FACTORY_MODIFIER) is False
+
+
+def test_factory_modifier_is_implemented_but_gated():
+    # Fase 7: factory_modifier ya está IMPLEMENTADO, pero requiere doble gate + PR (gated).
+    assert fr.is_implemented(fr.FACTORY_MODIFIER) is True
+    assert fr.is_gated(fr.FACTORY_MODIFIER) is True
+    assert fr.is_implemented(fr.AGENT_BUILDER) is True
+    assert fr.is_gated(fr.AGENT_BUILDER) is False
+    # Ya no queda nada sin implementar en la meta-capa.
+    assert fr.ESCALATED_TARGETS == set()
 
 
 def test_modify_agent_existing_not_create():
