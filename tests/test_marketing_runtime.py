@@ -157,6 +157,23 @@ def test_initial_state_contract():
     assert st["errors"] == [] and st["cost_entries"] == []
 
 
+def test_run_marketing_helper_full_flow(monkeypatch):
+    def _approve(**k):
+        return ("ok\nRISK_LEVEL: LOW\nCONFIDENCE_SCORE: 90\nBRAND_PASSED: true\n"
+                "COMPLIANCE_CLEAR: true\nADVERSARIAL_CLEAR: true", None)
+    monkeypatch.setattr(m, "call_agent", _approve)
+    monkeypatch.setattr("config.MARKETING_PUBLISH_ENABLED", True, raising=False)
+    final = gm.run_marketing(gm.initial_marketing_state(marca="Acme", pieza_nombre="p1", brief="b"))
+    assert final["published"] is True
+    assert final["publish_ref"].startswith("published:")
+
+
+def test_cli_marketing_command_wired():
+    # El comando 'marketing' está cableado en cli.py (argparse + dispatch).
+    import cli
+    assert hasattr(cli, "cmd_marketing")
+
+
 def test_end_to_end_reaches_publish_decision(monkeypatch):
     # Todos los agentes LLM aprueban; el flujo lineal llega a M8 y decide (dry-run).
     def _approve(**k):
