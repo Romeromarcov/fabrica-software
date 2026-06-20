@@ -1102,6 +1102,10 @@ async def save_config(
     # Comportamiento del pipeline
     write_to_repo:      str = Form("false"),   # checkbox: "on" cuando activo, ausente si no
     arch_review_interval: int = Form(3),
+    # Autonomía de la fábrica (alto riesgo) — checkboxes: "on" si activo, ausente si no
+    auto_merge_enabled:        str = Form("false"),
+    parallel_features_enabled: str = Form("false"),
+    factory_modifier_enabled:  str = Form("false"),
     # Límites
     max_qa_completo:    int = Form(3),
     max_qa_lite:        int = Form(2),
@@ -1147,6 +1151,9 @@ async def save_config(
         "MODEL_A8":  model_a8,
         "MODEL_A11": model_a11,
         "WRITE_TO_REPO":        "true" if write_to_repo == "on" else "false",
+        "AUTO_MERGE_ENABLED":        "true" if auto_merge_enabled == "on" else "false",
+        "PARALLEL_FEATURES_ENABLED": "true" if parallel_features_enabled == "on" else "false",
+        "FACTORY_MODIFIER_ENABLED":  "true" if factory_modifier_enabled == "on" else "false",
         "ARCH_REVIEW_INTERVAL": arch_review_interval,
         "MAX_QA_ITER_COMPLETO":       max_qa_completo,
         "MAX_QA_ITER_LITE":           max_qa_lite,

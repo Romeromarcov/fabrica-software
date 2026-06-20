@@ -518,6 +518,81 @@
     </div>
   </div>
 
+  <!-- ── Autonomía (alto riesgo) ──────────────────────────────────────────── -->
+  <div class="card mb-4" style="border:1px solid #6b3030">
+    <div class="card-header" style="background:#2a1414">
+      <i class="bi bi-exclamation-triangle" style="color:#e0a030"></i>
+      <span class="card-header-title">Autonomía de la Fábrica (alto riesgo)</span>
+    </div>
+    <div class="card-body">
+      <div class="form-text" style="font-size:.72rem;color:#c98; margin-bottom:.75rem">
+        Estos interruptores entregan autonomía a la fábrica. Por diseño vienen en <code>false</code>.
+        Actívalos solo de forma consciente: cada uno tiene precondiciones de seguridad (ver RUNBOOK §7.4
+        y CTF-FABRICA-001). El cambio persiste en el volumen (<code>/data/.env</code>) y gana sobre el entorno.
+      </div>
+      <div class="row g-3">
+
+        <!-- AUTO_MERGE_ENABLED -->
+        <div class="col-md-4">
+          <label class="form-label" style="font-size:.78rem;color:#888;text-transform:uppercase;letter-spacing:.05em">
+            Auto-merge
+          </label>
+          <div class="form-check form-switch mb-0 mt-1">
+            <input class="form-check-input" type="checkbox" role="switch"
+                   id="autoMergeSwitch" name="auto_merge_enabled"
+                   {% if cfg.get('AUTO_MERGE_ENABLED', 'false') == 'true' %}checked{% endif %}>
+            <label class="form-check-label" for="autoMergeSwitch" style="font-size:.82rem;color:#ccc">
+              Fusionar PRs LOW con gate verde
+            </label>
+          </div>
+          <div class="form-text" style="font-size:.7rem;color:#555">
+            Solo tier LOW + gate verde se auto-fusiona (squash, revertible). MEDIUM avisa; HIGH siempre humano.
+            <strong>Precondición:</strong> tasa de falsos-OK = 0 sostenida (RUNBOOK §7.4).
+          </div>
+        </div>
+
+        <!-- PARALLEL_FEATURES_ENABLED -->
+        <div class="col-md-4">
+          <label class="form-label" style="font-size:.78rem;color:#888;text-transform:uppercase;letter-spacing:.05em">
+            Features en paralelo
+          </label>
+          <div class="form-check form-switch mb-0 mt-1">
+            <input class="form-check-input" type="checkbox" role="switch"
+                   id="parallelSwitch" name="parallel_features_enabled"
+                   {% if cfg.get('PARALLEL_FEATURES_ENABLED', 'false') == 'true' %}checked{% endif %}>
+            <label class="form-check-label" for="parallelSwitch" style="font-size:.82rem;color:#ccc">
+              Ejecutar features concurrentes (worktree aislado)
+            </label>
+          </div>
+          <div class="form-text" style="font-size:.7rem;color:#555">
+            Cada feature corre en su propio git worktree. <strong>Precondición:</strong> cerrar
+            CTF-FABRICA-001 con una corrida E2E real (langgraph + claves vivas).
+          </div>
+        </div>
+
+        <!-- FACTORY_MODIFIER_ENABLED -->
+        <div class="col-md-4">
+          <label class="form-label" style="font-size:.78rem;color:#888;text-transform:uppercase;letter-spacing:.05em">
+            Factory Modifier
+          </label>
+          <div class="form-check form-switch mb-0 mt-1">
+            <input class="form-check-input" type="checkbox" role="switch"
+                   id="factoryModifierSwitch" name="factory_modifier_enabled"
+                   {% if cfg.get('FACTORY_MODIFIER_ENABLED', 'false') == 'true' %}checked{% endif %}>
+            <label class="form-check-label" for="factoryModifierSwitch" style="font-size:.82rem;color:#ccc">
+              Auto-modificación de la fábrica
+            </label>
+          </div>
+          <div class="form-text" style="font-size:.7rem;color:#555">
+            Permite aplicar cambios acotados (prompts/registry) a la propia fábrica. Doble gate:
+            además exige aprobación explícita por cambio y ruteo por PR (nunca toca <code>main</code>).
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
   <!-- ── Límites ────────────────────────────────────────────────────────── -->
   <div class="card mb-4">
     <div class="card-header">
