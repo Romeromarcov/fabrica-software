@@ -64,6 +64,18 @@ def compile_marketing_graph(checkpointer=None, interrupt_publish: bool = True):
     return graph.compile(checkpointer=checkpointer, interrupt_before=interrupt_before)
 
 
+def run_marketing(state: dict, *, thread_id: str = "mkt") -> dict:
+    """
+    Ejecuta el pipeline marketing COMPLETO (M0→M8) sin pausar y devuelve el estado final.
+    Pensado para lanzamiento programático / CLI con publicación confirmada. M8 sigue gated
+    por MARKETING_PUBLISH_ENABLED (dry-run por defecto), así que esto no publica de verdad
+    salvo opt-in explícito. El gate humano `never_full_auto` se aplica en el flujo interactivo
+    (compile_marketing_graph(interrupt_publish=True)), no aquí.
+    """
+    app = compile_marketing_graph(interrupt_publish=False)
+    return app.invoke(state, {"configurable": {"thread_id": thread_id}})
+
+
 def initial_marketing_state(
     *,
     objetivo: str = "",

@@ -121,6 +121,71 @@ def cmd_new_feature(feature_name: str, mode: str, repo_name: str) -> None:
         console.print(f"[dim]Feature ID: {feature_id}[/dim]")
 
 
+def cmd_marketing(
+    pieza_nombre: str,
+    brief: str,
+    marca: str = "",
+    canal: str = "instagram",
+    mode: str = "post",
+    publish: bool = False,
+) -> None:
+    """Lanza el pipeline `marketing` (M0→M8) sobre un brief de pieza."""
+    from graph_marketing import compile_marketing_graph, initial_marketing_state
+
+    feature_id = (
+        f"mkt_{datetime.now().strftime('%Y%m%d_%H%M%S')}_"
+        f"{pieza_nombre[:20].replace(' ', '_').lower()}"
+    )
+    console.print(Panel(
+        f"[bold green]Pieza de Marketing[/bold green]\n"
+        f"Pieza: [cyan]{pieza_nombre}[/cyan]\n"
+        f"Marca: [magenta]{marca or '—'}[/magenta]\n"
+        f"Canal: [yellow]{canal}[/yellow]   Modo: [yellow]{mode}[/yellow]\n"
+        f"Publicación: [yellow]{'CONFIRMADA' if publish else 'dry-run (gate humano)'}[/yellow]\n"
+        f"ID: [dim]{feature_id}[/dim]",
+        title="📣 Pipeline Marketing"
+    ))
+
+    state = initial_marketing_state(
+        marca=marca, canal=canal, pieza_nombre=pieza_nombre, brief=brief, mode=mode,
+    )
+    config = _thread_config(feature_id)
+    # interrupt_before=M8 salvo que el operador confirme publicación (gate never_full_auto).
+    app = compile_marketing_graph(interrupt_publish=not publish)
+
+    for chunk in app.stream(state, config=config, stream_mode="updates"):
+        node_name = list(chunk.keys())[0]
+        if node_name == "__interrupt__":
+            continue
+        agent = chunk[node_name].get("current_agent", node_name)
+        console.print(f"[dim]→ {agent}[/dim]")
+
+    snapshot = app.get_state(config)
+    vals = snapshot.values if snapshot else {}
+
+    # Si quedó pausado antes de M8 (publish gate), ofrecer publicar.
+    if snapshot and snapshot.next:
+        console.print(Panel(
+            (vals.get("pieza_ensamblada") or "")[:1500],
+            title="🔔 Publish gate (M8) — pieza lista", border_style="blue"
+        ))
+        console.print("[bold]Escribe PUBLICAR para continuar a M8, ENTER para terminar en dry-run:[/bold] ", end="")
+        resp = input().strip().upper()
+        if resp == "PUBLICAR":
+            for chunk in app.stream(None, config=config, stream_mode="updates"):
+                node_name = list(chunk.keys())[0]
+                if node_name != "__interrupt__":
+                    console.print(f"[dim]→ {chunk[node_name].get('current_agent', node_name)}[/dim]")
+            vals = app.get_state(config).values
+
+    console.print(Panel(
+        f"brand={vals.get('brand_passed')} compliance={vals.get('compliance_clear')} "
+        f"adversarial={vals.get('adversarial_clear')} preview={vals.get('preview_passed')}\n"
+        f"published={vals.get('published')}  ref={vals.get('publish_ref')}",
+        title="📣 Resultado", border_style="green"
+    ))
+
+
 def _handle_interrupt(app, config: dict, interrupt_data: dict, feature_id: str) -> None:
     """Maneja cualquier interrupción humana del pipeline."""
     from langgraph.types import Command
@@ -637,6 +702,15 @@ def main() -> None:
     sub.add_parser("repos", help="Lista los repositorios disponibles")
     sub.add_parser("pipelines", help="Lista los pipelines (dominios) disponibles")
 
+    p_mkt = sub.add_parser("marketing", help="Lanza el pipeline de marketing (M0→M8)")
+    p_mkt.add_argument("pieza", help="Nombre de la pieza")
+    p_mkt.add_argument("brief", help="Brief de la pieza (entre comillas)")
+    p_mkt.add_argument("--marca", default="", help="Marca")
+    p_mkt.add_argument("--canal", default="instagram", help="Canal (instagram, tiktok, ...)")
+    p_mkt.add_argument("--mode", choices=["campaña", "post", "lightning"], default="post")
+    p_mkt.add_argument("--publish", action="store_true",
+                       help="Confirma la publicación (salta el gate humano de M8; el push real sigue gated por MARKETING_PUBLISH_ENABLED)")
+
     p_proj = sub.add_parser("new-project", help="Crea un plan de proyecto y arranca el loop autónomo")
     p_proj.add_argument("name",  help="Nombre del proyecto")
     p_proj.add_argument("brief", help="Descripción del objetivo del proyecto (entre comillas)")
@@ -676,6 +750,9 @@ def main() -> None:
         cmd_repos()
     elif args.cmd == "pipelines":
         cmd_pipelines()
+    elif args.cmd == "marketing":
+        cmd_marketing(args.pieza, args.brief, marca=args.marca, canal=args.canal,
+                      mode=args.mode, publish=args.publish)
     elif args.cmd == "new-project":
         cmd_new_project(args.name, args.brief, args.repo, args.new, audit=getattr(args, "audit", False))
     elif args.cmd == "resume-project":
