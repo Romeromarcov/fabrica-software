@@ -1073,6 +1073,109 @@ async def skills_page(request: Request, repo: str = ""):
     })
 
 
+# ── Meta-agentes: Agent Builder / Pipeline Builder / Factory Modifier ──────────
+
+@app.get("/meta", response_class=HTMLResponse)
+async def meta_page(request: Request):
+    """Página de la meta-capa: construir agentes/pipelines y proponer auto-modificaciones."""
+    import config as _cfg
+    return templates.TemplateResponse(request, "meta.html", {
+        **_base_ctx(request),
+        "active_page": "meta",
+        "agent_builder_enabled":    getattr(_cfg, "AGENT_BUILDER_ENABLED", False),
+        "pipeline_builder_enabled": getattr(_cfg, "PIPELINE_BUILDER_ENABLED", False),
+        "factory_modifier_enabled": getattr(_cfg, "FACTORY_MODIFIER_ENABLED", False),
+    })
+
+
+@app.post("/api/meta/build-agent")
+async def api_meta_build_agent(request: Request):
+    """Genera+valida una definición de agente (NO registra). Body: {request}."""
+    from starlette.concurrency import run_in_threadpool
+    from tools.agent_builder import build_agent_definition, validate_agent_definition
+    data = await request.json()
+    req = (data.get("request") or "").strip()
+    if not req:
+        return JSONResponse({"ok": False, "error": "request requerido"}, status_code=400)
+    try:
+        definition = await run_in_threadpool(build_agent_definition, req)
+        errors = validate_agent_definition(definition)
+        return JSONResponse({"ok": True, "definition": definition, "errors": errors})
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("meta build-agent error: %s", exc)
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=200)
+
+
+@app.post("/api/meta/register-agent")
+async def api_meta_register_agent(request: Request):
+    """Registra un agente en el registry (doble gate: flag + aprobación owner)."""
+    _require_perm(request, "config")
+    from tools.agent_builder import register_agent
+    data = await request.json()
+    definition = data.get("definition") or {}
+    try:
+        register_agent(definition, approved=True)
+        return JSONResponse({"ok": True, "id": definition.get("id")})
+    except (PermissionError, ValueError) as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=200)
+
+
+@app.post("/api/meta/build-pipeline")
+async def api_meta_build_pipeline(request: Request):
+    """Genera+valida una definición de pipeline (NO registra). Body: {request}."""
+    from starlette.concurrency import run_in_threadpool
+    from tools.pipeline_builder import build_pipeline_definition, validate_pipeline_definition
+    data = await request.json()
+    req = (data.get("request") or "").strip()
+    if not req:
+        return JSONResponse({"ok": False, "error": "request requerido"}, status_code=400)
+    try:
+        definition = await run_in_threadpool(build_pipeline_definition, req)
+        errors = validate_pipeline_definition(definition)
+        return JSONResponse({"ok": True, "definition": definition, "errors": errors})
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("meta build-pipeline error: %s", exc)
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=200)
+
+
+@app.post("/api/meta/register-pipeline")
+async def api_meta_register_pipeline(request: Request):
+    """Escribe pipelines/<name>/pipeline.yaml (doble gate: flag + aprobación owner)."""
+    _require_perm(request, "config")
+    from tools.pipeline_builder import register_pipeline
+    data = await request.json()
+    definition = data.get("definition") or {}
+    try:
+        path = register_pipeline(definition, approved=True)
+        return JSONResponse({"ok": True, "name": definition.get("name"), "path": str(path)})
+    except (PermissionError, ValueError) as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=200)
+
+
+@app.post("/api/meta/build-factory-change")
+async def api_meta_build_factory_change(request: Request):
+    """
+    Propone+valida un cambio del factory_modifier y devuelve su PLAN. PROPOSE-ONLY:
+    la UI nunca aplica autofagia (eso exige rama + PR vía CLI). Body: {request, branch?}.
+    """
+    from starlette.concurrency import run_in_threadpool
+    from tools.factory_modifier import build_factory_change, validate_factory_change, plan_factory_change
+    data = await request.json()
+    req = (data.get("request") or "").strip()
+    branch = (data.get("branch") or "").strip()
+    if not req:
+        return JSONResponse({"ok": False, "error": "request requerido"}, status_code=400)
+    try:
+        change = await run_in_threadpool(build_factory_change, req)
+        errors = validate_factory_change(change)
+        plan = plan_factory_change(change, branch=branch)
+        return JSONResponse({"ok": True, "change": change, "errors": errors, "plan": plan,
+                             "note": "Propuesta only — aplicar requiere rama + PR vía CLI (nunca desde la web)."})
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("meta build-factory-change error: %s", exc)
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=200)
+
+
 @app.post("/config")
 async def save_config(
     request: Request,

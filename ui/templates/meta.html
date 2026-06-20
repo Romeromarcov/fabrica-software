@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+
+{% block title %}Meta-agentes{% endblock %}
+
+{% block content %}
+<div class="container py-3" style="max-width:900px">
+  <h4 class="mb-1"><i class="bi bi-cpu"></i> Meta-agentes</h4>
+  <p style="font-size:.8rem;color:#888">
+    La fábrica construyéndose a sí misma: crea agentes y pipelines nuevos, o propone
+    auto-modificaciones. Cada capacidad tiene doble gate (flag + aprobación).
+  </p>
+
+  <!-- ── Agent Builder ──────────────────────────────────────────────────── -->
+  <div class="card mb-3">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <span class="card-header-title"><i class="bi bi-robot"></i> Crear agente</span>
+      <span class="badge bg-{{ 'success' if agent_builder_enabled else 'secondary' }}">
+        {{ 'AGENT_BUILDER_ENABLED' if agent_builder_enabled else 'flag off' }}
+      </span>
+    </div>
+    <div class="card-body">
+      <textarea id="agentReq" class="form-control mb-2" rows="2"
+                placeholder="Ej: crea un agente de SEO que optimice metadatos para el pipeline marketing"></textarea>
+      <button class="btn btn-sm btn-primary" onclick="buildAgent()">Generar definición</button>
+      <button class="btn btn-sm btn-success" id="agentRegBtn" style="display:none" onclick="registerAgent()">Registrar</button>
+      <pre id="agentOut" class="mt-2" style="display:none;font-size:.72rem;background:#111;padding:.6rem;border-radius:6px;white-space:pre-wrap"></pre>
+    </div>
+  </div>
+
+  <!-- ── Pipeline Builder ───────────────────────────────────────────────── -->
+  <div class="card mb-3">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <span class="card-header-title"><i class="bi bi-diagram-3"></i> Crear pipeline</span>
+      <span class="badge bg-{{ 'success' if pipeline_builder_enabled else 'secondary' }}">
+        {{ 'PIPELINE_BUILDER_ENABLED' if pipeline_builder_enabled else 'flag off' }}
+      </span>
+    </div>
+    <div class="card-body">
+      <textarea id="pipeReq" class="form-control mb-2" rows="2"
+                placeholder="Ej: crea un pipeline legal para revisar contratos con agentes de extracción y riesgo"></textarea>
+      <button class="btn btn-sm btn-primary" onclick="buildPipeline()">Generar definición</button>
+      <button class="btn btn-sm btn-success" id="pipeRegBtn" style="display:none" onclick="registerPipeline()">Registrar</button>
+      <pre id="pipeOut" class="mt-2" style="display:none;font-size:.72rem;background:#111;padding:.6rem;border-radius:6px;white-space:pre-wrap"></pre>
+    </div>
+  </div>
+
+  <!-- ── Factory Modifier (propose-only) ────────────────────────────────── -->
+  <div class="card mb-3" style="border:1px solid #6b3030">
+    <div class="card-header d-flex justify-content-between align-items-center" style="background:#2a1414">
+      <span class="card-header-title"><i class="bi bi-exclamation-triangle"></i> Factory Modifier (auto-modificación)</span>
+      <span class="badge bg-{{ 'success' if factory_modifier_enabled else 'secondary' }}">
+        {{ 'FACTORY_MODIFIER_ENABLED' if factory_modifier_enabled else 'flag off' }}
+      </span>
+    </div>
+    <div class="card-body">
+      <div class="form-text" style="font-size:.72rem;color:#c98;margin-bottom:.5rem">
+        Propose-only: la web NUNCA aplica el cambio (autofagia). Genera la propuesta y su plan;
+        aplicar requiere rama de trabajo + PR vía CLI (revisor independiente + CI).
+      </div>
+      <textarea id="fmReq" class="form-control mb-2" rows="2"
+                placeholder="Ej: modifica el prompt de A4 para que siempre use type hints"></textarea>
+      <input id="fmBranch" class="form-control form-control-sm mb-2" placeholder="rama destino (ej: feature/20260620-prompt-a4)">
+      <button class="btn btn-sm btn-warning" onclick="buildFactoryChange()">Generar propuesta + plan</button>
+      <pre id="fmOut" class="mt-2" style="display:none;font-size:.72rem;background:#111;padding:.6rem;border-radius:6px;white-space:pre-wrap"></pre>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let _agentDef = null, _pipeDef = null;
+
+async function _post(url, body) {
+  const r = await fetch(url, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+  return r.json();
+}
+function _show(id, text) { const el = document.getElementById(id); el.style.display = 'block'; el.textContent = text; }
+
+async function buildAgent() {
+  _show('agentOut', 'Generando…');
+  const res = await _post('/api/meta/build-agent', {request: document.getElementById('agentReq').value});
+  if (!res.ok) { _show('agentOut', '❌ ' + res.error); return; }
+  _agentDef = res.definition;
+  const errs = (res.errors || []).length ? '\n\n⚠️ ' + res.errors.join('; ') : '\n\n✅ válido';
+  _show('agentOut', JSON.stringify(res.definition, null, 2) + errs);
+  document.getElementById('agentRegBtn').style.display = (res.errors || []).length ? 'none' : 'inline-block';
+}
+async function registerAgent() {
+  const res = await _post('/api/meta/register-agent', {definition: _agentDef});
+  _show('agentOut', res.ok ? '✅ Agente registrado: ' + res.id : '❌ ' + res.error);
+  if (res.ok) document.getElementById('agentRegBtn').style.display = 'none';
+}
+
+async function buildPipeline() {
+  _show('pipeOut', 'Generando…');
+  const res = await _post('/api/meta/build-pipeline', {request: document.getElementById('pipeReq').value});
+  if (!res.ok) { _show('pipeOut', '❌ ' + res.error); return; }
+  _pipeDef = res.definition;
+  const errs = (res.errors || []).length ? '\n\n⚠️ ' + res.errors.join('; ') : '\n\n✅ válido';
+  _show('pipeOut', JSON.stringify(res.definition, null, 2) + errs);
+  document.getElementById('pipeRegBtn').style.display = (res.errors || []).length ? 'none' : 'inline-block';
+}
+async function registerPipeline() {
+  const res = await _post('/api/meta/register-pipeline', {definition: _pipeDef});
+  _show('pipeOut', res.ok ? '✅ Pipeline registrado: ' + res.name : '❌ ' + res.error);
+  if (res.ok) document.getElementById('pipeRegBtn').style.display = 'none';
+}
+
+async function buildFactoryChange() {
+  _show('fmOut', 'Generando…');
+  const res = await _post('/api/meta/build-factory-change', {
+    request: document.getElementById('fmReq').value,
+    branch:  document.getElementById('fmBranch').value,
+  });
+  if (!res.ok) { _show('fmOut', '❌ ' + res.error); return; }
+  _show('fmOut', res.plan + '\n\n' + res.note);
+}
+</script>
+{% endblock %}
