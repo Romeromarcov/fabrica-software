@@ -18,7 +18,8 @@
     <div class="card-body">
       <div class="form-text" style="font-size:.72rem;color:#9bb;margin-bottom:.5rem">
         Explica en lenguaje natural qué pipeline quieres; el agente pregunta lo necesario y va
-        diseñando cada nodo. Cuando el diseño esté completo, podrás registrarlo.
+        diseñando cada nodo <b>con su lógica</b> (un system prompt por agente). Al registrar, esa
+        lógica se persiste como prompt_file y el pipeline arranca con calidad dedicada, no genérica.
       </div>
       <div id="convLog" style="max-height:280px;overflow-y:auto;background:#0d0d0d;border-radius:6px;padding:.6rem;font-size:.8rem;margin-bottom:.5rem"></div>
       <div class="d-flex gap-2">
@@ -132,7 +133,8 @@ async function convRegister() {
   if (!_convDraft) return;
   const res = await _post('/api/meta/register-draft', {draft: _convDraft});
   _convAppend('assistant', res.ok
-    ? '✅ Registrado: pipeline ' + res.pipeline + ' con agentes ' + (res.agents || []).join(', ')
+    ? '✅ Registrado: pipeline ' + res.pipeline + ' con agentes ' + (res.agents || []).join(', ') +
+      ' · ' + (res.prompts || []).length + ' nodo(s) con lógica dedicada'
     : '❌ ' + res.error);
   if (res.ok) document.getElementById('convDraft').style.display = 'none';
 }
