@@ -1095,14 +1095,15 @@ async def marketing_page(request: Request):
     """Página para lanzar una pieza del pipeline `marketing` y ver qué pipelines existen."""
     import config as _cfg
     from tools.pipeline_loader import pipeline_summaries
-    # Pipelines con runtime ejecutable hoy (los demás son definición sin nodos).
-    launchable = {"software", "marketing"}
+    # Pipelines con runtime DEDICADO; el resto es lanzable con el runtime GENÉRICO (v0).
+    dedicated = {"software", "marketing"}
     try:
         summaries = pipeline_summaries()
     except Exception:
         summaries = []
     for s in summaries:
-        s["launchable"] = s.get("name") in launchable
+        s["dedicated"] = s.get("name") in dedicated
+        s["launchable"] = True  # todo pipeline registrado es lanzable (dedicado o genérico)
     return templates.TemplateResponse(request, "marketing.html", {
         **_base_ctx(request),
         "active_page": "marketing",
@@ -1147,6 +1148,30 @@ async def api_marketing_launch(request: Request):
         }})
     except Exception as exc:  # noqa: BLE001
         logger.exception("marketing launch error: %s", exc)
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=200)
+
+
+@app.post("/api/pipeline/launch")
+async def api_pipeline_launch(request: Request):
+    """
+    Lanza CUALQUIER pipeline registrado con el runtime genérico (Fase 4 v0): cada agente
+    corre como una llamada LLM lineal desde su role/prompt_file. Sirve para pipelines creados
+    en /meta que aún no tienen runtime dedicado. Body: {pipeline, brief}.
+    """
+    _require_perm(request, "launch_feature")
+    from starlette.concurrency import run_in_threadpool
+    from graph_generic import run_generic_pipeline
+    data = await request.json()
+    pipeline = (data.get("pipeline") or "").strip()
+    brief = (data.get("brief") or "").strip()
+    if not pipeline or not brief:
+        return JSONResponse({"ok": False, "error": "pipeline y brief son requeridos"}, status_code=400)
+    try:
+        final = await run_in_threadpool(run_generic_pipeline, pipeline, brief, thread_id=f"gen_{pipeline}")
+        return JSONResponse({"ok": True, "outputs": final.get("outputs", []),
+                             "errors": final.get("errors", [])})
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("generic pipeline launch error: %s", exc)
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=200)
 
 
