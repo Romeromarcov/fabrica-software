@@ -10,6 +10,30 @@
     auto-modificaciones. Cada capacidad tiene doble gate (flag + aprobación).
   </p>
 
+  <!-- ── Constructor conversacional ─────────────────────────────────────── -->
+  <div class="card mb-3" style="border:1px solid #2d4a6b">
+    <div class="card-header" style="background:#14202a">
+      <span class="card-header-title"><i class="bi bi-chat-dots"></i> Constructor conversacional de pipelines</span>
+    </div>
+    <div class="card-body">
+      <div class="form-text" style="font-size:.72rem;color:#9bb;margin-bottom:.5rem">
+        Explica en lenguaje natural qué pipeline quieres; el agente pregunta lo necesario y va
+        diseñando cada nodo. Cuando el diseño esté completo, podrás registrarlo.
+      </div>
+      <div id="convLog" style="max-height:280px;overflow-y:auto;background:#0d0d0d;border-radius:6px;padding:.6rem;font-size:.8rem;margin-bottom:.5rem"></div>
+      <div class="d-flex gap-2">
+        <input id="convInput" class="form-control form-control-sm"
+               placeholder="Ej: quiero un pipeline para revisar contratos legales..."
+               onkeydown="if(event.key==='Enter')convSend()">
+        <button class="btn btn-sm btn-primary" id="convBtn" onclick="convSend()">Enviar</button>
+      </div>
+      <div id="convDraft" class="mt-2" style="display:none">
+        <pre style="font-size:.72rem;background:#111;padding:.6rem;border-radius:6px;white-space:pre-wrap"></pre>
+        <button class="btn btn-sm btn-success" onclick="convRegister()">Registrar pipeline + agentes</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ── Agent Builder ──────────────────────────────────────────────────── -->
   <div class="card mb-3">
     <div class="card-header d-flex justify-content-between align-items-center">
@@ -70,6 +94,48 @@
 {% block scripts %}
 <script>
 let _agentDef = null, _pipeDef = null;
+let _convHistory = [], _convDraft = null;
+
+function _convAppend(role, text) {
+  const log = document.getElementById('convLog');
+  const who = role === 'user' ? '🧑 Tú' : '🤖 Arquitecto';
+  const color = role === 'user' ? '#9cf' : '#cea';
+  log.innerHTML += '<div style="margin-bottom:.4rem"><b style="color:' + color + '">' + who +
+    ':</b> <span style="white-space:pre-wrap">' + text.replace(/</g, '&lt;') + '</span></div>';
+  log.scrollTop = log.scrollHeight;
+}
+
+async function convSend() {
+  const inp = document.getElementById('convInput'), btn = document.getElementById('convBtn');
+  const msg = inp.value.trim();
+  if (!msg) return;
+  _convAppend('user', msg); inp.value = ''; btn.disabled = true;
+  try {
+    const res = await _post('/api/meta/converse', {history: _convHistory, message: msg});
+    if (!res.ok) { _convAppend('assistant', '❌ ' + res.error); return; }
+    _convAppend('assistant', res.reply);
+    _convHistory.push({role: 'user', content: msg});
+    _convHistory.push({role: 'assistant', content: res.reply});
+    const dd = document.getElementById('convDraft');
+    if (res.ready && res.draft) {
+      _convDraft = res.draft;
+      dd.style.display = 'block';
+      dd.querySelector('pre').textContent = JSON.stringify(res.draft, null, 2);
+    } else if (res.draft && res.errors && res.errors.length) {
+      _convAppend('assistant', '⚠️ Draft con errores: ' + res.errors.join('; '));
+      dd.style.display = 'none';
+    }
+  } finally { btn.disabled = false; }
+}
+
+async function convRegister() {
+  if (!_convDraft) return;
+  const res = await _post('/api/meta/register-draft', {draft: _convDraft});
+  _convAppend('assistant', res.ok
+    ? '✅ Registrado: pipeline ' + res.pipeline + ' con agentes ' + (res.agents || []).join(', ')
+    : '❌ ' + res.error);
+  if (res.ok) document.getElementById('convDraft').style.display = 'none';
+}
 
 async function _post(url, body) {
   const r = await fetch(url, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
