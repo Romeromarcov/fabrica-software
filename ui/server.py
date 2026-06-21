@@ -1088,6 +1088,68 @@ async def meta_page(request: Request):
     })
 
 
+# ── Marketing: lanzamiento desde la web ───────────────────────────────────────
+
+@app.get("/marketing", response_class=HTMLResponse)
+async def marketing_page(request: Request):
+    """Página para lanzar una pieza del pipeline `marketing` y ver qué pipelines existen."""
+    import config as _cfg
+    from tools.pipeline_loader import pipeline_summaries
+    # Pipelines con runtime ejecutable hoy (los demás son definición sin nodos).
+    launchable = {"software", "marketing"}
+    try:
+        summaries = pipeline_summaries()
+    except Exception:
+        summaries = []
+    for s in summaries:
+        s["launchable"] = s.get("name") in launchable
+    return templates.TemplateResponse(request, "marketing.html", {
+        **_base_ctx(request),
+        "active_page": "marketing",
+        "pipelines": summaries,
+        "publish_enabled": getattr(_cfg, "MARKETING_PUBLISH_ENABLED", False),
+    })
+
+
+@app.post("/api/marketing/launch")
+async def api_marketing_launch(request: Request):
+    """
+    Ejecuta el pipeline marketing (M0→M8) inline y devuelve el resultado. La publicación
+    real está gated por MARKETING_PUBLISH_ENABLED (dry-run por defecto). Body:
+    {pieza, brief, marca?, canal?, mode?}.
+    """
+    _require_perm(request, "launch_feature")
+    from starlette.concurrency import run_in_threadpool
+    from graph_marketing import run_marketing, initial_marketing_state
+    data = await request.json()
+    pieza = (data.get("pieza") or "").strip()
+    brief = (data.get("brief") or "").strip()
+    if not pieza or not brief:
+        return JSONResponse({"ok": False, "error": "pieza y brief son requeridos"}, status_code=400)
+    state = initial_marketing_state(
+        marca=(data.get("marca") or "").strip(),
+        canal=(data.get("canal") or "instagram").strip(),
+        pieza_nombre=pieza,
+        brief=brief,
+        mode=(data.get("mode") or "post").strip(),
+    )
+    try:
+        final = await run_in_threadpool(run_marketing, state, thread_id=f"web_{pieza[:20]}")
+        return JSONResponse({"ok": True, "result": {
+            "pieza_ensamblada": final.get("pieza_ensamblada"),
+            "risk_level":       final.get("risk_level"),
+            "brand_passed":     final.get("brand_passed"),
+            "compliance_clear": final.get("compliance_clear"),
+            "adversarial_clear": final.get("adversarial_clear"),
+            "preview_passed":   final.get("preview_passed"),
+            "published":        final.get("published"),
+            "publish_ref":      final.get("publish_ref"),
+        }})
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("marketing launch error: %s", exc)
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=200)
+
+
 @app.post("/api/meta/build-agent")
 async def api_meta_build_agent(request: Request):
     """Genera+valida una definición de agente (NO registra). Body: {request}."""
