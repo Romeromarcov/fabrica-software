@@ -17,9 +17,9 @@ def test_marketing_page_renders_and_lists_pipelines(tc):
     body = resp.text
     assert "Nueva pieza" in body
     assert "Pipelines disponibles" in body
-    # software y marketing aparecen marcados lanzables
+    # software y marketing aparecen con runtime dedicado
     assert "marketing" in body
-    assert "lanzable" in body
+    assert "dedicado" in body
 
 
 def test_launch_requires_pieza_and_brief(tc):
