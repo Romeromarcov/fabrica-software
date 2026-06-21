@@ -1263,6 +1263,43 @@ async def api_meta_build_factory_change(request: Request):
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=200)
 
 
+@app.post("/api/meta/converse")
+async def api_meta_converse(request: Request):
+    """
+    Constructor conversacional de pipelines: avanza el diálogo y, cuando hay diseño completo,
+    devuelve un draft (pipeline + agentes) validado. Body: {history: [{role,content}], message}.
+    """
+    from starlette.concurrency import run_in_threadpool
+    from tools.conversational_builder import converse
+    data = await request.json()
+    message = (data.get("message") or "").strip()
+    history = data.get("history") or []
+    if not message:
+        return JSONResponse({"ok": False, "error": "message requerido"}, status_code=400)
+    try:
+        result = await run_in_threadpool(converse, history, message)
+        return JSONResponse({"ok": True, **result})
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("meta converse error: %s", exc)
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=200)
+
+
+@app.post("/api/meta/register-draft")
+async def api_meta_register_draft(request: Request):
+    """Registra el draft conversacional (agentes + pipeline). Doble gate: flags + owner."""
+    _require_perm(request, "config")
+    from tools.conversational_builder import register_draft
+    data = await request.json()
+    draft = data.get("draft") or {}
+    if not draft.get("pipeline") or not draft.get("agents"):
+        return JSONResponse({"ok": False, "error": "draft incompleto"}, status_code=400)
+    try:
+        results = register_draft(draft, approved=True)
+        return JSONResponse({"ok": True, **results})
+    except (PermissionError, ValueError) as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=200)
+
+
 @app.post("/config")
 async def save_config(
     request: Request,
