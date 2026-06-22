@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block title %}Pipelines{% endblock %}
+
+{% block content %}
+<div class="container py-3" style="max-width:960px">
+  <div class="d-flex justify-content-between align-items-center mb-1">
+    <h4 class="mb-0"><i class="bi bi-diagram-2"></i> Pipelines</h4>
+    <a href="/meta" class="btn btn-sm btn-primary"><i class="bi bi-plus-lg"></i> Crear pipeline</a>
+  </div>
+  <p style="font-size:.8rem;color:#888">
+    Cada pipeline es un dominio de la fábrica (Software, Marketing, …). Entra en uno para
+    lanzarlo, ver/configurar sus agentes y sus skills. Los pipelines nuevos se crean en
+    <a href="/meta">Meta-agentes</a> y aparecen aquí automáticamente.
+  </p>
+
+  <div class="row g-3">
+    {% for p in pipelines %}
+    <div class="col-md-6">
+      <div class="card h-100">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-start">
+            <h6 class="mb-1"><a href="/pipeline/{{ p.name }}" class="text-decoration-none"><code>{{ p.name }}</code></a></h6>
+            {% if p.dedicated %}<span class="badge bg-success">dedicado</span>
+            {% else %}<span class="badge bg-info">genérico (v0)</span>{% endif %}
+          </div>
+          <div style="font-size:.78rem;color:#aaa;min-height:2.2em">{{ p.description or 'Sin descripción.' }}</div>
+          <div class="d-flex justify-content-between align-items-center mt-2">
+            <span style="font-size:.72rem;color:#888"><i class="bi bi-people"></i> {{ p.agent_count }} agente(s)</span>
+            <a href="/pipeline/{{ p.name }}" class="btn btn-sm btn-outline-light">Abrir sección →</a>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% else %}
+    <div class="col-12"><p class="text-muted">No hay pipelines registrados todavía.</p></div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

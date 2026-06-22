@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+
+{% block title %}{{ name }} · Pipeline{% endblock %}
+
+{% block content %}
+<div class="container py-3" style="max-width:920px">
+  <div class="d-flex align-items-center gap-2 mb-1">
+    <a href="/pipelines" class="btn btn-sm btn-ghost"><i class="bi bi-arrow-left"></i></a>
+    <h4 class="mb-0"><code>{{ name }}</code></h4>
+    {% if dedicated %}<span class="badge bg-success">runtime dedicado</span>
+    {% else %}<span class="badge bg-info">runtime genérico (v0)</span>{% endif %}
+  </div>
+  <p style="font-size:.8rem;color:#888">{{ pdef.description or 'Sin descripción.' }}</p>
+
+  <ul class="nav nav-tabs" role="tablist" style="font-size:.85rem">
+    <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-run" type="button">Resumen / Lanzar</button></li>
+    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-agents" type="button">Agentes ({{ agents|length }})</button></li>
+    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-skills" type="button">Skills ({{ skills|length }})</button></li>
+  </ul>
+
+  <div class="tab-content pt-3">
+    <!-- ── Resumen / Lanzar ──────────────────────────────────────────────── -->
+    <div class="tab-pane fade show active" id="tab-run">
+      {% if dedicated and name == 'marketing' %}
+        <div class="alert alert-info py-2" style="font-size:.8rem">
+          Este pipeline tiene runtime dedicado (M0→M8). Lánzalo desde <a href="/marketing">Marketing</a>.
+        </div>
+      {% endif %}
+      <div class="card">
+        <div class="card-header"><span class="card-header-title"><i class="bi bi-play-circle"></i> Lanzar (runtime genérico)</span></div>
+        <div class="card-body">
+          <label class="form-label" style="font-size:.72rem;color:#888">Brief</label>
+          <textarea id="secBrief" class="form-control" rows="3" placeholder="Describe la tarea a ejecutar..."></textarea>
+          <button class="btn btn-sm btn-info mt-2" id="secBtn" onclick="launchSection()">Ejecutar</button>
+          <span id="secSpin" style="display:none;font-size:.8rem;color:#888"> ⏳ ejecutando…</span>
+          <div id="secResult" class="mt-2" style="display:none"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Agentes ───────────────────────────────────────────────────────── -->
+    <div class="tab-pane fade" id="tab-agents">
+      <div class="d-flex justify-content-end mb-2">
+        <a href="/meta" class="btn btn-sm btn-outline-light"><i class="bi bi-plus-lg"></i> Añadir agente</a>
+      </div>
+      <table class="table table-sm" style="font-size:.78rem">
+        <thead><tr><th>ID</th><th>Rol</th><th>Modelo</th><th>Lógica</th></tr></thead>
+        <tbody>
+        {% for a in agents %}
+          <tr>
+            <td><code>{{ a.id }}</code></td>
+            <td style="color:#aaa">{{ a.role or '—' }}</td>
+            <td><span style="font-size:.72rem">{{ a.model or 'cascada' }}</span></td>
+            <td>{% if a.prompt_file %}<span class="badge bg-success" title="{{ a.prompt_file }}">prompt</span>{% else %}<span class="badge bg-secondary">genérica</span>{% endif %}</td>
+          </tr>
+        {% else %}
+          <tr><td colspan="4" class="text-muted">Sin agentes registrados.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ── Skills ────────────────────────────────────────────────────────── -->
+    <div class="tab-pane fade" id="tab-skills">
+      <div class="form-text" style="font-size:.72rem;color:#9bb;margin-bottom:.5rem">
+        Skills globales etiquetadas con <code>pipeline: {{ name }}</code> en su frontmatter.
+        Gestiónalas en <a href="/skills">Skills</a>.
+      </div>
+      {% for s in skills %}
+      <div class="card mb-2"><div class="card-body py-2">
+        <b style="font-size:.82rem">{{ s.name }}</b>
+        <div style="font-size:.74rem;color:#aaa">{{ s.description or '—' }}</div>
+      </div></div>
+      {% else %}
+      <p class="text-muted" style="font-size:.8rem">No hay skills asociadas a este pipeline todavía.</p>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function launchSection() {
+  const btn = document.getElementById('secBtn'), spin = document.getElementById('secSpin');
+  const out = document.getElementById('secResult');
+  const brief = document.getElementById('secBrief').value.trim();
+  if (!brief) { out.style.display = 'block'; out.innerHTML = '<span class="text-warning">El brief es requerido.</span>'; return; }
+  btn.disabled = true; spin.style.display = 'inline'; out.style.display = 'none';
+  try {
+    const r = await fetch('/api/pipeline/launch', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({pipeline: '{{ name }}', brief}),
+    });
+    const res = await r.json();
+    out.style.display = 'block';
+    if (!res.ok) { out.innerHTML = '<span class="text-danger">❌ ' + res.error + '</span>'; return; }
+    out.innerHTML = (res.outputs || []).map(o =>
+      '<div style="margin-bottom:.5rem"><b style="font-size:.78rem">' + o.agent + ' — ' + o.role + '</b>' +
+      '<pre style="font-size:.72rem;background:#111;padding:.5rem;border-radius:6px;white-space:pre-wrap">' +
+      (o.output || '').replace(/</g, '&lt;') + '</pre></div>'
+    ).join('') || '<span class="text-muted">Sin salidas.</span>';
+  } catch (e) {
+    out.style.display = 'block'; out.innerHTML = '<span class="text-danger">❌ ' + e.message + '</span>';
+  } finally {
+    btn.disabled = false; spin.style.display = 'none';
+  }
+}
+</script>
+{% endblock %}
