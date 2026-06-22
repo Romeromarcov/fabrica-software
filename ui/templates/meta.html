@@ -122,6 +122,61 @@
       <pre id="fmOut" class="mt-2" style="display:none;font-size:.72rem;background:#111;padding:.6rem;border-radius:6px;white-space:pre-wrap"></pre>
     </div>
   </div>
+
+  <!-- ── Auditoría de la fábrica + aprobación de propuestas ─────────────── -->
+  <div class="card mb-3" style="border:1px solid #3a2f6b">
+    <div class="card-header d-flex justify-content-between align-items-center" style="background:#16142a">
+      <span class="card-header-title"><i class="bi bi-clipboard-check"></i> Auditoría de la fábrica</span>
+      <span class="badge bg-{{ 'success' if factory_audit_enabled else 'secondary' }}">
+        {{ 'FACTORY_AUDIT_ENABLED' if factory_audit_enabled else 'auditor off' }}
+      </span>
+    </div>
+    <div class="card-body">
+      <div class="form-text" style="font-size:.72rem;color:#9bb;margin-bottom:.5rem">
+        La fábrica audita su propio código (programado en <a href="/config">Configuración general</a>:
+        LLM, cadencia por tiempo/features, on-off) y propone mejoras. Las de bajo riesgo se
+        auto-aplican a una rama; tú apruebas el resto: aplicar a rama → PR → mergear, con un clic.
+      </div>
+      <button class="btn btn-sm btn-primary" id="faRunBtn" onclick="runFactoryAudit()">
+        <i class="bi bi-play"></i> Auditar ahora
+      </button>
+      <span id="faSpin" style="display:none;font-size:.8rem;color:#888"> ⏳ auditando…</span>
+      <div id="faSummary" class="mt-2" style="font-size:.78rem"></div>
+
+      <div id="faProposals" class="mt-2">
+        {% for p in factory_proposals %}
+        <div class="card mb-2" data-pid="{{ p.id }}" style="border:1px solid #2a2a3a">
+          <div class="card-body py-2">
+            <div class="d-flex justify-content-between align-items-start">
+              <div style="font-size:.78rem">
+                <span class="badge bg-{{ 'success' if p.risk=='low' else 'warning' if p.risk=='medium' else 'danger' }}">{{ p.risk }}</span>
+                <code>{{ p.change.kind }}</code>
+                {% if p.change.agent_id %}· {{ p.change.agent_id }}.{{ p.change.field }}{% endif %}
+                {% if p.change.target %}· {{ p.change.target }}{% endif %}
+                <span class="badge bg-secondary ms-1">{{ p.status }}</span>
+              </div>
+            </div>
+            <div style="font-size:.74rem;color:#aaa;margin:.3rem 0">{{ p.rationale or '—' }}</div>
+            <div class="d-flex gap-2">
+              {% if p.status in ['pending', 'applied'] %}
+              <button class="btn btn-xs btn-outline-info" onclick="faApply('{{ p.id }}', this)">Aplicar a rama + PR</button>
+              {% endif %}
+              {% if p.status == 'pr_open' %}
+              <a href="{{ p.pr_url }}" target="_blank" class="btn btn-xs btn-outline-light">Ver PR</a>
+              <button class="btn btn-xs btn-success" onclick="faMerge('{{ p.id }}', this)">Mergear</button>
+              {% endif %}
+              {% if p.status != 'merged' %}
+              <button class="btn btn-xs btn-outline-danger" onclick="faDismiss('{{ p.id }}', this)">Descartar</button>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+        {% else %}
+        <p class="text-muted" style="font-size:.78rem">No hay propuestas pendientes.</p>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
 </div>
 {% endblock %}
 
@@ -244,6 +299,42 @@ async function buildFactoryChange() {
   });
   if (!res.ok) { _show('fmOut', '❌ ' + res.error); return; }
   _show('fmOut', res.plan + '\n\n' + res.note);
+}
+
+// ── Auditoría de la fábrica + aprobación de propuestas ───────────────────────
+async function runFactoryAudit() {
+  const btn = document.getElementById('faRunBtn'), spin = document.getElementById('faSpin');
+  const out = document.getElementById('faSummary');
+  btn.disabled = true; spin.style.display = 'inline'; out.textContent = '';
+  try {
+    const res = await _post('/api/meta/factory-audit/run', {});
+    if (!res.ok) { out.innerHTML = '<span class="text-danger">❌ ' + res.error + '</span>'; return; }
+    const s = res.summary;
+    out.innerHTML = '✅ Generadas ' + s.generated + ' · auto-aplicadas ' + s.auto_applied +
+      ' · pendientes ' + s.pending + (s.errors && s.errors.length ? ' · errores ' + s.errors.length : '');
+    setTimeout(() => window.location.reload(), 1200);
+  } finally { btn.disabled = false; spin.style.display = 'none'; }
+}
+
+function _faRow(pid) { return document.querySelector('[data-pid="' + pid + '"]'); }
+
+async function faApply(pid, btn) {
+  btn.disabled = true; btn.textContent = 'Aplicando…';
+  const res = await _post('/api/meta/factory-audit/proposals/' + pid + '/apply', {});
+  if (!res.ok) { alert('❌ ' + res.error); btn.disabled = false; btn.textContent = 'Aplicar a rama + PR'; return; }
+  window.location.reload();
+}
+async function faMerge(pid, btn) {
+  btn.disabled = true; btn.textContent = 'Mergeando…';
+  const res = await _post('/api/meta/factory-audit/proposals/' + pid + '/merge', {});
+  if (!res.ok) { alert('❌ ' + res.error); btn.disabled = false; btn.textContent = 'Mergear'; return; }
+  window.location.reload();
+}
+async function faDismiss(pid, btn) {
+  if (!confirm('¿Descartar esta propuesta?')) return;
+  const res = await _post('/api/meta/factory-audit/proposals/' + pid + '/dismiss', {});
+  if (!res.ok) { alert('❌ ' + res.error); return; }
+  const row = _faRow(pid); if (row) row.remove();
 }
 </script>
 {% endblock %}

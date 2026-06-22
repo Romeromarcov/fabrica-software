@@ -187,6 +187,27 @@ def build_factory_change(request: str, llm: Optional[Callable[[str], object]] = 
     return normalize_factory_change(raw)
 
 
+def risk_level(change: dict) -> str:
+    """
+    Clasifica el riesgo de un cambio para decidir qué se puede auto-aplicar a rama:
+      - low:    append a un prompt, o ajustar model/model_fallbacks de un agente.
+      - medium: reemplazar un prompt, o tocar role/output_schema/depends_on/prompt_file.
+      - high:   cualquier otra cosa (hooks/judge/activation_flags o kind no reconocido).
+    Es deterministico y conservador: ante la duda, sube el riesgo (no auto-aplica).
+    """
+    kind = change.get("kind")
+    if kind == "prompt":
+        return "low" if change.get("mode") == "append" else "medium"
+    if kind == "registry_field":
+        field = change.get("field")
+        if field in ("model", "model_fallbacks"):
+            return "low"
+        if field in ("role", "output_schema", "depends_on", "prompt_file"):
+            return "medium"
+        return "high"
+    return "high"
+
+
 def plan_factory_change(change: dict, branch: str = "") -> str:
     """Reporte legible del cambio propuesto (qué, dónde, y la garantía de ruteo por PR)."""
     errors = validate_factory_change(change)

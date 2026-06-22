@@ -263,6 +263,44 @@ def _reschedule_auditor(enabled: bool, weekday: int, hour: int) -> None:
         logger.exception("Error al reconfigurar scheduler de auditoría: %s", e)
 
 
+def _run_factory_audit_job() -> None:
+    """Job del scheduler: corre la auditoría de la fábrica con los parámetros de config."""
+    try:
+        import config as _cfg
+        from tools.factory_audit import run_factory_audit
+        run_factory_audit(
+            max_files=int(getattr(_cfg, "AUDITOR_MAX_FILES", 30) or 30),
+            auto_apply_low=getattr(_cfg, "FACTORY_AUDIT_AUTOAPPLY", True),
+        )
+    except Exception as e:  # noqa: BLE001
+        logger.exception("Error en la auditoría programada de la fábrica: %s", e)
+
+
+def _reschedule_factory_audit(enabled: bool, weekday: int, hour: int) -> None:
+    """Reconfigura el job de auditoría de la fábrica (modo tiempo) sin reiniciar el proceso."""
+    global _audit_scheduler
+    if _audit_scheduler is None:
+        return
+    try:
+        from apscheduler.triggers.cron import CronTrigger
+        try:
+            _audit_scheduler.remove_job("factory_audit")
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("no había job factory_audit que remover: %s", exc)
+        if enabled:
+            _audit_scheduler.add_job(
+                _run_factory_audit_job,
+                trigger=CronTrigger(day_of_week=weekday, hour=hour, minute=0),
+                id="factory_audit",
+                name="Auditoría periódica de la fábrica",
+                replace_existing=True,
+                misfire_grace_time=3600,
+            )
+            logger.info("Auditor de la fábrica reconfigurado — día %d a las %02d:00", weekday, hour)
+    except Exception as e:  # noqa: BLE001
+        logger.exception("Error al reconfigurar el auditor de la fábrica: %s", e)
+
+
 def _start_telegram_bot() -> None:
     """Arranca el bot de Telegram interactivo en un daemon thread."""
     global _tg_bot_stop_event, _tg_bot_thread
@@ -1156,6 +1194,12 @@ async def meta_page(request: Request):
         summaries = []
     for s in summaries:
         s["dedicated"] = s.get("name") in dedicated
+    try:
+        from tools.factory_proposals import list_proposals
+        proposals = [p for p in list_proposals() if p.get("status") != "dismissed"]
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("meta: no se pudieron listar propuestas (%s)", exc)
+        proposals = []
     return templates.TemplateResponse(request, "meta.html", {
         **_base_ctx(request),
         "active_page": "meta",
@@ -1163,6 +1207,8 @@ async def meta_page(request: Request):
         "agent_builder_enabled":    getattr(_cfg, "AGENT_BUILDER_ENABLED", False),
         "pipeline_builder_enabled": getattr(_cfg, "PIPELINE_BUILDER_ENABLED", False),
         "factory_modifier_enabled": getattr(_cfg, "FACTORY_MODIFIER_ENABLED", False),
+        "factory_audit_enabled":    getattr(_cfg, "FACTORY_AUDIT_ENABLED", False),
+        "factory_proposals":        proposals,
     })
 
 
@@ -1334,10 +1380,86 @@ async def api_meta_build_factory_change(request: Request):
         errors = validate_factory_change(change)
         plan = plan_factory_change(change, branch=branch)
         return JSONResponse({"ok": True, "change": change, "errors": errors, "plan": plan,
-                             "note": "Propuesta only — aplicar requiere rama + PR vía CLI (nunca desde la web)."})
+                             "note": "Para aplicarlo, genera la propuesta desde la Auditoría de la "
+                                     "fábrica: se aplica a una rama y entra por PR (CI + revisor)."})
     except Exception as exc:  # noqa: BLE001
         logger.exception("meta build-factory-change error: %s", exc)
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=200)
+
+
+# ── Auditoría de la fábrica + aprobación de propuestas desde la UI (PR3) ───────
+
+@app.post("/api/meta/factory-audit/run")
+async def api_factory_audit_run(request: Request):
+    """Lanza una auditoría de la fábrica ahora (gated). Genera propuestas; auto-aplica low a rama."""
+    _require_perm(request, "config")
+    import config as _cfg
+    from starlette.concurrency import run_in_threadpool
+    from tools.factory_audit import run_factory_audit
+    try:
+        summary = await run_in_threadpool(
+            run_factory_audit,
+            max_files=int(getattr(_cfg, "AUDITOR_MAX_FILES", 30) or 30),
+            auto_apply_low=getattr(_cfg, "FACTORY_AUDIT_AUTOAPPLY", True),
+        )
+        return JSONResponse({"ok": True, "summary": summary})
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("factory-audit run error: %s", exc)
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=200)
+
+
+@app.get("/api/meta/factory-audit/proposals")
+async def api_factory_audit_proposals(request: Request):
+    """Lista las propuestas del factory modifier (todas o por estado ?status=)."""
+    from tools.factory_proposals import list_proposals
+    status = request.query_params.get("status") or None
+    return JSONResponse({"ok": True, "proposals": list_proposals(status)})
+
+
+@app.post("/api/meta/factory-audit/proposals/{pid}/apply")
+async def api_factory_audit_apply(pid: str, request: Request):
+    """Aplica una propuesta a una rama y abre el PR (gated). Estado → pr_open."""
+    _require_perm(request, "config")
+    from starlette.concurrency import run_in_threadpool
+    from tools.factory_proposals import get_proposal
+    from tools.factory_pr import apply_and_open_pr
+    item = get_proposal(pid)
+    if not item:
+        return JSONResponse({"ok": False, "error": "propuesta no encontrada"}, status_code=404)
+    try:
+        out = await run_in_threadpool(lambda: apply_and_open_pr(item, approved=True))
+        return JSONResponse({"ok": True, **out})
+    except (PermissionError, ValueError, RuntimeError) as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=200)
+
+
+@app.post("/api/meta/factory-audit/proposals/{pid}/merge")
+async def api_factory_audit_merge(pid: str, request: Request):
+    """Mergea el PR de una propuesta (gated; respeta la branch protection de main)."""
+    _require_perm(request, "config")
+    from starlette.concurrency import run_in_threadpool
+    from tools.factory_proposals import get_proposal
+    from tools.factory_pr import merge_pr
+    item = get_proposal(pid)
+    if not item:
+        return JSONResponse({"ok": False, "error": "propuesta no encontrada"}, status_code=404)
+    try:
+        out = await run_in_threadpool(lambda: merge_pr(item, approved=True))
+        return JSONResponse({"ok": True, **out})
+    except (PermissionError, ValueError, RuntimeError) as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=200)
+
+
+@app.post("/api/meta/factory-audit/proposals/{pid}/dismiss")
+async def api_factory_audit_dismiss(pid: str, request: Request):
+    """Descarta una propuesta (estado → dismissed)."""
+    _require_perm(request, "config")
+    from tools.factory_proposals import set_status
+    try:
+        set_status(pid, "dismissed")
+        return JSONResponse({"ok": True})
+    except KeyError:
+        return JSONResponse({"ok": False, "error": "propuesta no encontrada"}, status_code=404)
 
 
 @app.post("/api/meta/converse")
@@ -1430,6 +1552,15 @@ async def save_config(
     auditor_max_files: int = Form(30),
     auditor_model:     str = Form("claude-sonnet-4-6"),
     auditor_repo:      str = Form("all"),
+    # Auditoría de la propia fábrica (Factory Modifier)
+    factory_audit_enabled:  str = Form("false"),
+    factory_audit_mode:     str = Form("time"),
+    factory_audit_weekday:  int = Form(0),
+    factory_audit_hour:     int = Form(6),
+    factory_audit_every_features: int = Form(10),
+    factory_audit_autoapply: str = Form("false"),
+    factory_audit_model:    str = Form("claude-sonnet-4-6"),
+    github_repo:            str = Form(""),
     # Seguridad & Acceso
     ui_username:       str = Form(""),
     ui_password:       str = Form(""),
@@ -1477,6 +1608,14 @@ async def save_config(
         "AUDITOR_MAX_FILES": auditor_max_files,
         "AUDITOR_MODEL":     auditor_model,
         "AUDITOR_REPO":      auditor_repo,
+        "FACTORY_AUDIT_ENABLED":   "true" if factory_audit_enabled == "on" else "false",
+        "FACTORY_AUDIT_MODE":      factory_audit_mode,
+        "FACTORY_AUDIT_WEEKDAY":   factory_audit_weekday,
+        "FACTORY_AUDIT_HOUR":      factory_audit_hour,
+        "FACTORY_AUDIT_EVERY_FEATURES": factory_audit_every_features,
+        "FACTORY_AUDIT_AUTOAPPLY": "true" if factory_audit_autoapply == "on" else "false",
+        "FACTORY_AUDIT_MODEL":     factory_audit_model,
+        "GITHUB_REPO":             github_repo,
         # Seguridad & Acceso
         "UI_USERNAME":   ui_username,
         "UI_PASSWORD":   ui_password,
@@ -1490,6 +1629,11 @@ async def save_config(
         enabled=auditor_enabled == "on",
         weekday=auditor_weekday,
         hour=auditor_hour,
+    )
+    _reschedule_factory_audit(
+        enabled=(factory_audit_enabled == "on" and factory_audit_mode == "time"),
+        weekday=factory_audit_weekday,
+        hour=factory_audit_hour,
     )
     # Parsear variables adicionales (una por línea, formato KEY=VALUE)
     for line in extra_vars.splitlines():
@@ -1778,7 +1922,33 @@ async def start_feature(
     run_dir.mkdir(parents=True, exist_ok=True)
     (run_dir / "process.pid").write_text(str(proc.pid))
 
+    # Cadencia por features de la auditoría de la fábrica (no bloquea el redirect).
+    _maybe_factory_audit_on_feature()
+
     return RedirectResponse(f"/feature/{feature_id}", status_code=303)
+
+
+def _maybe_factory_audit_on_feature() -> None:
+    """Dispara, en un hilo aparte, la auditoría de la fábrica si la cadencia por features toca."""
+    try:
+        import threading
+        import config as _cfg
+        from tools.factory_audit import on_feature_started
+        if not getattr(_cfg, "FACTORY_AUDIT_ENABLED", False):
+            return
+        threading.Thread(
+            target=on_feature_started,
+            kwargs=dict(
+                enabled=True,
+                mode=getattr(_cfg, "FACTORY_AUDIT_MODE", "time"),
+                every_n=int(getattr(_cfg, "FACTORY_AUDIT_EVERY_FEATURES", 10) or 10),
+                auto_apply_low=getattr(_cfg, "FACTORY_AUDIT_AUTOAPPLY", True),
+                max_files=int(getattr(_cfg, "AUDITOR_MAX_FILES", 30) or 30),
+            ),
+            daemon=True,
+        ).start()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("no se pudo evaluar la cadencia de auditoría por features: %s", exc)
 
 
 # ── Rutas — Detalle de Feature ────────────────────────────────────────────────
