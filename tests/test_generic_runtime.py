@@ -61,9 +61,9 @@ def test_pipeline_launch_runs(tc, monkeypatch):
     assert len(body["outputs"]) == 10
 
 
-def test_marketing_page_shows_generic_launcher(tc):
-    body = tc.get("/marketing").text
-    # El card del lanzador genérico siempre está; los pipelines actuales son dedicados.
-    assert "runtime genérico" in body
+def test_meta_page_shows_generic_launcher(tc):
+    # El lanzador de pipelines vive ahora en /meta (se movió desde /marketing).
+    body = tc.get("/meta").text
+    assert "genérico" in body
     assert "dedicado" in body
     assert 'id="gPipeline"' in body

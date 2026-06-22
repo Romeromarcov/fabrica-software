@@ -44,28 +44,61 @@
       </span>
     </div>
     <div class="card-body">
+      <div class="form-text" style="font-size:.72rem;color:#9bb;margin-bottom:.5rem">
+        Para crear un pipeline NUEVO usa el constructor conversacional de arriba. Esta tarjeta
+        añade un agente a un pipeline que ya existe.
+      </div>
+      <label class="form-label" style="font-size:.72rem;color:#888">Pipeline destino</label>
+      <select id="agentPipeline" class="form-select form-select-sm mb-2">
+        {% for p in pipelines %}<option value="{{ p.name }}">{{ p.name }}</option>{% endfor %}
+      </select>
       <textarea id="agentReq" class="form-control mb-2" rows="2"
-                placeholder="Ej: crea un agente de SEO que optimice metadatos para el pipeline marketing"></textarea>
+                placeholder="Ej: crea un agente de SEO que optimice metadatos"></textarea>
       <button class="btn btn-sm btn-primary" onclick="buildAgent()">Generar definición</button>
       <button class="btn btn-sm btn-success" id="agentRegBtn" style="display:none" onclick="registerAgent()">Registrar</button>
+      <div id="agentWarn" class="mt-2" style="display:none"></div>
       <pre id="agentOut" class="mt-2" style="display:none;font-size:.72rem;background:#111;padding:.6rem;border-radius:6px;white-space:pre-wrap"></pre>
     </div>
   </div>
 
-  <!-- ── Pipeline Builder ───────────────────────────────────────────────── -->
+  <!-- ── Lanzar pipeline + disponibles (runtime genérico) ───────────────── -->
   <div class="card mb-3">
-    <div class="card-header d-flex justify-content-between align-items-center">
-      <span class="card-header-title"><i class="bi bi-diagram-3"></i> Crear pipeline</span>
-      <span class="badge bg-{{ 'success' if pipeline_builder_enabled else 'secondary' }}">
-        {{ 'PIPELINE_BUILDER_ENABLED' if pipeline_builder_enabled else 'flag off' }}
-      </span>
-    </div>
+    <div class="card-header"><span class="card-header-title"><i class="bi bi-play-circle"></i> Lanzar pipeline</span></div>
     <div class="card-body">
-      <textarea id="pipeReq" class="form-control mb-2" rows="2"
-                placeholder="Ej: crea un pipeline legal para revisar contratos con agentes de extracción y riesgo"></textarea>
-      <button class="btn btn-sm btn-primary" onclick="buildPipeline()">Generar definición</button>
-      <button class="btn btn-sm btn-success" id="pipeRegBtn" style="display:none" onclick="registerPipeline()">Registrar</button>
-      <pre id="pipeOut" class="mt-2" style="display:none;font-size:.72rem;background:#111;padding:.6rem;border-radius:6px;white-space:pre-wrap"></pre>
+      <div class="form-text" style="font-size:.7rem;color:#666;margin-bottom:.5rem">
+        «Dedicado» = runtime propio por dominio (mejor calidad). «Genérico» = runtime v0 que
+        corre cualquier pipeline.yaml como cadena de llamadas LLM (ideal para pipelines recién creados).
+      </div>
+      <table class="table table-sm" style="font-size:.78rem">
+        <thead><tr><th>Pipeline</th><th>Descripción</th><th>Runtime</th></tr></thead>
+        <tbody>
+        {% for p in pipelines %}
+          <tr>
+            <td><code>{{ p.name }}</code></td>
+            <td style="color:#aaa">{{ p.description or '—' }}</td>
+            <td>
+              {% if p.dedicated %}<span class="badge bg-success">dedicado</span>
+              {% else %}<span class="badge bg-info">genérico (v0)</span>{% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      <div class="row g-2 mt-1">
+        <div class="col-md-4">
+          <label class="form-label" style="font-size:.72rem;color:#888">Pipeline</label>
+          <select id="gPipeline" class="form-select form-select-sm">
+            {% for p in pipelines %}<option value="{{ p.name }}">{{ p.name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="col-12">
+          <label class="form-label" style="font-size:.72rem;color:#888">Brief</label>
+          <textarea id="gBrief" class="form-control" rows="2" placeholder="Describe la tarea a ejecutar..."></textarea>
+        </div>
+      </div>
+      <button class="btn btn-sm btn-info mt-2" id="gBtn" onclick="launchGeneric()">Ejecutar</button>
+      <span id="gSpin" style="display:none;font-size:.8rem;color:#888"> ⏳ ejecutando…</span>
+      <div id="gResult" class="mt-2" style="display:none"></div>
     </div>
   </div>
 
@@ -94,8 +127,20 @@
 
 {% block scripts %}
 <script>
-let _agentDef = null, _pipeDef = null;
+let _agentDef = null;
 let _convHistory = [], _convDraft = null;
+
+function _renderWarnings(id, warnings, label) {
+  const el = document.getElementById(id);
+  if (!warnings || !warnings.length) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  const rows = warnings.map(w => '<li><code>' + (w.id || w.name) + '</code>' +
+    (w.role ? ' — ' + w.role : '') + (w.pipeline ? ' (' + w.pipeline + ')' : '') +
+    ' · similitud ' + Math.round(w.score * 100) + '%</li>').join('');
+  el.style.display = 'block';
+  el.innerHTML = '<div class="alert alert-warning py-2" style="font-size:.74rem">⚠️ Ya existe ' +
+    label + ' parecido en la fábrica:<ul class="mb-0">' + rows + '</ul>' +
+    'Revisa si de verdad necesitas crear otro.</div>';
+}
 
 function _convAppend(role, text) {
   const log = document.getElementById('convLog');
@@ -122,6 +167,10 @@ async function convSend() {
       _convDraft = res.draft;
       dd.style.display = 'block';
       dd.querySelector('pre').textContent = JSON.stringify(res.draft, null, 2);
+      if (res.warnings && res.warnings.length) {
+        _convAppend('assistant', '⚠️ Ya existe un pipeline parecido: ' +
+          res.warnings.map(w => w.name + ' (' + Math.round(w.score * 100) + '%)').join(', '));
+      }
     } else if (res.draft && res.errors && res.errors.length) {
       _convAppend('assistant', '⚠️ Draft con errores: ' + res.errors.join('; '));
       dd.style.display = 'none';
@@ -147,9 +196,13 @@ function _show(id, text) { const el = document.getElementById(id); el.style.disp
 
 async function buildAgent() {
   _show('agentOut', 'Generando…');
-  const res = await _post('/api/meta/build-agent', {request: document.getElementById('agentReq').value});
+  const res = await _post('/api/meta/build-agent', {
+    request:  document.getElementById('agentReq').value,
+    pipeline: document.getElementById('agentPipeline').value,
+  });
   if (!res.ok) { _show('agentOut', '❌ ' + res.error); return; }
   _agentDef = res.definition;
+  _renderWarnings('agentWarn', res.warnings, 'un agente');
   const errs = (res.errors || []).length ? '\n\n⚠️ ' + res.errors.join('; ') : '\n\n✅ válido';
   _show('agentOut', JSON.stringify(res.definition, null, 2) + errs);
   document.getElementById('agentRegBtn').style.display = (res.errors || []).length ? 'none' : 'inline-block';
@@ -160,19 +213,27 @@ async function registerAgent() {
   if (res.ok) document.getElementById('agentRegBtn').style.display = 'none';
 }
 
-async function buildPipeline() {
-  _show('pipeOut', 'Generando…');
-  const res = await _post('/api/meta/build-pipeline', {request: document.getElementById('pipeReq').value});
-  if (!res.ok) { _show('pipeOut', '❌ ' + res.error); return; }
-  _pipeDef = res.definition;
-  const errs = (res.errors || []).length ? '\n\n⚠️ ' + res.errors.join('; ') : '\n\n✅ válido';
-  _show('pipeOut', JSON.stringify(res.definition, null, 2) + errs);
-  document.getElementById('pipeRegBtn').style.display = (res.errors || []).length ? 'none' : 'inline-block';
-}
-async function registerPipeline() {
-  const res = await _post('/api/meta/register-pipeline', {definition: _pipeDef});
-  _show('pipeOut', res.ok ? '✅ Pipeline registrado: ' + res.name : '❌ ' + res.error);
-  if (res.ok) document.getElementById('pipeRegBtn').style.display = 'none';
+async function launchGeneric() {
+  const btn = document.getElementById('gBtn'), spin = document.getElementById('gSpin');
+  const out = document.getElementById('gResult');
+  const pipeline = document.getElementById('gPipeline').value;
+  const brief = document.getElementById('gBrief').value.trim();
+  if (!brief) { out.style.display = 'block'; out.innerHTML = '<span class="text-warning">El brief es requerido.</span>'; return; }
+  btn.disabled = true; spin.style.display = 'inline'; out.style.display = 'none';
+  try {
+    const res = await _post('/api/pipeline/launch', {pipeline, brief});
+    out.style.display = 'block';
+    if (!res.ok) { out.innerHTML = '<span class="text-danger">❌ ' + res.error + '</span>'; return; }
+    out.innerHTML = (res.outputs || []).map(o =>
+      '<div style="margin-bottom:.5rem"><b style="font-size:.78rem">' + o.agent + ' — ' + o.role + '</b>' +
+      '<pre style="font-size:.72rem;background:#111;padding:.5rem;border-radius:6px;white-space:pre-wrap">' +
+      (o.output || '').replace(/</g, '&lt;') + '</pre></div>'
+    ).join('') || '<span class="text-muted">Sin salidas.</span>';
+  } catch (e) {
+    out.style.display = 'block'; out.innerHTML = '<span class="text-danger">❌ ' + e.message + '</span>';
+  } finally {
+    btn.disabled = false; spin.style.display = 'none';
+  }
 }
 
 async function buildFactoryChange() {

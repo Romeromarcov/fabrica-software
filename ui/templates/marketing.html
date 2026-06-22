@@ -52,58 +52,10 @@
     </div>
   </div>
 
-  <!-- ── Pipelines disponibles ──────────────────────────────────────────── -->
-  <div class="card mb-3">
-    <div class="card-header"><span class="card-header-title"><i class="bi bi-diagram-3"></i> Pipelines disponibles</span></div>
-    <div class="card-body">
-      <div class="form-text" style="font-size:.7rem;color:#666;margin-bottom:.5rem">
-        «Dedicado» = runtime propio por dominio (mejor calidad). «Genérico» = runtime v0 que
-        corre cualquier pipeline.yaml como cadena de llamadas LLM, ideal para pipelines recién
-        creados en /meta.
-      </div>
-      <table class="table table-sm" style="font-size:.78rem">
-        <thead><tr><th>Pipeline</th><th>Descripción</th><th>Runtime</th></tr></thead>
-        <tbody>
-        {% for p in pipelines %}
-          <tr>
-            <td><code>{{ p.name }}</code></td>
-            <td style="color:#aaa">{{ p.description or '—' }}</td>
-            <td>
-              {% if p.dedicated %}<span class="badge bg-success">dedicado</span>
-              {% else %}<span class="badge bg-info">genérico (v0)</span>{% endif %}
-            </td>
-          </tr>
-        {% endfor %}
-        </tbody>
-      </table>
-    </div>
-  </div>
-
-  <!-- ── Lanzar pipeline genérico ───────────────────────────────────────── -->
-  <div class="card mb-3">
-    <div class="card-header"><span class="card-header-title"><i class="bi bi-play-circle"></i> Lanzar pipeline (runtime genérico)</span></div>
-    <div class="card-body">
-      <div class="form-text" style="font-size:.7rem;color:#666;margin-bottom:.5rem">
-        Ejecuta cualquier pipeline registrado de forma lineal (sin gates de dominio). Pensado
-        para pipelines nuevos sin runtime dedicado.
-      </div>
-      <div class="row g-2">
-        <div class="col-md-4">
-          <label class="form-label" style="font-size:.72rem;color:#888">Pipeline</label>
-          <select id="gPipeline" class="form-select form-select-sm">
-            {% for p in pipelines %}<option value="{{ p.name }}">{{ p.name }}</option>{% endfor %}
-          </select>
-        </div>
-        <div class="col-12">
-          <label class="form-label" style="font-size:.72rem;color:#888">Brief</label>
-          <textarea id="gBrief" class="form-control" rows="2" placeholder="Describe la tarea a ejecutar..."></textarea>
-        </div>
-      </div>
-      <button class="btn btn-sm btn-info mt-2" id="gBtn" onclick="launchGeneric()">Ejecutar</button>
-      <span id="gSpin" style="display:none;font-size:.8rem;color:#888"> ⏳ ejecutando…</span>
-      <div id="gResult" class="mt-2" style="display:none"></div>
-    </div>
-  </div>
+  <p style="font-size:.72rem;color:#666">
+    ¿Quieres lanzar otro pipeline o ver los disponibles? Ve a
+    <a href="/meta">Meta-agentes</a>.
+  </p>
 </div>
 {% endblock %}
 
@@ -139,33 +91,6 @@ async function launchMarketing() {
       '<div>publicado: <b>' + x.published + '</b> · ref: <code>' + (x.publish_ref || '—') + '</code></div>' +
       '<pre style="font-size:.72rem;background:#111;padding:.6rem;border-radius:6px;white-space:pre-wrap;margin-top:.4rem">' +
       (x.pieza_ensamblada || '').replace(/</g, '&lt;') + '</pre></div>';
-  } catch (e) {
-    out.style.display = 'block'; out.innerHTML = '<span class="text-danger">❌ ' + e.message + '</span>';
-  } finally {
-    btn.disabled = false; spin.style.display = 'none';
-  }
-}
-
-async function launchGeneric() {
-  const btn = document.getElementById('gBtn'), spin = document.getElementById('gSpin');
-  const out = document.getElementById('gResult');
-  const pipeline = document.getElementById('gPipeline').value;
-  const brief = document.getElementById('gBrief').value.trim();
-  if (!brief) { out.style.display = 'block'; out.innerHTML = '<span class="text-warning">El brief es requerido.</span>'; return; }
-  btn.disabled = true; spin.style.display = 'inline'; out.style.display = 'none';
-  try {
-    const r = await fetch('/api/pipeline/launch', {
-      method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({pipeline, brief}),
-    });
-    const res = await r.json();
-    out.style.display = 'block';
-    if (!res.ok) { out.innerHTML = '<span class="text-danger">❌ ' + res.error + '</span>'; return; }
-    out.innerHTML = (res.outputs || []).map(o =>
-      '<div style="margin-bottom:.5rem"><b style="font-size:.78rem">' + o.agent + ' — ' + o.role + '</b>' +
-      '<pre style="font-size:.72rem;background:#111;padding:.5rem;border-radius:6px;white-space:pre-wrap">' +
-      (o.output || '').replace(/</g, '&lt;') + '</pre></div>'
-    ).join('') || '<span class="text-muted">Sin salidas.</span>';
   } catch (e) {
     out.style.display = 'block'; out.innerHTML = '<span class="text-danger">❌ ' + e.message + '</span>';
   } finally {
