@@ -315,6 +315,18 @@ MARKETING_PUBLISH_ENABLED = os.getenv("MARKETING_PUBLISH_ENABLED", "false").lowe
 # revisores A8/A8.5) y ruteo obligatorio por PR (nunca escribe sobre main). Default off.
 FACTORY_MODIFIER_ENABLED = os.getenv("FACTORY_MODIFIER_ENABLED", "false").lower() == "true"
 
+# Auditoría PROGRAMADA de la propia fábrica (PR3). On/off como el auditor de código. Cadencia
+# por tiempo (weekday/hour) o por nº de features ejecutados. Las propuestas de bajo riesgo se
+# auto-aplican a una rama (sin mergear) si FACTORY_AUDIT_AUTOAPPLY. owner/repo para los PRs.
+FACTORY_AUDIT_ENABLED   = os.getenv("FACTORY_AUDIT_ENABLED", "false").lower() == "true"
+FACTORY_AUDIT_MODE      = os.getenv("FACTORY_AUDIT_MODE", "time")        # "time" | "features"
+FACTORY_AUDIT_WEEKDAY   = int(os.getenv("FACTORY_AUDIT_WEEKDAY", "0"))
+FACTORY_AUDIT_HOUR      = int(os.getenv("FACTORY_AUDIT_HOUR", "6"))
+FACTORY_AUDIT_EVERY_FEATURES = int(os.getenv("FACTORY_AUDIT_EVERY_FEATURES", "10"))
+FACTORY_AUDIT_AUTOAPPLY = os.getenv("FACTORY_AUDIT_AUTOAPPLY", "true").lower() == "true"
+FACTORY_AUDIT_MODEL     = os.getenv("FACTORY_AUDIT_MODEL", "claude-sonnet-4-6")
+GITHUB_REPO             = os.getenv("GITHUB_REPO", "")
+
 # M7 (PLAN_PLATAFORMA_V2 Fase 3) — Observabilidad OpenTelemetry. Spans por agente
 # (reusa trace_id de E1.1), export OTLP a Jaeger/Tempo si OTEL_EXPORTER_OTLP_ENDPOINT.
 # Opt-in; la fábrica NO requiere opentelemetry (dep opcional). Default off → no-op.
