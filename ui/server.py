@@ -1058,6 +1058,7 @@ async def skills_page(request: Request, repo: str = ""):
     if not repo and repos:
         repo = repos[0]["name"]
 
+    from tools.skill_tools import group_skills_by_pipeline
     skills = []
     if repo:
         try:
@@ -1069,7 +1070,73 @@ async def skills_page(request: Request, repo: str = ""):
         "repos":       repos,
         "selected_repo": repo,
         "skills":      skills,
+        "skill_groups": group_skills_by_pipeline(skills),
         "active_page": "skills",
+    })
+
+
+# ── Pipelines: hub + sección por dominio (Software, Marketing, …) ──────────────
+
+@app.get("/pipelines", response_class=HTMLResponse)
+async def pipelines_hub(request: Request):
+    """Hub de pipelines: una tarjeta por dominio → entra a su sección con pestañas."""
+    from tools.pipeline_loader import pipeline_summaries
+    from tools.agent_registry import all_agents
+    dedicated = {"software", "marketing"}
+    try:
+        summaries = pipeline_summaries()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("pipelines hub: no se pudieron listar pipelines (%s)", exc)
+        summaries = []
+    for s in summaries:
+        s["dedicated"] = s.get("name") in dedicated
+        try:
+            s["agent_count"] = len(all_agents(s.get("name")))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("pipelines hub: conteo de agentes falló para %s (%s)", s.get("name"), exc)
+            s["agent_count"] = 0
+    return templates.TemplateResponse(request, "pipelines.html", {
+        **_base_ctx(request),
+        "active_page": "pipelines",
+        "pipelines": summaries,
+    })
+
+
+@app.get("/pipeline/{name}", response_class=HTMLResponse)
+async def pipeline_section(request: Request, name: str):
+    """
+    Sección de un pipeline con pestañas (Resumen/Lanzar, Agentes, Skills). Es la 'sección
+    de Software/Marketing/…' que se autogenera para cada pipeline registrado.
+    """
+    from tools.pipeline_loader import load_pipeline
+    from tools.agent_registry import all_agents
+    from tools.skill_tools import list_global_skills
+    try:
+        pdef = load_pipeline(name)
+    except Exception as exc:  # noqa: BLE001
+        logger.info("sección de pipeline '%s' no encontrada: %s", name, exc)
+        return HTMLResponse(f"Pipeline '{name}' no encontrado.", status_code=404)
+
+    dedicated = name in {"software", "marketing"}
+    try:
+        agents = all_agents(name)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("sección %s: no se pudieron listar agentes (%s)", name, exc)
+        agents = []
+    # Skills globales etiquetadas con este pipeline (frontmatter pipeline: <name>).
+    try:
+        skills = [s for s in list_global_skills() if (s.get("pipeline") or "general") == name]
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("sección %s: no se pudieron listar skills (%s)", name, exc)
+        skills = []
+    return templates.TemplateResponse(request, "pipeline_section.html", {
+        **_base_ctx(request),
+        "active_page": "pipelines",
+        "name": name,
+        "pdef": pdef,
+        "dedicated": dedicated,
+        "agents": agents,
+        "skills": skills,
     })
 
 
@@ -2170,7 +2237,7 @@ async def api_get_skill(skill_name: str, repo: str = ""):
 
 @app.post("/api/skills")
 async def api_create_skill(request: Request):
-    """Crea una nueva skill en el repo. Body: {repo, name, description, content}."""
+    """Crea una nueva skill en el repo. Body: {repo, name, description, content, pipeline?}."""
     from tools.skill_tools import create_skill
     from config import resolve_repo_path
 
@@ -2179,11 +2246,12 @@ async def api_create_skill(request: Request):
     name    = data.get("name", "").strip()
     desc    = data.get("description", "").strip()
     content = data.get("content", "").strip()
+    pipeline = (data.get("pipeline") or "general").strip() or "general"
 
     if not repo or not name:
         raise HTTPException(status_code=400, detail="Se requieren 'repo' y 'name'")
 
-    path = create_skill(resolve_repo_path(repo), name, desc, content)
+    path = create_skill(resolve_repo_path(repo), name, desc, content, pipeline=pipeline)
     return {"ok": True, "path": path, "name": name}
 
 
@@ -2222,7 +2290,10 @@ async def api_generate_skill(request: Request):
 
 @app.put("/api/skills/{skill_name}")
 async def api_update_skill(skill_name: str, request: Request):
-    """Actualiza una skill existente. Body: {repo, description, content}."""
+    """Actualiza una skill existente. Body: {repo, description, content, pipeline?}.
+
+    Si no se envía `pipeline`, se PRESERVA el que ya tuviera la skill.
+    """
     from tools.skill_tools import list_skills, update_skill
     from config import resolve_repo_path, list_repos
 
@@ -2230,6 +2301,7 @@ async def api_update_skill(skill_name: str, request: Request):
     repo    = data.get("repo", "")
     desc    = data.get("description", "")
     content = data.get("content", "")
+    pipeline = data.get("pipeline")  # None → preservar el existente
 
     if not repo:
         repos = list_repos()
@@ -2240,7 +2312,7 @@ async def api_update_skill(skill_name: str, request: Request):
     if not skill:
         raise HTTPException(status_code=404, detail=f"Skill '{skill_name}' no encontrada")
 
-    update_skill(skill["path"], desc, content)
+    update_skill(skill["path"], desc, content, pipeline=pipeline)
     return {"ok": True, "name": skill_name}
 
 
