@@ -11,15 +11,14 @@ def tc():
     return TestClient(srv.app)
 
 
-def test_marketing_page_renders_and_lists_pipelines(tc):
+def test_marketing_page_renders(tc):
     resp = tc.get("/marketing")
     assert resp.status_code == 200
     body = resp.text
     assert "Nueva pieza" in body
-    assert "Pipelines disponibles" in body
-    # software y marketing aparecen con runtime dedicado
-    assert "marketing" in body
-    assert "dedicado" in body
+    # El lanzar/listar pipelines se movió a /meta; la página enlaza allí.
+    assert "Pipelines disponibles" not in body
+    assert "/meta" in body
 
 
 def test_launch_requires_pieza_and_brief(tc):

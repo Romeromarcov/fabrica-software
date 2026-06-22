@@ -1077,11 +1077,22 @@ async def skills_page(request: Request, repo: str = ""):
 
 @app.get("/meta", response_class=HTMLResponse)
 async def meta_page(request: Request):
-    """Página de la meta-capa: construir agentes/pipelines y proponer auto-modificaciones."""
+    """Página de la meta-capa: construir agentes/pipelines, lanzarlos y proponer auto-modificaciones."""
     import config as _cfg
+    from tools.pipeline_loader import pipeline_summaries
+    # Pipelines con runtime DEDICADO; el resto es lanzable con el runtime GENÉRICO (v0).
+    dedicated = {"software", "marketing"}
+    try:
+        summaries = pipeline_summaries()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("meta: no se pudieron listar pipelines (%s)", exc)
+        summaries = []
+    for s in summaries:
+        s["dedicated"] = s.get("name") in dedicated
     return templates.TemplateResponse(request, "meta.html", {
         **_base_ctx(request),
         "active_page": "meta",
+        "pipelines": summaries,
         "agent_builder_enabled":    getattr(_cfg, "AGENT_BUILDER_ENABLED", False),
         "pipeline_builder_enabled": getattr(_cfg, "PIPELINE_BUILDER_ENABLED", False),
         "factory_modifier_enabled": getattr(_cfg, "FACTORY_MODIFIER_ENABLED", False),
@@ -1092,22 +1103,11 @@ async def meta_page(request: Request):
 
 @app.get("/marketing", response_class=HTMLResponse)
 async def marketing_page(request: Request):
-    """Página para lanzar una pieza del pipeline `marketing` y ver qué pipelines existen."""
+    """Página para lanzar una pieza del pipeline `marketing` (M0→M8)."""
     import config as _cfg
-    from tools.pipeline_loader import pipeline_summaries
-    # Pipelines con runtime DEDICADO; el resto es lanzable con el runtime GENÉRICO (v0).
-    dedicated = {"software", "marketing"}
-    try:
-        summaries = pipeline_summaries()
-    except Exception:
-        summaries = []
-    for s in summaries:
-        s["dedicated"] = s.get("name") in dedicated
-        s["launchable"] = True  # todo pipeline registrado es lanzable (dedicado o genérico)
     return templates.TemplateResponse(request, "marketing.html", {
         **_base_ctx(request),
         "active_page": "marketing",
-        "pipelines": summaries,
         "publish_enabled": getattr(_cfg, "MARKETING_PUBLISH_ENABLED", False),
     })
 
@@ -1177,17 +1177,27 @@ async def api_pipeline_launch(request: Request):
 
 @app.post("/api/meta/build-agent")
 async def api_meta_build_agent(request: Request):
-    """Genera+valida una definición de agente (NO registra). Body: {request}."""
+    """
+    Genera+valida una definición de agente (NO registra). Body: {request, pipeline?}.
+    `pipeline` fija el dominio destino del agente. Devuelve además `warnings`: agentes ya
+    existentes que harían algo parecido (anti-duplicados; no bloquea, solo avisa).
+    """
     from starlette.concurrency import run_in_threadpool
     from tools.agent_builder import build_agent_definition, validate_agent_definition
+    from tools.dedup_check import find_similar_agents
     data = await request.json()
     req = (data.get("request") or "").strip()
+    pipeline = (data.get("pipeline") or "").strip()
     if not req:
         return JSONResponse({"ok": False, "error": "request requerido"}, status_code=400)
     try:
         definition = await run_in_threadpool(build_agent_definition, req)
+        if pipeline:
+            definition["pipeline"] = pipeline
         errors = validate_agent_definition(definition)
-        return JSONResponse({"ok": True, "definition": definition, "errors": errors})
+        warnings = await run_in_threadpool(find_similar_agents, definition.get("role", ""))
+        return JSONResponse({"ok": True, "definition": definition,
+                             "errors": errors, "warnings": warnings})
     except Exception as exc:  # noqa: BLE001
         logger.exception("meta build-agent error: %s", exc)
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=200)
@@ -1271,6 +1281,7 @@ async def api_meta_converse(request: Request):
     """
     from starlette.concurrency import run_in_threadpool
     from tools.conversational_builder import converse
+    from tools.dedup_check import find_similar_pipelines
     data = await request.json()
     message = (data.get("message") or "").strip()
     history = data.get("history") or []
@@ -1278,7 +1289,13 @@ async def api_meta_converse(request: Request):
         return JSONResponse({"ok": False, "error": "message requerido"}, status_code=400)
     try:
         result = await run_in_threadpool(converse, history, message)
-        return JSONResponse({"ok": True, **result})
+        # Cuando hay diseño listo, avisa si ya existe un pipeline que hace lo mismo (no bloquea).
+        warnings: list = []
+        if result.get("ready") and result.get("draft"):
+            p = result["draft"].get("pipeline", {})
+            warnings = await run_in_threadpool(
+                find_similar_pipelines, p.get("name", ""), p.get("description", ""))
+        return JSONResponse({"ok": True, "warnings": warnings, **result})
     except Exception as exc:  # noqa: BLE001
         logger.exception("meta converse error: %s", exc)
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=200)

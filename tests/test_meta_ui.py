@@ -21,12 +21,34 @@ def test_meta_page_renders(tc):
     body = resp.text
     assert "Meta-agentes" in body
     assert "Crear agente" in body
-    assert "Crear pipeline" in body
+    # La creación de pipelines se consolidó en el constructor conversacional (no card aparte).
+    assert "Constructor conversacional" in body
+    assert "Crear pipeline" not in body
+    # Lanzar/listar pipelines se movió aquí desde /marketing.
+    assert "Lanzar pipeline" in body
     assert "Factory Modifier" in body
 
 
 def test_build_agent_requires_request(tc):
     assert tc.post("/api/meta/build-agent", json={"request": ""}).status_code == 400
+
+
+def test_build_agent_sets_pipeline_and_returns_warnings(tc, monkeypatch):
+    import tools.agent_builder as ab
+    import tools.dedup_check as dc
+    # Mock del LLM: definición mínima sin pipeline explícito.
+    monkeypatch.setattr(ab, "build_agent_definition",
+                        lambda req: ab.normalize_agent_definition(
+                            {"id": "SEO1", "role": "Optimizador SEO", "uses_llm": True}))
+    # Hay ya un agente parecido en la fábrica.
+    monkeypatch.setattr(dc, "find_similar_agents",
+                        lambda role, **k: [{"id": "OLD", "role": "Optimizador SEO",
+                                            "pipeline": "marketing", "score": 0.9}])
+    res = tc.post("/api/meta/build-agent", json={"request": "agente seo", "pipeline": "marketing"})
+    body = res.json()
+    assert body["ok"] is True
+    assert body["definition"]["pipeline"] == "marketing"   # el destino elegido se aplica
+    assert body["warnings"] and body["warnings"][0]["id"] == "OLD"
 
 
 def test_build_pipeline_requires_request(tc):
