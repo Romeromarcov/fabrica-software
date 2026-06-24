@@ -1,0 +1,4 @@
+# Los scripts shell DEBEN tener fin de línea LF: con CRLF el kernel no encuentra el
+# intérprete del shebang dentro del contenedor ("exec /entrypoint.sh: no such file").
+*.sh text eol=lf
+entrypoint.sh text eol=lf
