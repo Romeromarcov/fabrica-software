@@ -2,7 +2,7 @@ FROM python:3.12-slim
 
 # ── System deps + Node.js + gh CLI ───────────────────────────────────────────
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      git curl ca-certificates gnupg tzdata \
+      git curl ca-certificates gnupg tzdata gosu \
     # Node.js 22 LTS (para instalar openclaw CLI via npm)
     && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y nodejs \
@@ -65,14 +65,17 @@ RUN chmod +x /entrypoint.sh
 #   /data       → DB (/data/fabrica_state.db) y runs (/data/runs)
 #   /workspace  → WORKSPACES_ROOT: repos destino clonados al arrancar (clone-on-startup)
 #   /home/fabrica → git config --global escribe ~/.gitconfig
-# NOTA: si en producción se monta un volumen sobre /data o /workspace (compose),
-# el host debe darle propiedad/permiso de escritura al uid 10001.
+# NOTA: cuando se monta un VOLUMEN sobre /data o /workspace (Railway/compose), el
+# volumen aparece como propiedad de root y sombrea este chown de build-time. Por eso el
+# contenedor arranca como root y el entrypoint hace `chown` del volumen montado y luego
+# baja privilegios a `fabrica` (uid 10001) con gosu — el proceso de la app NUNCA corre
+# como root (se preserva A3.3). Esto hace los volúmenes frescos (preview) self-healing.
 RUN useradd --create-home --uid 10001 --shell /bin/sh fabrica \
     && mkdir -p /data/runs /workspace \
     && chown -R fabrica:fabrica /app /data /workspace
 
-USER fabrica
-
+# Sin `USER fabrica`: arrancamos como root para poder chown del volumen montado; el
+# entrypoint dropea a `fabrica` antes de ejecutar la app.
 ENTRYPOINT ["/entrypoint.sh"]
 # sh -c para que ${PORT} (inyectado por Railway) se expanda; default 7860 local/compose.
 CMD ["sh", "-c", "uvicorn ui.server:app --host 0.0.0.0 --port ${PORT:-7860}"]

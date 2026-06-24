@@ -1,6 +1,16 @@
 #!/bin/sh
 set -e
 
+# ── Privilege drop: arrancamos como root para poder chown del volumen montado ──
+# Railway/compose montan volúmenes en /data y /workspace propiedad de root, lo que
+# sombrea el chown de build-time y rompe la escritura como uid 10001 (la DB no se
+# puede crear → healthcheck falla). Como root: arreglamos la propiedad y re-ejecutamos
+# este mismo script ya como `fabrica`. La app NUNCA corre como root (se preserva A3.3).
+if [ "$(id -u)" = "0" ]; then
+  chown -R fabrica:fabrica /data /workspace 2>/dev/null || true
+  exec gosu fabrica "$0" "$@"
+fi
+
 # ── Git identity (necesaria para commits dentro del contenedor) ────────────────
 git config --global user.name  "${GIT_USER_NAME:-Omni ERP Bot}"
 git config --global user.email "${GIT_USER_EMAIL:-bot@omni-erp.local}"
