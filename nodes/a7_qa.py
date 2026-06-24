@@ -2,7 +2,7 @@
 from state import FabricaState
 from nodes.base import call_agent
 from tools.file_tools import save_agent_output
-from tools.learning_memory import extract_patterns, append_to_lessons, load_lessons
+from tools.learning_memory import extract_patterns, append_to_lessons, lessons_for_context
 from config import MAX_QA_ITER_COMPLETO, MAX_QA_ITER_LITE, MODEL_A7
 
 
@@ -17,7 +17,7 @@ def a7_qa(state: FabricaState) -> dict:
     stack_block = f"\n## INSTRUCCIONES DE TESTING\n{qa_instructions}\n" if qa_instructions else ""
 
     # Lecciones aprendidas del proyecto (patrones de error anteriores)
-    lessons_block = load_lessons(state["repo_path"])
+    lessons_block = lessons_for_context(state["repo_path"], state.get("master_plan", ""))
 
     iteration    = state["qa_iterations"] + 1
     max_iter     = MAX_QA_ITER_COMPLETO if state["mode"] == "completo" else MAX_QA_ITER_LITE

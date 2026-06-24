@@ -26,3 +26,6 @@ ruff>=0.4.0             # linter + formatter Python (reemplaza flake8)
 mypy>=1.10.0            # type-checker Python
 scikit-learn>=1.5.0     # VIII-2: routing dinámico TF-IDF
 pyyaml>=6.0             # V2 Fase 0: definición de pipelines data-driven (pipeline.yaml)
+# ── F0.2: memoria semántica de lecciones (VECTOR_MEMORY_ENABLED=true por defecto) ──
+chromadb>=0.5.0               # backend vectorial persistente (fallback keyword si falla)
+sentence-transformers>=3.0.0  # embeddings semánticos para la búsqueda de lecciones

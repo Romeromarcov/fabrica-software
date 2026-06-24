@@ -147,7 +147,12 @@ def _chroma_add(namespace: str, text: str, metadata: dict) -> None:
     col = client.get_or_create_collection(_safe_ns(namespace))
     import hashlib
     doc_id = hashlib.sha256(text.encode("utf-8")).hexdigest()[:32]
-    col.add(documents=[text], metadatas=[metadata or {}], ids=[doc_id])
+    # chromadb rechaza un dict de metadata vacío ("non-empty dict"); con metadata
+    # vacía hay que omitir el argumento (None) en vez de pasar {}.
+    if metadata:
+        col.add(documents=[text], metadatas=[metadata], ids=[doc_id])
+    else:
+        col.add(documents=[text], ids=[doc_id])
 
 
 def _chroma_query(namespace: str, text: str, top_k: int) -> list[dict]:
@@ -165,3 +170,42 @@ def _chroma_query(namespace: str, text: str, top_k: int) -> list[dict]:
             "score": round(1.0 - dists[i], 4) if i < len(dists) else None,
         })
     return out
+
+
+# ── Memoria semántica de lecciones (F0.2) ─────────────────────────────────────
+# Namespace por repo: las lecciones de un repo no contaminan a otro. La escritura
+# se cablea en `learning_memory.append_to_lessons` (punto único que cubre A7 y A8);
+# la lectura semántica la consumen A4/A5/A7 vía `learning_memory.lessons_for_context`.
+
+def namespace_for(repo_path: str | None) -> str:
+    """Namespace de memoria de lecciones derivado del repo (basename, saneado)."""
+    from pathlib import Path as _P
+    base = _P(repo_path).name if repo_path else "default"
+    return f"lessons:{_safe_ns(base)}"
+
+
+def record_lesson(repo_path: str | None, text: str, metadata: dict | None = None) -> bool:
+    """Indexa una lección en la memoria semántica del repo (idempotente por hash del texto)."""
+    if not repo_path or not text:
+        return False
+    return add_memory(namespace_for(repo_path), text, metadata)
+
+
+def semantic_lessons_block(repo_path: str | None, query_text: str, top_k: int = 5) -> str:
+    """
+    Bloque markdown con las `top_k` lecciones más similares semánticamente a `query_text`.
+    Devuelve "" si no hay coincidencias (p. ej. store frío) — el llamador puede degradar
+    al bloque keyword de `load_lessons`.
+    """
+    if not repo_path or not query_text:
+        return ""
+    hits = query(namespace_for(repo_path), query_text, top_k=top_k)
+    if not hits:
+        return ""
+    how = "semántica" if backend() == "chromadb" else "keyword"
+    block = (
+        "\n## ⚠️ LECCIONES APRENDIDAS (memoria " + how + " — más similares a este plan)\n"
+        f"_(top {len(hits)} — no repitas estos errores)_\n\n"
+    )
+    block += "\n".join(f"- {h['text']}" for h in hits) + "\n"
+    return block

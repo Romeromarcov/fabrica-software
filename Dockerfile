@@ -35,6 +35,11 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 WORKDIR /app
 
 COPY requirements.txt .
+# F0.2 — torch CPU-only ANTES de requirements: sentence-transformers arrastra torch y
+# el wheel por defecto incluye las libs CUDA (~2GB), que reventaban el build en Railway
+# (OOM/tamaño). Pre-instalando el wheel CPU (~200MB) desde el índice de PyTorch, pip ve
+# torch ya satisfecho al resolver sentence-transformers y no baja el wheel CUDA.
+RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
 # A3.2 (pinning): existe requirements.lock (pip-compile, deps transitivas fijadas).
 # Aún NO se instala desde el lock: se generó con Python 3.11 y falta verificarlo en
 # CI bajo python:3.12 (Bloque C: pip-audit). Una vez verificado, cambiar a:

@@ -203,10 +203,58 @@ def append_to_lessons(repo_path: str, patterns: list[dict]) -> bool:
             "LearningMemory: %d lecciones nuevas escritas en %s",
             len(new_entries), lessons_path,
         )
-        return True
     except Exception as exc:
         logger.error("LearningMemory: error al escribir LESSONS_LEARNED: %s", exc)
         return False
+
+    # F0.2 — Espejo en memoria semántica (punto único que cubre la escritura de A7 y A8).
+    # No-op efectivo si VECTOR_MEMORY_ENABLED=false (queda solo el JSONL keyword); nunca
+    # debe tumbar el flujo de aprendizaje si el indexado falla.
+    _mirror_patterns_to_vector_memory(repo_path, patterns)
+    return True
+
+
+def _mirror_patterns_to_vector_memory(repo_path: str, patterns: list[dict]) -> None:
+    """Indexa cada patrón en la memoria semántica del repo. Tolerante a fallos."""
+    from tools import vector_memory
+    for p in patterns:
+        text = f"[{p.get('category', '')} | {p.get('severity', '')}] {p.get('description', '')}".strip()
+        try:
+            vector_memory.record_lesson(
+                repo_path, text,
+                metadata={
+                    "category": p.get("category", ""),
+                    "severity": p.get("severity", ""),
+                    "source":   p.get("source", ""),
+                    "feature":  p.get("feature", ""),
+                },
+            )
+        except Exception as exc:  # noqa: BLE001 — el aprendizaje keyword ya quedó persistido
+            logger.warning("LearningMemory: indexado semántico falló (%s); queda el markdown", exc)
+
+
+def lessons_for_context(repo_path: str, query_text: str = "", max_entries: int = MAX_LESSONS_IN_CONTEXT) -> str:
+    """
+    Bloque de lecciones para inyectar en el prompt de un agente constructor (A4/A5/A7).
+
+    F0.2 — Enrutado:
+      • VECTOR_MEMORY_ENABLED=true y `query_text` no vacío → lecciones más similares
+        semánticamente al plan (vía `vector_memory.semantic_lessons_block`). Si el store
+        está frío (sin coincidencias) se degrada al bloque keyword para no regresar.
+      • En cualquier otro caso → comportamiento histórico (`load_lessons`, keyword).
+    """
+    from config import VECTOR_MEMORY_ENABLED
+
+    if VECTOR_MEMORY_ENABLED and query_text:
+        try:
+            from tools import vector_memory
+            block = vector_memory.semantic_lessons_block(repo_path, query_text, top_k=max_entries)
+            if block:
+                return block
+        except Exception as exc:  # noqa: BLE001 — degradar a keyword
+            logger.warning("LearningMemory: lectura semántica falló (%s); fallback keyword", exc)
+
+    return load_lessons(repo_path, max_entries=max_entries)
 
 
 def record_missed_by_pipeline(repo_path: str, finding: str, feature_name: str = "") -> None:
