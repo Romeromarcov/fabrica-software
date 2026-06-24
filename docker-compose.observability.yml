@@ -1,0 +1,24 @@
+# docker-compose.observability.yml — Stack de observabilidad local (PLAN_MAESTRO F0.1).
+#
+# Levanta Jaeger all-in-one con receptor OTLP nativo, para visualizar las trazas que la
+# fábrica exporta vía OTel cuando OTEL_ENABLED=true y OTEL_EXPORTER_OTLP_ENDPOINT apunta
+# al collector OTLP/HTTP (puerto 4318).
+#
+# Uso:
+#   docker compose -f docker-compose.observability.yml up -d
+#   # en el .env de la fábrica:
+#   OTEL_ENABLED=true
+#   OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+#   # corre un feature y abre la UI:
+#   open http://localhost:16686   (busca el service "fabrica-software")
+services:
+  jaeger:
+    image: jaegertracing/all-in-one:1.60
+    container_name: fabrica-jaeger
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686"   # Jaeger UI
+      - "4318:4318"     # OTLP/HTTP (lo que usa opentelemetry-exporter-otlp-proto-http)
+      - "4317:4317"     # OTLP/gRPC (por si se cambia el exporter)
+    restart: unless-stopped

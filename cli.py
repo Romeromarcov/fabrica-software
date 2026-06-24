@@ -36,7 +36,15 @@ def _get_app():
 
 
 def _thread_config(feature_id: str) -> dict:
-    return {"configurable": {"thread_id": feature_id}}
+    # F0.1 — Observabilidad LangSmith: inyecta el tracer del grafo cuando está habilitado
+    # (no-op → callbacks=[] si LangSmith está off/no instalado). Cubre los 5 puntos de
+    # invocación de `app.stream` porque todos derivan su config de aquí.
+    from tools.langsmith_tracing import tracing_callbacks
+    config: dict = {"configurable": {"thread_id": feature_id}}
+    callbacks = tracing_callbacks()
+    if callbacks:
+        config["callbacks"] = callbacks
+    return config
 
 
 # ── Comando: new-feature ──────────────────────────────────────────────────────

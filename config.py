@@ -327,10 +327,11 @@ FACTORY_AUDIT_AUTOAPPLY = os.getenv("FACTORY_AUDIT_AUTOAPPLY", "true").lower() =
 FACTORY_AUDIT_MODEL     = os.getenv("FACTORY_AUDIT_MODEL", "claude-sonnet-4-6")
 GITHUB_REPO             = os.getenv("GITHUB_REPO", "")
 
-# M7 (PLAN_PLATAFORMA_V2 Fase 3) — Observabilidad OpenTelemetry. Spans por agente
-# (reusa trace_id de E1.1), export OTLP a Jaeger/Tempo si OTEL_EXPORTER_OTLP_ENDPOINT.
-# Opt-in; la fábrica NO requiere opentelemetry (dep opcional). Default off → no-op.
-OTEL_ENABLED = os.getenv("OTEL_ENABLED", "false").lower() == "true"
+# M7 / F0.1 — Observabilidad OpenTelemetry. Spans por agente (reusa trace_id de E1.1),
+# export OTLP a Jaeger/Tempo si OTEL_EXPORTER_OTLP_ENDPOINT está definido. opentelemetry
+# va en requirements (F0.1); ON por defecto. Sin endpoint los spans se crean y descartan
+# (no-op observable); con endpoint se exportan. Ver docker-compose.observability.yml.
+OTEL_ENABLED = os.getenv("OTEL_ENABLED", "true").lower() == "true"
 
 # A2.3 — CORS explícito. Allowlist de orígenes (separados por comas). Vacío = no se
 # añade middleware CORS (comportamiento por defecto: sin orígenes cruzados permitidos).
