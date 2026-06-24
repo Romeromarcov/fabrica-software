@@ -147,7 +147,12 @@ def _chroma_add(namespace: str, text: str, metadata: dict) -> None:
     col = client.get_or_create_collection(_safe_ns(namespace))
     import hashlib
     doc_id = hashlib.sha256(text.encode("utf-8")).hexdigest()[:32]
-    col.add(documents=[text], metadatas=[metadata or {}], ids=[doc_id])
+    # chromadb rechaza un dict de metadata vacío ("non-empty dict"); con metadata
+    # vacía hay que omitir el argumento (None) en vez de pasar {}.
+    if metadata:
+        col.add(documents=[text], metadatas=[metadata], ids=[doc_id])
+    else:
+        col.add(documents=[text], ids=[doc_id])
 
 
 def _chroma_query(namespace: str, text: str, top_k: int) -> list[dict]:
