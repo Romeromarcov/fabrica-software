@@ -377,6 +377,13 @@ ui/templates/admin_users.html      ← gestión de usuarios (owner only)
 models/user.py                     ← User model
 ```
 
+> **Estado (2026-06-18):** núcleo de autorización **IMPLEMENTADO offline** — `tools/auth.py`
+> expone `require_can(action)` / `require_role(*roles)` / `check_access` (framework-agnósticos,
+> sobre la matriz `PERMISSIONS` + `can()` de `auth_manager`). *Test:* `tests/test_auth.py` (13;
+> cubre además el `can()`/hashing de `auth_manager`, antes sin tests). La capa de sesión web
+> (Flask-Login, `login.html`, `admin_users.html`, `models/user.py`) es UI y queda pendiente
+> (requiere el contexto de la app web; fuera del núcleo verificable offline).
+
 **Matriz de permisos**
 
 | Acción | owner | developer | viewer |

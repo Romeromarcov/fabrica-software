@@ -74,6 +74,7 @@ def list_skills(repo_path: str) -> list[dict]:
                 skills.append({
                     "name":        name,
                     "description": meta.get("description", ""),
+                    "pipeline":    meta.get("pipeline", "general"),
                     "path":        str(skill_file),
                     "content":     body.strip(),
                     "full_text":   text,
@@ -110,6 +111,7 @@ def list_global_skills() -> list[dict]:
             skills.append({
                 "name":        meta.get("name", skill_file.parent.name),
                 "description": meta.get("description", ""),
+                "pipeline":    meta.get("pipeline", "general"),
                 "path":        str(skill_file),
                 "content":     body,
                 "scope":       "global",
@@ -139,6 +141,20 @@ def all_skills_for(repo_path: str | None) -> list[dict]:
     if repo_path:
         out += list_skills(repo_path)
     return out
+
+
+def group_skills_by_pipeline(skills: list[dict]) -> dict[str, list[dict]]:
+    """
+    Agrupa skills por su campo `pipeline` (frontmatter; 'general' si no lo declara).
+    Devuelve un dict ordenado {pipeline: [skills]} con 'general' al final.
+    """
+    groups: dict[str, list[dict]] = {}
+    for s in skills:
+        groups.setdefault(s.get("pipeline") or "general", []).append(s)
+    ordered = sorted((k for k in groups if k != "general"))
+    if "general" in groups:
+        ordered.append("general")
+    return {k: groups[k] for k in ordered}
 
 
 def _score_skill(skill: dict, task_text: str) -> float:
@@ -236,10 +252,19 @@ def build_skills_context(skills: list[dict], max_chars_per_skill: int = 3000) ->
 
 # ── CRUD para la UI ───────────────────────────────────────────────────────────
 
-def create_skill(repo_path: str, name: str, description: str, content: str) -> str:
+def _frontmatter(name: str, description: str, pipeline: str = "general") -> str:
+    """Construye el bloque de frontmatter; omite `pipeline` cuando es 'general' (default)."""
+    lines = [f"name: {name}", f"description: {description}"]
+    if pipeline and pipeline != "general":
+        lines.append(f"pipeline: {pipeline}")
+    return "---\n" + "\n".join(lines) + "\n---\n"
+
+
+def create_skill(repo_path: str, name: str, description: str, content: str,
+                 pipeline: str = "general") -> str:
     """
-    Crea una nueva skill en docs/skills/<name>/SKILL.md del repo.
-    Devuelve la ruta del archivo creado.
+    Crea una nueva skill en docs/skills/<name>/SKILL.md del repo. `pipeline` la asocia a un
+    dominio (frontmatter) para agruparla en la UI. Devuelve la ruta del archivo creado.
     """
     # Normalizar nombre: lowercase, guiones
     safe_name = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
@@ -247,21 +272,26 @@ def create_skill(repo_path: str, name: str, description: str, content: str) -> s
     skill_dir.mkdir(parents=True, exist_ok=True)
 
     skill_path = skill_dir / "SKILL.md"
-    full_text = f"---\nname: {safe_name}\ndescription: {description}\n---\n\n{content}"
+    full_text = f"{_frontmatter(safe_name, description, pipeline)}\n{content}"
     skill_path.write_text(full_text, encoding="utf-8")
-    logger.info("Skill creada: %s", skill_path)
+    logger.info("Skill creada: %s (pipeline=%s)", skill_path, pipeline)
     return str(skill_path)
 
 
-def update_skill(path: str, description: str, content: str) -> None:
-    """Actualiza el frontmatter y el body de una skill existente."""
+def update_skill(path: str, description: str, content: str,
+                 pipeline: str | None = None) -> None:
+    """
+    Actualiza el frontmatter y el body de una skill existente. Si `pipeline` es None se
+    PRESERVA el que ya tuviera (no se pierde el tag de dominio al editar).
+    """
     p = Path(path)
     if not p.exists():
         raise FileNotFoundError(f"Skill no encontrada: {path}")
     text = p.read_text(encoding="utf-8")
     meta, _ = _parse_frontmatter(text)
     name = meta.get("name", p.parent.name)
-    full_text = f"---\nname: {name}\ndescription: {description}\n---\n\n{content}"
+    eff_pipeline = pipeline if pipeline is not None else meta.get("pipeline", "general")
+    full_text = f"{_frontmatter(name, description, eff_pipeline)}\n{content}"
     p.write_text(full_text, encoding="utf-8")
     logger.info("Skill actualizada: %s", path)
 

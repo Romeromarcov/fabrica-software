@@ -1,0 +1,609 @@
+{
+  "version": 1,
+  "agents": [
+    {
+      "id": "A0",
+      "pipeline": "software",
+      "role": "Arquitecto de Proyecto",
+      "agent_key": "a0_arquitecto",
+      "node_name": null,
+      "uses_llm": true,
+      "model": "gemini-2.5-flash-lite",
+      "model_fallbacks": [],
+      "prompt_file": null,
+      "output_schema": null,
+      "depends_on": [],
+      "activation_flags": [],
+      "hooks": [
+        "pre_agent",
+        "post_agent"
+      ],
+      "judge": {
+        "enabled": false,
+        "model": null
+      }
+    },
+    {
+      "id": "A0_REVISOR",
+      "pipeline": "software",
+      "role": "Revisor de Arquitectura",
+      "agent_key": "a0_revisor",
+      "node_name": null,
+      "uses_llm": true,
+      "model": "gemini-2.5-flash-lite",
+      "model_fallbacks": [],
+      "prompt_file": null,
+      "output_schema": null,
+      "depends_on": [
+        "A0"
+      ],
+      "activation_flags": [],
+      "hooks": [
+        "pre_agent",
+        "post_agent"
+      ],
+      "judge": {
+        "enabled": false,
+        "model": null
+      }
+    },
+    {
+      "id": "A1",
+      "pipeline": "software",
+      "role": "PM / Planificador",
+      "agent_key": "a1_planificador",
+      "node_name": "a1_planificador",
+      "uses_llm": true,
+      "model": "gemini-2.5-flash-lite",
+      "model_fallbacks": [],
+      "prompt_file": "agents/agent_01_pm/system_prompt.md",
+      "output_schema": "MasterPlan",
+      "depends_on": [
+        "A0"
+      ],
+      "activation_flags": [],
+      "hooks": [
+        "pre_agent",
+        "post_agent"
+      ],
+      "judge": {
+        "enabled": false,
+        "model": null
+      }
+    },
+    {
+      "id": "A2",
+      "pipeline": "software",
+      "role": "DB Architect",
+      "agent_key": "a2_db",
+      "node_name": "a2_db",
+      "uses_llm": true,
+      "model": "gemini-2.5-flash-lite",
+      "model_fallbacks": [],
+      "prompt_file": "agents/agent_02_db/system_prompt.md",
+      "output_schema": "DBSchema",
+      "depends_on": [
+        "A1"
+      ],
+      "activation_flags": [
+        "completo_only"
+      ],
+      "hooks": [
+        "pre_agent",
+        "post_agent"
+      ],
+      "judge": {
+        "enabled": false,
+        "model": null
+      }
+    },
+    {
+      "id": "A3",
+      "pipeline": "software",
+      "role": "MCP Toolsmith",
+      "agent_key": "a3_mcp",
+      "node_name": "a3_mcp",
+      "uses_llm": true,
+      "model": "gemini-2.5-flash-lite",
+      "model_fallbacks": [],
+      "prompt_file": "agents/agent_03_mcp_toolsmith/system_prompt.md",
+      "output_schema": null,
+      "depends_on": [
+        "A1"
+      ],
+      "activation_flags": [
+        "needs_mcp"
+      ],
+      "hooks": [
+        "pre_agent",
+        "post_agent"
+      ],
+      "judge": {
+        "enabled": false,
+        "model": null
+      }
+    },
+    {
+      "id": "A4",
+      "pipeline": "software",
+      "role": "Backend Developer",
+      "agent_key": "a4_backend",
+      "node_name": "a4_backend",
+      "uses_llm": true,
+      "model": "gemini-2.5-flash-lite",
+      "model_fallbacks": [],
+      "prompt_file": "agents/agent_04_backend/system_prompt.md",
+      "output_schema": "BackendCode",
+      "depends_on": [
+        "A2",
+        "A3"
+      ],
+      "activation_flags": [
+        "!skip_backend"
+      ],
+      "hooks": [
+        "pre_agent",
+        "post_agent"
+      ],
+      "judge": {
+        "enabled": false,
+        "model": null
+      }
+    },
+    {
+      "id": "A5",
+      "pipeline": "software",
+      "role": "Frontend Developer",
+      "agent_key": "a5_frontend",
+      "node_name": "a5_frontend",
+      "uses_llm": true,
+      "model": "gemini-2.5-flash-lite",
+      "model_fallbacks": [],
+      "prompt_file": "agents/agent_05_frontend/system_prompt.md",
+      "output_schema": "FrontendCode",
+      "depends_on": [
+        "A2"
+      ],
+      "activation_flags": [
+        "!skip_frontend"
+      ],
+      "hooks": [
+        "pre_agent",
+        "post_agent"
+      ],
+      "judge": {
+        "enabled": false,
+        "model": null
+      }
+    },
+    {
+      "id": "A6",
+      "pipeline": "software",
+      "role": "Revisor / Refactor",
+      "agent_key": "a6_refactor",
+      "node_name": "a6_refactor",
+      "uses_llm": true,
+      "model": "gemini-2.5-flash-lite",
+      "model_fallbacks": [],
+      "prompt_file": "agents/agent_06_refactor/system_prompt.md",
+      "output_schema": null,
+      "depends_on": [
+        "A4",
+        "A5"
+      ],
+      "activation_flags": [],
+      "hooks": [
+        "pre_agent",
+        "post_agent"
+      ],
+      "judge": {
+        "enabled": false,
+        "model": null
+      }
+    },
+    {
+      "id": "A7",
+      "pipeline": "software",
+      "role": "QA Test Engineer",
+      "agent_key": "a7_qa",
+      "node_name": "a7_qa",
+      "uses_llm": true,
+      "model": "gemini-2.5-flash-lite",
+      "model_fallbacks": [],
+      "prompt_file": "agents/agent_07_qa/system_prompt.md",
+      "output_schema": "QAReport",
+      "depends_on": [
+        "A6"
+      ],
+      "activation_flags": [],
+      "hooks": [
+        "pre_agent",
+        "post_agent"
+      ],
+      "judge": {
+        "enabled": false,
+        "model": null
+      }
+    },
+    {
+      "id": "A8",
+      "pipeline": "software",
+      "role": "SecOps Auditor",
+      "agent_key": "a8_secops",
+      "node_name": "a8_secops",
+      "uses_llm": true,
+      "model": "gemini-2.5-flash-lite",
+      "model_fallbacks": [],
+      "prompt_file": "agents/agent_08_secops/system_prompt.md",
+      "output_schema": "SecOpsReport",
+      "depends_on": [
+        "A7"
+      ],
+      "activation_flags": [],
+      "hooks": [
+        "pre_agent",
+        "post_agent"
+      ],
+      "judge": {
+        "enabled": false,
+        "model": null
+      }
+    },
+    {
+      "id": "A8_5",
+      "pipeline": "software",
+      "role": "Adversarial Reviewer (repo)",
+      "agent_key": "a85_adversarial",
+      "node_name": "a85_adversarial",
+      "uses_llm": true,
+      "model": "gemini-2.5-flash-lite",
+      "model_fallbacks": [],
+      "prompt_file": null,
+      "output_schema": "AdversarialReport",
+      "depends_on": [
+        "A9"
+      ],
+      "activation_flags": [],
+      "hooks": [
+        "pre_agent",
+        "post_agent"
+      ],
+      "judge": {
+        "enabled": false,
+        "model": null
+      }
+    },
+    {
+      "id": "A9",
+      "pipeline": "software",
+      "role": "Sandbox / Gates",
+      "agent_key": "a9_sandbox",
+      "node_name": "a9_sandbox",
+      "uses_llm": false,
+      "model": null,
+      "model_fallbacks": [],
+      "prompt_file": null,
+      "output_schema": null,
+      "depends_on": [
+        "A10"
+      ],
+      "activation_flags": [],
+      "hooks": [
+        "pre_agent",
+        "post_agent"
+      ],
+      "judge": {
+        "enabled": false,
+        "model": null
+      }
+    },
+    {
+      "id": "A10",
+      "pipeline": "software",
+      "role": "Code Writer",
+      "agent_key": "a10_code_writer",
+      "node_name": "a10_code_writer",
+      "uses_llm": false,
+      "model": null,
+      "model_fallbacks": [],
+      "prompt_file": null,
+      "output_schema": null,
+      "depends_on": [
+        "A8"
+      ],
+      "activation_flags": [],
+      "hooks": [
+        "pre_agent",
+        "post_agent"
+      ],
+      "judge": {
+        "enabled": false,
+        "model": null
+      }
+    },
+    {
+      "id": "A11",
+      "pipeline": "software",
+      "role": "DevOps",
+      "agent_key": "a11_devops",
+      "node_name": "a11_devops",
+      "uses_llm": true,
+      "model": "gemini-2.5-flash-lite",
+      "model_fallbacks": [],
+      "prompt_file": null,
+      "output_schema": null,
+      "depends_on": [
+        "A8_5"
+      ],
+      "activation_flags": [
+        "needs_devops"
+      ],
+      "hooks": [
+        "pre_agent",
+        "post_agent"
+      ],
+      "judge": {
+        "enabled": false,
+        "model": null
+      }
+    },
+    {
+      "id": "M0",
+      "agent_key": "m0",
+      "role": "Brief & Research",
+      "pipeline": "marketing",
+      "uses_llm": true,
+      "model": "gemini-2.5-flash-lite",
+      "model_fallbacks": [],
+      "node_name": null,
+      "output_schema": null,
+      "prompt_file": null,
+      "depends_on": [],
+      "hooks": [
+        "pre_agent",
+        "post_agent"
+      ],
+      "activation_flags": [],
+      "judge": {
+        "enabled": false,
+        "model": null
+      }
+    },
+    {
+      "id": "M1",
+      "agent_key": "m1",
+      "role": "Estratega",
+      "pipeline": "marketing",
+      "uses_llm": true,
+      "model": "gemini-2.5-flash-lite",
+      "model_fallbacks": [],
+      "node_name": null,
+      "output_schema": null,
+      "prompt_file": null,
+      "depends_on": [],
+      "hooks": [
+        "pre_agent",
+        "post_agent"
+      ],
+      "activation_flags": [],
+      "judge": {
+        "enabled": false,
+        "model": null
+      }
+    },
+    {
+      "id": "M2",
+      "agent_key": "m2",
+      "role": "Copywriter",
+      "pipeline": "marketing",
+      "uses_llm": true,
+      "model": "gemini-2.5-flash-lite",
+      "model_fallbacks": [],
+      "node_name": null,
+      "output_schema": null,
+      "prompt_file": null,
+      "depends_on": [],
+      "hooks": [
+        "pre_agent",
+        "post_agent"
+      ],
+      "activation_flags": [],
+      "judge": {
+        "enabled": false,
+        "model": null
+      }
+    },
+    {
+      "id": "M3",
+      "agent_key": "m3",
+      "role": "Director de Arte",
+      "pipeline": "marketing",
+      "uses_llm": true,
+      "model": "gemini-2.5-flash-lite",
+      "model_fallbacks": [],
+      "node_name": null,
+      "output_schema": null,
+      "prompt_file": null,
+      "depends_on": [],
+      "hooks": [
+        "pre_agent",
+        "post_agent"
+      ],
+      "activation_flags": [],
+      "judge": {
+        "enabled": false,
+        "model": null
+      }
+    },
+    {
+      "id": "M4",
+      "agent_key": "m4",
+      "role": "Editor / Ensamblador",
+      "pipeline": "marketing",
+      "uses_llm": true,
+      "model": "gemini-2.5-flash-lite",
+      "model_fallbacks": [],
+      "node_name": null,
+      "output_schema": null,
+      "prompt_file": null,
+      "depends_on": [],
+      "hooks": [
+        "pre_agent",
+        "post_agent"
+      ],
+      "activation_flags": [],
+      "judge": {
+        "enabled": false,
+        "model": null
+      }
+    },
+    {
+      "id": "M5",
+      "agent_key": "m5",
+      "role": "QA de Marca",
+      "pipeline": "marketing",
+      "uses_llm": true,
+      "model": "gemini-2.5-flash-lite",
+      "model_fallbacks": [],
+      "node_name": null,
+      "output_schema": null,
+      "prompt_file": null,
+      "depends_on": [],
+      "hooks": [
+        "pre_agent",
+        "post_agent"
+      ],
+      "activation_flags": [],
+      "judge": {
+        "enabled": false,
+        "model": null
+      }
+    },
+    {
+      "id": "M6",
+      "agent_key": "m6",
+      "role": "Compliance & Brand Safety",
+      "pipeline": "marketing",
+      "uses_llm": true,
+      "model": "gemini-2.5-flash-lite",
+      "model_fallbacks": [],
+      "node_name": null,
+      "output_schema": null,
+      "prompt_file": null,
+      "depends_on": [],
+      "hooks": [
+        "pre_agent",
+        "post_agent"
+      ],
+      "activation_flags": [],
+      "judge": {
+        "enabled": false,
+        "model": null
+      }
+    },
+    {
+      "id": "M6_5",
+      "agent_key": "m6_5",
+      "role": "Adversarial",
+      "pipeline": "marketing",
+      "uses_llm": true,
+      "model": "gemini-2.5-flash-lite",
+      "model_fallbacks": [],
+      "node_name": null,
+      "output_schema": null,
+      "prompt_file": null,
+      "depends_on": [],
+      "hooks": [
+        "pre_agent",
+        "post_agent"
+      ],
+      "activation_flags": [],
+      "judge": {
+        "enabled": false,
+        "model": null
+      }
+    },
+    {
+      "id": "M7",
+      "agent_key": "m7",
+      "role": "Preview / Sandbox",
+      "pipeline": "marketing",
+      "uses_llm": false,
+      "model": null,
+      "model_fallbacks": [],
+      "node_name": null,
+      "output_schema": null,
+      "prompt_file": null,
+      "depends_on": [],
+      "hooks": [],
+      "activation_flags": [],
+      "judge": {
+        "enabled": false,
+        "model": null
+      }
+    },
+    {
+      "id": "M8",
+      "agent_key": "m8",
+      "role": "Publisher",
+      "pipeline": "marketing",
+      "uses_llm": false,
+      "model": null,
+      "model_fallbacks": [],
+      "node_name": null,
+      "output_schema": null,
+      "prompt_file": null,
+      "depends_on": [],
+      "hooks": [],
+      "activation_flags": [],
+      "judge": {
+        "enabled": false,
+        "model": null
+      }
+    },
+    {
+      "id": "M9",
+      "agent_key": "m9",
+      "role": "Analista (async/cron)",
+      "pipeline": "marketing",
+      "uses_llm": true,
+      "model": "gemini-2.5-flash-lite",
+      "model_fallbacks": [],
+      "node_name": null,
+      "output_schema": null,
+      "prompt_file": null,
+      "depends_on": [],
+      "hooks": [
+        "pre_agent",
+        "post_agent"
+      ],
+      "activation_flags": [],
+      "judge": {
+        "enabled": false,
+        "model": null
+      }
+    },
+    {
+      "id": "M10",
+      "agent_key": "m10",
+      "role": "Documentador",
+      "pipeline": "marketing",
+      "uses_llm": true,
+      "model": "gemini-2.5-flash-lite",
+      "model_fallbacks": [],
+      "node_name": null,
+      "output_schema": null,
+      "prompt_file": null,
+      "depends_on": [],
+      "hooks": [
+        "pre_agent",
+        "post_agent"
+      ],
+      "activation_flags": [],
+      "judge": {
+        "enabled": false,
+        "model": null
+      }
+    }
+  ]
+}

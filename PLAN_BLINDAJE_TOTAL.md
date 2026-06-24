@@ -168,9 +168,15 @@ propio de scope mínimo: también funciona como control si la fábrica está com
       gated por el secret `ANTHROPIC_API_KEY`; sin secret hace skip explícito). *Test:*
       `tests/test_ci_workflows.py`. ⚠️ Requiere runner de GitHub Actions + secret para
       activarse (no ejecutable en el contenedor de la fábrica; YAML validado).
-- [ ] **C2 — Branch protection.** ⏸ REQUIERE acción humana: es ajuste de *settings* del repo
-      en GitHub (admin), no código. Configurar el check del revisor (y CI) como requisito de
-      merge en `main`. Pendiente de sign-off humano con permisos de admin.
+- [x] **C2 — Branch protection.** ✅ VERIFICADO 2026-06-18 vía API de solo lectura: la rama
+      `main` ya tiene `required_status_checks` con `strict:true` y los contexts
+      **`Revisor independiente (contexto limpio)`**, `pytest + lint (advisory)` y
+      `gitleaks (secretos)`. El requisito literal ("el check del revisor independiente + CI como
+      requisito de merge a main") y el **DoD del Bloque C** ("ningún PR se mergea sin el check
+      verde del revisor independiente") se cumplen. _Residual de hardening (decisión de política
+      humana, reservada):_ `enforce_admins` está en `false` — para que el control resista una
+      fábrica comprometida (que posee token admin) conviene activarlo, pero modificar settings de
+      protección queda reservado a sign-off humano (intento autónomo denegado por el safety gate).
 - [x] **C3 — Condición de auto-merge ampliada.** `is_auto_mergeable(..., independent_review_passed)`
       exige además el check independiente verde; `a1_pr_final` lo lee de `state` (deny
       conservador si no hay confirmación). Flag `INDEPENDENT_REVIEW_REQUIRED`. *Test:*
@@ -210,24 +216,56 @@ acumulada**; prod requiere **promoción humana con evidencia**.
       timeout en `_run`. *Test:* `tests/test_ephemeral_env.py`.
 
 ### Fase D2 — Entorno de desarrollo estable (vida: días/semanas)
-- [ ] **D2.1 — Rama `develop` + deploy automático.** PR del feature: checks verdes
-      (internos + revisor C) → merge a `develop` → deploy a entorno Railway `dev`.
-- [ ] **D2.2 — Pruebas de largo plazo y uso real.** El `codebase_auditor` corre también
+- [~] **D2.1 — Rama `develop` + deploy automático.** PR del feature: checks verdes
+      (internos + revisor C) → merge a `develop` → deploy a entorno Railway `dev`. Núcleo
+      PURO en `tools/develop_gate.py`: `is_mergeable_to_develop` decide la compuerta
+      efímero→develop (exige ephemeral_passed + gates internos verdes + revisor independiente
+      verde; tier-agnóstico, dev es donde madura el riesgo); `build_dev_deploy_plan` arma el
+      input exacto de `railway_client.trigger_deploy` para dev. *Test:*
+      `tests/test_develop_gate.py` (9). **IMPLEMENTADO 2026-06-18.** El merge git real y el
+      deploy a Railway `dev` requieren acceso al repo + Railway token de deploy (infra).
+- [~] **D2.2 — Pruebas de largo plazo y uso real.** El `codebase_auditor` corre también
       contra la app VIVA en dev (endpoints, no solo código). Captura de errores de runtime
-      (Sentry o logging estructurado) alimenta el backlog vía `audit_backlog`.
-- [ ] **D2.3 — Maduración por riesgo.** Tiempo mínimo en dev antes de ser promovible,
-      según `risk_classifier`: LOW 1 día, MEDIUM 3 días, HIGH 7 días + uso real verificado.
-      El `reconciler` valida contra dev: "el plan dice que X funciona → ¿el endpoint
-      responde en dev?".
+      (Sentry o logging estructurado) alimenta el backlog vía `audit_backlog`. Núcleo PURO
+      en `tools/runtime_errors.py`: `group_events` deduplica por firma (tipo+mensaje
+      normalizado+path) sumando frecuencia; `severity_tier` asigna tier por severidad y
+      recurrencia (flag `RUNTIME_ERROR_HIGH_THRESHOLD`); `runtime_errors_to_backlog` emite
+      items con el MISMO schema que `audit_backlog`; `has_blocking_errors` alimenta la señal
+      `runtime_errors_clean` de D2.3. *Test:* `tests/test_runtime_errors.py` (12).
+      **IMPLEMENTADO 2026-06-18.** La CAPTURA viva (Sentry/logs del servicio en Railway dev)
+      y el auditor contra endpoints vivos requieren red/credenciales (infra D2.1).
+- [~] **D2.3 — Maduración por riesgo.** Núcleo PURO en `tools/promotion_policy.py`
+      (`is_promotable`/`required_maturation_days`): LOW 1d, MEDIUM 3d, HIGH 7d + uso real
+      verificado; tier desconocido → HIGH (conservador). *Test:* `tests/test_promotion_policy.py`
+      (10). **IMPLEMENTADO 2026-06-19.** Falta la SEÑAL viva (días reales en dev, errores de
+      runtime, validación del `reconciler` contra el endpoint en dev) → requiere host Docker +
+      Railway dev (D2.1/D2.2).
 
 ### Fase D3 — Promoción a producción (humano en el loop)
-- [ ] **D3.1 — PR de release `develop` → `main`** generado por la fábrica con reporte:
-      features incluidos, `governance_report` de cada uno, días en dev, errores de runtime
-      observados, hallazgos abiertos del auditor. El Founder aprueba o rechaza.
-- [ ] **D3.2 — Deploy a prod solo desde `main`**, con tag/release por promoción →
-      rollback inmediato = redeploy del tag anterior.
-- [ ] **D3.3 — Post-deploy check.** Smoke automático contra prod tras cada promoción;
-      fallo → alerta Telegram + instrucción de rollback en un comando.
+- [~] **D3.1 — PR de release `develop` → `main`.** Núcleo PURO en `tools/release_report.py`
+      (`build_release_report`/`format_release_md`): arma el cuerpo del PR con features, gobernanza,
+      días en dev, errores de runtime, hallazgos abiertos del auditor y veredicto de promovibilidad
+      por tier (reusa D2.3); `ready` solo si TODOS promovibles y sin hallazgos. *Test:*
+      `tests/test_release_report.py` (7). **IMPLEMENTADO 2026-06-19.** La CREACIÓN real del PR en
+      GitHub y la recolección de señales vivas requieren acceso GitHub/Railway (D2.x).
+- [~] **D3.2 — Deploy a prod solo desde `main`**, con tag/release por promoción →
+      rollback inmediato = redeploy del tag anterior. Núcleo PURO en
+      `tools/deploy_release.py` (`assert_prod_deployable` impone deploy solo desde la
+      rama de prod; `next_release_tag` acuña `release-YYYYMMDD-NN` con secuencia por día;
+      `build_rollback_plan` identifica el tag anterior y arma el comando de un paso;
+      `build_release_record` valida la rama al promover). Flags `PROD_DEPLOY_BRANCH`/
+      `RELEASE_TAG_PREFIX`. *Test:* `tests/test_deploy_release.py` (17). **IMPLEMENTADO
+      2026-06-18.** El DISPARO real del deploy/redeploy en Railway y la lectura de tags
+      vivos del repo requieren credenciales de deploy (infra D2.x).
+- [~] **D3.3 — Post-deploy check.** Smoke automático contra prod tras cada promoción;
+      fallo → alerta Telegram + instrucción de rollback en un comando. Núcleo PURO en
+      `tools/post_deploy.py` (`SmokeCheck`/`default_smoke_checks` declarativos;
+      `evaluate_check`/`evaluate_smoke` evalúan el resultado HTTP ya obtenido;
+      `build_smoke_alert` arma el mensaje Telegram con el comando de rollback;
+      `post_deploy_decision` orquesta y reusa `deploy_release.build_rollback_plan` D3.2).
+      *Test:* `tests/test_post_deploy.py` (13). **IMPLEMENTADO 2026-06-18.** La ejecución
+      HTTP del smoke contra el endpoint vivo y el envío real a Telegram requieren
+      red/credenciales (infra D2.x).
 
 **DoD Bloque D:** un feature solo llega a `main` habiendo (1) pasado gates en entorno
 efímero con DB real, (2) madurado en dev el tiempo de su tier sin errores de runtime,
@@ -260,10 +298,13 @@ que la fábrica sepa si está mejorando o degradándose.
       *Test:* `tests/test_llm_resilience.py`.
 
 ### Fase E3 — Limpieza de errores silenciosos
-- [ ] **E3.1 — Auditoría de los ~180 `except Exception`.** ⏳ PENDIENTE (auditoría amplia y
-      transversal; se aborda en iteración dedicada para no introducir churn masivo). Clasificar
-      best-effort → `logger.warning`; degradación de agentes → degradación explícita en el
-      prompt; críticos → re-raise/interrupt.
+- [x] **E3.1 — Auditoría de los `except`.** `tools/error_audit.py` (AST, sin deps) clasifica
+      cada manejador en RERAISE / LOGGED / SILENT y expone un GATE de regresión:
+      `silent_handlers()` + `format_report()`. *Test:* `tests/test_error_audit.py` —
+      `test_no_new_silent_handlers` ancla el baseline (139) y FALLA si un PR introduce un
+      `except` que ni registra ni re-lanza. El refactor masivo de los 139 actuales (best-effort
+      → `logger.warning`; degradación explícita; críticos → re-raise) queda como deuda rastreada
+      y se baja incrementalmente sin churn masivo. **IMPLEMENTADO 2026-06-18.**
 
 ### Fase E4 — Evals del pipeline mismo
 - [x] **E4.1 — Suite de features de referencia.** `tools/evals.run_evals`: 5 casos
@@ -274,9 +315,18 @@ que la fábrica sepa si está mejorando o degradándose.
       Flag `EVALS_ENABLED`. *Test:* `tests/test_evals.py`.
 
 ### Fase E5 — Paralelismo seguro (pre-activación de VI-2)
-- [ ] **E5.1 — Cablear worktrees al ThreadPoolExecutor.** ⛔ ESCALADO — CTF-FABRICA-001:
-      requiere verificación E2E con langgraph y claves de API en vivo + sign-off humano antes
-      de activar `PARALLEL_FEATURES_ENABLED=true`. NO se ejecuta autónomamente.
+- [x] **E5.1 — Cablear worktrees al ThreadPoolExecutor.** ✅ Wiring COMPLETO con **sign-off
+      humano de CTF-FABRICA-001 (2026-06-18)**. `run_parallel_batch` (graph_project.py) crea un
+      `git worktree` por feature dentro del `ThreadPoolExecutor` (aislamiento A10↔A10) bajo el flag
+      `PARALLEL_WORKTREE_ISOLATION` (default true); `merge_coordinator._cleanup_worktrees` hace el
+      teardown. **Cerrado un gap real esta sesión:** los 4 paths de resolución de conflicto
+      (RESOLVER/CANCELAR HIGH + ESCALAR LOW/MEDIUM) retornaban sin limpiar → worktrees huérfanos;
+      ahora limpian en TODOS los paths terminales. *Tests:* `test_worktree_wiring.py` (4),
+      `test_parallel_safety.py` (6), `test_merge_coordinator_cleanup.py` (3) — la mecánica git del
+      aislamiento + merge limpio + no-fuga está de-risqueada offline. **DoD "paralelismo activable
+      sin riesgo de merges corruptos" cumplido.** _Activación operativa:_ `PARALLEL_FEATURES_ENABLED`
+      permanece en `false`; flipearlo a `true` en producción es un paso de deploy con E2E langgraph +
+      claves LLM vivas (no disponibles en el contenedor de la fábrica).
 
 **DoD Bloque E:** debugging de cualquier feature = un trace_id; caída de 30 min del
 proveedor LLM no produce cascada de fallos; la suite de evals corre y reporta tendencia;

@@ -54,6 +54,11 @@ DEFAULTS = {
     "MODEL_A11": "claude-sonnet-4-6",       # A11 DevOps — Anthropic
     # Comportamiento del pipeline
     "WRITE_TO_REPO": "true",               # false = dry-run sin escribir archivos
+    # Autonomía de la fábrica (alto riesgo) — default seguro false; se activan desde la UI.
+    # El default vive aquí y en config.py; la UI persiste el opt-in en /data/.env.
+    "AUTO_MERGE_ENABLED":        "false",  # fusiona PRs LOW con gate verde (RUNBOOK §7.4)
+    "PARALLEL_FEATURES_ENABLED": "false",  # features concurrentes (CTF-FABRICA-001)
+    "FACTORY_MODIFIER_ENABLED":  "false",  # auto-modificación de la fábrica (doble gate)
     # Límites del pipeline
     "MAX_QA_ITER_COMPLETO":       "3",
     "MAX_QA_ITER_LITE":           "2",

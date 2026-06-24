@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+
+{% block title %}Marketing{% endblock %}
+
+{% block content %}
+<div class="container py-3" style="max-width:880px">
+  <h4 class="mb-1"><i class="bi bi-megaphone"></i> Marketing</h4>
+  <p style="font-size:.8rem;color:#888">
+    Lanza una pieza por el pipeline de marketing (M0→M8: brief → estrategia → copy + arte →
+    ensamble → QA marca → compliance → preview → publicación).
+  </p>
+
+  <!-- ── Lanzar pieza ───────────────────────────────────────────────────── -->
+  <div class="card mb-3">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <span class="card-header-title"><i class="bi bi-rocket-takeoff"></i> Nueva pieza</span>
+      <span class="badge bg-{{ 'success' if publish_enabled else 'secondary' }}">
+        {{ 'Publicación REAL activa' if publish_enabled else 'dry-run (no publica)' }}
+      </span>
+    </div>
+    <div class="card-body">
+      <div class="row g-2">
+        <div class="col-md-6">
+          <label class="form-label" style="font-size:.72rem;color:#888">Nombre de la pieza</label>
+          <input id="mPieza" class="form-control form-control-sm" placeholder="Lanzamiento Q3">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label" style="font-size:.72rem;color:#888">Marca</label>
+          <input id="mMarca" class="form-control form-control-sm" placeholder="Acme">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label" style="font-size:.72rem;color:#888">Canal</label>
+          <input id="mCanal" class="form-control form-control-sm" value="instagram">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label" style="font-size:.72rem;color:#888">Modo</label>
+          <select id="mMode" class="form-select form-select-sm">
+            <option value="post">post</option>
+            <option value="campaña">campaña</option>
+            <option value="lightning">lightning</option>
+          </select>
+        </div>
+        <div class="col-12">
+          <label class="form-label" style="font-size:.72rem;color:#888">Brief</label>
+          <textarea id="mBrief" class="form-control" rows="3"
+                    placeholder="Objetivo, audiencia, mensaje clave, tono..."></textarea>
+        </div>
+      </div>
+      <button class="btn btn-sm btn-primary mt-2" id="mBtn" onclick="launchMarketing()">Lanzar pieza</button>
+      <span id="mSpin" style="display:none;font-size:.8rem;color:#888"> ⏳ ejecutando M0→M8…</span>
+      <div id="mResult" class="mt-2" style="display:none"></div>
+    </div>
+  </div>
+
+  <p style="font-size:.72rem;color:#666">
+    ¿Quieres lanzar otro pipeline o ver los disponibles? Ve a
+    <a href="/meta">Meta-agentes</a>.
+  </p>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function launchMarketing() {
+  const btn = document.getElementById('mBtn'), spin = document.getElementById('mSpin');
+  const out = document.getElementById('mResult');
+  const pieza = document.getElementById('mPieza').value.trim();
+  const brief = document.getElementById('mBrief').value.trim();
+  if (!pieza || !brief) { out.style.display = 'block'; out.innerHTML = '<span class="text-warning">Pieza y brief son requeridos.</span>'; return; }
+  btn.disabled = true; spin.style.display = 'inline'; out.style.display = 'none';
+  try {
+    const r = await fetch('/api/marketing/launch', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        pieza, brief,
+        marca: document.getElementById('mMarca').value,
+        canal: document.getElementById('mCanal').value,
+        mode:  document.getElementById('mMode').value,
+      }),
+    });
+    const res = await r.json();
+    out.style.display = 'block';
+    if (!res.ok) { out.innerHTML = '<span class="text-danger">❌ ' + res.error + '</span>'; return; }
+    const x = res.result;
+    const g = (v) => v ? '✅' : '❌';
+    out.innerHTML =
+      '<div style="font-size:.8rem">' +
+      '<div>riesgo: <b>' + (x.risk_level || '—') + '</b></div>' +
+      '<div>gates — marca ' + g(x.brand_passed) + ' · compliance ' + g(x.compliance_clear) +
+      ' · adversarial ' + g(x.adversarial_clear) + ' · preview ' + g(x.preview_passed) + '</div>' +
+      '<div>publicado: <b>' + x.published + '</b> · ref: <code>' + (x.publish_ref || '—') + '</code></div>' +
+      '<pre style="font-size:.72rem;background:#111;padding:.6rem;border-radius:6px;white-space:pre-wrap;margin-top:.4rem">' +
+      (x.pieza_ensamblada || '').replace(/</g, '&lt;') + '</pre></div>';
+  } catch (e) {
+    out.style.display = 'block'; out.innerHTML = '<span class="text-danger">❌ ' + e.message + '</span>';
+  } finally {
+    btn.disabled = false; spin.style.display = 'none';
+  }
+}
+</script>
+{% endblock %}

@@ -84,24 +84,33 @@ OPENAI_API_KEY    = os.getenv("OPENAI_API_KEY",    "")
 NVIDIA_API_KEY    = os.getenv("NVIDIA_API_KEY",    "")   # build.nvidia.com (Nemotron)
 
 # ── Modelo por agente ─────────────────────────────────────────────────────────
-MODEL_A0 = os.getenv("MODEL_A0", "gemini-3.5-flash")   # A0 Arquitecto de Proyecto
-MODEL_A1 = os.getenv("MODEL_A1", "gemini-3.5-flash")   # A1 PM / Planificador
-MODEL_A2 = os.getenv("MODEL_A2", "claude-sonnet-4-6") # A2 DB Architect
-MODEL_A3 = os.getenv("MODEL_A3", "claude-sonnet-4-6") # A3 MCP Toolsmith
-MODEL_A4 = os.getenv("MODEL_A4", "glm-5.1")           # A4 Backend Developer
-MODEL_A5 = os.getenv("MODEL_A5", "kimi-k2.6")         # A5 Frontend Developer
-MODEL_A6 = os.getenv("MODEL_A6", "claude-sonnet-4-6") # A6 Revisor / Refactor
-MODEL_A7 = os.getenv("MODEL_A7", "gpt-5.5")           # A7 QA Test — OpenAI
-MODEL_A8 = os.getenv("MODEL_A8", "gpt-5.5")           # A8 SecOps — OpenAI
+# Default unificado: todos los agentes con LLM apuntan al modelo más económico disponible
+# (Google Gemini flash-lite). Cada uno sigue siendo overridable por env (MODEL_A*) y la
+# clave del proveedor va en GOOGLE_API_KEY (.env, nunca commiteada).
+_DEFAULT_AGENT_MODEL = "gemini-2.5-flash-lite"
+MODEL_A0 = os.getenv("MODEL_A0", _DEFAULT_AGENT_MODEL)   # A0 Arquitecto de Proyecto
+MODEL_A1 = os.getenv("MODEL_A1", _DEFAULT_AGENT_MODEL)   # A1 PM / Planificador
+MODEL_A2 = os.getenv("MODEL_A2", _DEFAULT_AGENT_MODEL)   # A2 DB Architect
+MODEL_A3 = os.getenv("MODEL_A3", _DEFAULT_AGENT_MODEL)   # A3 MCP Toolsmith
+MODEL_A4 = os.getenv("MODEL_A4", _DEFAULT_AGENT_MODEL)   # A4 Backend Developer
+MODEL_A5 = os.getenv("MODEL_A5", _DEFAULT_AGENT_MODEL)   # A5 Frontend Developer
+MODEL_A6 = os.getenv("MODEL_A6", _DEFAULT_AGENT_MODEL)   # A6 Revisor / Refactor
+MODEL_A7 = os.getenv("MODEL_A7", _DEFAULT_AGENT_MODEL)   # A7 QA Test
+MODEL_A8 = os.getenv("MODEL_A8", _DEFAULT_AGENT_MODEL)   # A8 SecOps
 
 MODEL_A9  = "no-llm"                                         # A9 Sandbox — sin LLM
 MODEL_A10 = "no-llm"                                         # A10 Code Writer — sin LLM
-MODEL_A11 = os.getenv("MODEL_A11", "claude-sonnet-4-6")     # A11 DevOps — Anthropic
+MODEL_A11 = os.getenv("MODEL_A11", _DEFAULT_AGENT_MODEL)    # A11 DevOps
 MODEL_A0_REVISOR = MODEL_A0                                  # A0 Revisor usa el mismo modelo que A0
 
 MODEL_PM       = MODEL_A1
-MODEL_STANDARD = "claude-sonnet-4-6"
-MODEL_FAST     = os.getenv("MODEL_FAST", "claude-haiku-4-5-20251001")
+MODEL_STANDARD = _DEFAULT_AGENT_MODEL
+MODEL_FAST     = os.getenv("MODEL_FAST", _DEFAULT_AGENT_MODEL)
+
+# ── V2 Fase 0: modelo por defecto global (último escalón de la cascada) ────────
+# Resolución de modelo por agente: agent.model → pipeline.default_model → GLOBAL_DEFAULT_MODEL.
+# El modelo por agente sigue siendo OPCIONAL (invariante del PLAN_PLATAFORMA_V2).
+GLOBAL_DEFAULT_MODEL = os.getenv("GLOBAL_DEFAULT_MODEL", MODEL_STANDARD)
 
 # ── Flags de comportamiento del pipeline ──────────────────────────────────────
 # WRITE_TO_REPO: si False, A10 hace dry-run (loguea sin escribir)
@@ -240,6 +249,89 @@ UI_ALLOW_NO_AUTH = os.getenv("UI_ALLOW_NO_AUTH", "false").lower() == "true"
 # en los archivos generados, el gate FALLA (no depende de que el LLM de A8 lo note).
 SECRET_SCAN_GATE = os.getenv("SECRET_SCAN_GATE", "true").lower() == "true"
 
+# R4 (PLAN_PLATAFORMA_V2 Fase 1) — Validador de input (AIDefence lite) antes de A0.
+# INPUT_VALIDATION_GATE: si true, el brief se valida (inyección de prompt → bloqueo;
+# PII/secretos → sanitización). INPUT_VALIDATION_STRICT: PII/secretos también bloquean.
+INPUT_VALIDATION_GATE   = os.getenv("INPUT_VALIDATION_GATE", "true").lower() == "true"
+INPUT_VALIDATION_STRICT = os.getenv("INPUT_VALIDATION_STRICT", "false").lower() == "true"
+
+# M4 (PLAN_PLATAFORMA_V2 Fase 1) — Diff inteligente en A6. Mide cuánto reescribió A6
+# el código (ratio entrada↔salida); si supera el umbral, escala (sobre-refactor).
+# Opt-in: observacional por defecto (registra el ratio); el aviso solo dispara con gate on.
+INTELLIGENT_DIFF_GATE      = os.getenv("INTELLIGENT_DIFF_GATE", "false").lower() == "true"
+INTELLIGENT_DIFF_THRESHOLD = float(os.getenv("INTELLIGENT_DIFF_THRESHOLD", "0.85"))
+
+# M3 (PLAN_PLATAFORMA_V2 Fase 1) — LLM-as-judge: evaluador ligero puntúa la salida de
+# cada agente (post_agent). Opt-in (añade ~1 llamada LLM barata por agente). Por debajo
+# de LLM_JUDGE_MIN_SCORE se registra/escala. Default off → comportamiento idéntico.
+LLM_JUDGE_ENABLED   = os.getenv("LLM_JUDGE_ENABLED", "false").lower() == "true"
+LLM_JUDGE_MODEL     = os.getenv("LLM_JUDGE_MODEL", MODEL_FAST)
+LLM_JUDGE_MIN_SCORE = int(os.getenv("LLM_JUDGE_MIN_SCORE", "60"))
+
+# M5 (PLAN_PLATAFORMA_V2 Fase 2) — Caché local de prompts para proveedores sin caché
+# nativa (Anthropic ya cachea → se salta). Opt-in; default off → comportamiento idéntico.
+SEMANTIC_CACHE_ENABLED     = os.getenv("SEMANTIC_CACHE_ENABLED", "false").lower() == "true"
+SEMANTIC_CACHE_TTL_SECONDS = int(os.getenv("SEMANTIC_CACHE_TTL_SECONDS", "86400"))
+
+# M8 (PLAN_PLATAFORMA_V2 Fase 2) — Contexto dinámico: en A0 (continuar proyecto),
+# añade los archivos más relevantes a la tarea por keywords, además del snapshot.
+# Opt-in; default off → comportamiento idéntico.
+DYNAMIC_CONTEXT_ENABLED = os.getenv("DYNAMIC_CONTEXT_ENABLED", "false").lower() == "true"
+
+# R1 (PLAN_PLATAFORMA_V2 Fase 2) — Memoria vectorial. Si está habilitado Y chromadb
+# instalado → búsqueda semántica; si no, fallback por keywords sobre JSONL. La fábrica
+# NO requiere chromadb (dependencia opcional: `pip install chromadb`). Default off.
+VECTOR_MEMORY_ENABLED = os.getenv("VECTOR_MEMORY_ENABLED", "false").lower() == "true"
+
+# M6 (PLAN_PLATAFORMA_V2 Fase 3) — A/B testing de modelos por agente. En AB_TESTING_PCT
+# de los features, el agente usa su modelo alternativo (model_fallbacks del registry) y se
+# registra el resultado para recomendar el óptimo por rol. Opt-in; default off → idéntico.
+AB_TESTING_ENABLED = os.getenv("AB_TESTING_ENABLED", "false").lower() == "true"
+AB_TESTING_PCT     = float(os.getenv("AB_TESTING_PCT", "0.2"))
+
+# R3 (PLAN_PLATAFORMA_V2 Fase 2) — Paralelismo INTRA-feature A4+A5. Cuando ambos agentes
+# están activos (no skip), corren concurrentes (ThreadPoolExecutor con contexto aislado por
+# hilo) y A6 unifica. Opt-in; default off → ruta secuencial idéntica. NO confundir con
+# PARALLEL_FEATURES_ENABLED (paralelismo a nivel feature, escalado a CTF-FABRICA-001, intocado).
+PARALLEL_AGENTS_ENABLED = os.getenv("PARALLEL_AGENTS_ENABLED", "false").lower() == "true"
+
+# Fase 5 (PLAN_PLATAFORMA_V2) — Agent Builder. Permite REGISTRAR agentes generados
+# conversacionalmente en el registry. Default off + aprobación explícita del fundador por
+# registro (doble gate): la fábrica no se auto-modifica sin intención humana.
+AGENT_BUILDER_ENABLED = os.getenv("AGENT_BUILDER_ENABLED", "false").lower() == "true"
+
+# Fase 6 (PLAN_PLATAFORMA_V2) — Pipeline Builder. Permite ESCRIBIR pipelines generados
+# conversacionalmente (pipelines/<name>/pipeline.yaml). Mismo doble gate que Agent Builder.
+PIPELINE_BUILDER_ENABLED = os.getenv("PIPELINE_BUILDER_ENABLED", "false").lower() == "true"
+
+# PLAN_PIPELINE_MARKETING — Publicación real del pipeline marketing. Default false → M8 hace
+# dry-run (decide y registra publish_ref 'dryrun:' sin llamar a la API del canal). El push
+# real a Instagram/etc. (credenciales vivas) es arista de infra, gated por este flag.
+MARKETING_PUBLISH_ENABLED = os.getenv("MARKETING_PUBLISH_ENABLED", "false").lower() == "true"
+
+# Fase 7 (PLAN_PLATAFORMA_V2) — Factory Modifier. AUTO-MODIFICACIÓN de la fábrica (prompts y
+# campos no-estructurales del registry). Es el ítem de mayor riesgo (autofagia): doble gate
+# (flag + aprobación), deny-list dura (jamás .github/, config, grafo, flags intocables ni los
+# revisores A8/A8.5) y ruteo obligatorio por PR (nunca escribe sobre main). Default off.
+FACTORY_MODIFIER_ENABLED = os.getenv("FACTORY_MODIFIER_ENABLED", "false").lower() == "true"
+
+# Auditoría PROGRAMADA de la propia fábrica (PR3). On/off como el auditor de código. Cadencia
+# por tiempo (weekday/hour) o por nº de features ejecutados. Las propuestas de bajo riesgo se
+# auto-aplican a una rama (sin mergear) si FACTORY_AUDIT_AUTOAPPLY. owner/repo para los PRs.
+FACTORY_AUDIT_ENABLED   = os.getenv("FACTORY_AUDIT_ENABLED", "false").lower() == "true"
+FACTORY_AUDIT_MODE      = os.getenv("FACTORY_AUDIT_MODE", "time")        # "time" | "features"
+FACTORY_AUDIT_WEEKDAY   = int(os.getenv("FACTORY_AUDIT_WEEKDAY", "0"))
+FACTORY_AUDIT_HOUR      = int(os.getenv("FACTORY_AUDIT_HOUR", "6"))
+FACTORY_AUDIT_EVERY_FEATURES = int(os.getenv("FACTORY_AUDIT_EVERY_FEATURES", "10"))
+FACTORY_AUDIT_AUTOAPPLY = os.getenv("FACTORY_AUDIT_AUTOAPPLY", "true").lower() == "true"
+FACTORY_AUDIT_MODEL     = os.getenv("FACTORY_AUDIT_MODEL", "claude-sonnet-4-6")
+GITHUB_REPO             = os.getenv("GITHUB_REPO", "")
+
+# M7 (PLAN_PLATAFORMA_V2 Fase 3) — Observabilidad OpenTelemetry. Spans por agente
+# (reusa trace_id de E1.1), export OTLP a Jaeger/Tempo si OTEL_EXPORTER_OTLP_ENDPOINT.
+# Opt-in; la fábrica NO requiere opentelemetry (dep opcional). Default off → no-op.
+OTEL_ENABLED = os.getenv("OTEL_ENABLED", "false").lower() == "true"
+
 # A2.3 — CORS explícito. Allowlist de orígenes (separados por comas). Vacío = no se
 # añade middleware CORS (comportamiento por defecto: sin orígenes cruzados permitidos).
 CORS_ALLOWED_ORIGINS = [
@@ -275,6 +367,18 @@ EPHEMERAL_CPUS        = os.getenv("EPHEMERAL_CPUS", "1.0")
 EPHEMERAL_TIMEOUT_SECONDS = int(os.getenv("EPHEMERAL_TIMEOUT_SECONDS", "300"))
 # Antigüedad máxima (s) antes de que el reaper coseche un entorno huérfano.
 EPHEMERAL_MAX_AGE_SECONDS = int(os.getenv("EPHEMERAL_MAX_AGE_SECONDS", "3600"))
+
+# ── PLAN_BLINDAJE_TOTAL — Bloque D2.2: errores de runtime en dev ───────────────
+# Recurrencias de un error de nivel `error` en dev que lo escalan a tier HIGH
+# (un error que se repite en la app viva es crítico, no ruido).
+RUNTIME_ERROR_HIGH_THRESHOLD = int(os.getenv("RUNTIME_ERROR_HIGH_THRESHOLD", "10"))
+
+# ── PLAN_BLINDAJE_TOTAL — Bloque D3.2: promoción a producción ──────────────────
+# Deploy a prod SOLO desde esta rama (invariante: nunca desde un feature/branch).
+PROD_DEPLOY_BRANCH = os.getenv("PROD_DEPLOY_BRANCH", "main")
+# Prefijo de los tags de release por promoción → `{prefix}-YYYYMMDD-NN`.
+# El rollback inmediato = redeploy del tag de release anterior (D3.2).
+RELEASE_TAG_PREFIX = os.getenv("RELEASE_TAG_PREFIX", "release")
 
 # ── PLAN_BLINDAJE_TOTAL — Bloque E: resiliencia LLM (E2) ──────────────────────
 # E2.1 — Backoff exponencial + manejo de 429. Reintentos máximos y delay base
@@ -354,6 +458,8 @@ PRICES = {
     "claude-haiku-4-5-20251001": {"input":  0.80, "output":  4.00, "cache_read": 0.08},
     # Google
     "gemini-3.5-flash":          {"input":  0.30, "output":  2.50, "cache_read": 0.00},
+    "gemini-2.5-flash-lite":     {"input":  0.10, "output":  0.40, "cache_read": 0.00},
+    "gemini-2.5-flash":          {"input":  0.30, "output":  2.50, "cache_read": 0.00},
     "gemini-3.1-pro-preview":    {"input":  2.50, "output": 15.00, "cache_read": 0.00},
     "gemini-2.5-pro":            {"input":  1.25, "output": 10.00, "cache_read": 0.00},
     # OpenAI

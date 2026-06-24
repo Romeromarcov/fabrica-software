@@ -1,0 +1,340 @@
+{% extends "base.html" %}
+
+{% block title %}Meta-agentes{% endblock %}
+
+{% block content %}
+<div class="container py-3" style="max-width:900px">
+  <h4 class="mb-1"><i class="bi bi-cpu"></i> Meta-agentes</h4>
+  <p style="font-size:.8rem;color:#888">
+    La fábrica construyéndose a sí misma: crea agentes y pipelines nuevos, o propone
+    auto-modificaciones. Cada capacidad tiene doble gate (flag + aprobación).
+  </p>
+
+  <!-- ── Constructor conversacional ─────────────────────────────────────── -->
+  <div class="card mb-3" style="border:1px solid #2d4a6b">
+    <div class="card-header" style="background:#14202a">
+      <span class="card-header-title"><i class="bi bi-chat-dots"></i> Constructor conversacional de pipelines</span>
+    </div>
+    <div class="card-body">
+      <div class="form-text" style="font-size:.72rem;color:#9bb;margin-bottom:.5rem">
+        Explica en lenguaje natural qué pipeline quieres; el agente pregunta lo necesario y va
+        diseñando cada nodo <b>con su lógica</b> (un system prompt por agente). Al registrar, esa
+        lógica se persiste como prompt_file y el pipeline arranca con calidad dedicada, no genérica.
+      </div>
+      <div id="convLog" style="max-height:280px;overflow-y:auto;background:#0d0d0d;border-radius:6px;padding:.6rem;font-size:.8rem;margin-bottom:.5rem"></div>
+      <div class="d-flex gap-2">
+        <input id="convInput" class="form-control form-control-sm"
+               placeholder="Ej: quiero un pipeline para revisar contratos legales..."
+               onkeydown="if(event.key==='Enter')convSend()">
+        <button class="btn btn-sm btn-primary" id="convBtn" onclick="convSend()">Enviar</button>
+      </div>
+      <div id="convDraft" class="mt-2" style="display:none">
+        <pre style="font-size:.72rem;background:#111;padding:.6rem;border-radius:6px;white-space:pre-wrap"></pre>
+        <button class="btn btn-sm btn-success" onclick="convRegister()">Registrar pipeline + agentes</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Agent Builder ──────────────────────────────────────────────────── -->
+  <div class="card mb-3">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <span class="card-header-title"><i class="bi bi-robot"></i> Crear agente</span>
+      <span class="badge bg-{{ 'success' if agent_builder_enabled else 'secondary' }}">
+        {{ 'AGENT_BUILDER_ENABLED' if agent_builder_enabled else 'flag off' }}
+      </span>
+    </div>
+    <div class="card-body">
+      <div class="form-text" style="font-size:.72rem;color:#9bb;margin-bottom:.5rem">
+        Para crear un pipeline NUEVO usa el constructor conversacional de arriba. Esta tarjeta
+        añade un agente a un pipeline que ya existe.
+      </div>
+      <label class="form-label" style="font-size:.72rem;color:#888">Pipeline destino</label>
+      <select id="agentPipeline" class="form-select form-select-sm mb-2">
+        {% for p in pipelines %}<option value="{{ p.name }}">{{ p.name }}</option>{% endfor %}
+      </select>
+      <textarea id="agentReq" class="form-control mb-2" rows="2"
+                placeholder="Ej: crea un agente de SEO que optimice metadatos"></textarea>
+      <button class="btn btn-sm btn-primary" onclick="buildAgent()">Generar definición</button>
+      <button class="btn btn-sm btn-success" id="agentRegBtn" style="display:none" onclick="registerAgent()">Registrar</button>
+      <div id="agentWarn" class="mt-2" style="display:none"></div>
+      <pre id="agentOut" class="mt-2" style="display:none;font-size:.72rem;background:#111;padding:.6rem;border-radius:6px;white-space:pre-wrap"></pre>
+    </div>
+  </div>
+
+  <!-- ── Lanzar pipeline + disponibles (runtime genérico) ───────────────── -->
+  <div class="card mb-3">
+    <div class="card-header"><span class="card-header-title"><i class="bi bi-play-circle"></i> Lanzar pipeline</span></div>
+    <div class="card-body">
+      <div class="form-text" style="font-size:.7rem;color:#666;margin-bottom:.5rem">
+        «Dedicado» = runtime propio por dominio (mejor calidad). «Genérico» = runtime v0 que
+        corre cualquier pipeline.yaml como cadena de llamadas LLM (ideal para pipelines recién creados).
+      </div>
+      <table class="table table-sm" style="font-size:.78rem">
+        <thead><tr><th>Pipeline</th><th>Descripción</th><th>Runtime</th></tr></thead>
+        <tbody>
+        {% for p in pipelines %}
+          <tr>
+            <td><code>{{ p.name }}</code></td>
+            <td style="color:#aaa">{{ p.description or '—' }}</td>
+            <td>
+              {% if p.dedicated %}<span class="badge bg-success">dedicado</span>
+              {% else %}<span class="badge bg-info">genérico (v0)</span>{% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      <div class="row g-2 mt-1">
+        <div class="col-md-4">
+          <label class="form-label" style="font-size:.72rem;color:#888">Pipeline</label>
+          <select id="gPipeline" class="form-select form-select-sm">
+            {% for p in pipelines %}<option value="{{ p.name }}">{{ p.name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="col-12">
+          <label class="form-label" style="font-size:.72rem;color:#888">Brief</label>
+          <textarea id="gBrief" class="form-control" rows="2" placeholder="Describe la tarea a ejecutar..."></textarea>
+        </div>
+      </div>
+      <button class="btn btn-sm btn-info mt-2" id="gBtn" onclick="launchGeneric()">Ejecutar</button>
+      <span id="gSpin" style="display:none;font-size:.8rem;color:#888"> ⏳ ejecutando…</span>
+      <div id="gResult" class="mt-2" style="display:none"></div>
+    </div>
+  </div>
+
+  <!-- ── Factory Modifier (propose-only) ────────────────────────────────── -->
+  <div class="card mb-3" style="border:1px solid #6b3030">
+    <div class="card-header d-flex justify-content-between align-items-center" style="background:#2a1414">
+      <span class="card-header-title"><i class="bi bi-exclamation-triangle"></i> Factory Modifier (auto-modificación)</span>
+      <span class="badge bg-{{ 'success' if factory_modifier_enabled else 'secondary' }}">
+        {{ 'FACTORY_MODIFIER_ENABLED' if factory_modifier_enabled else 'flag off' }}
+      </span>
+    </div>
+    <div class="card-body">
+      <div class="form-text" style="font-size:.72rem;color:#c98;margin-bottom:.5rem">
+        Propose-only: la web NUNCA aplica el cambio (autofagia). Genera la propuesta y su plan;
+        aplicar requiere rama de trabajo + PR vía CLI (revisor independiente + CI).
+      </div>
+      <textarea id="fmReq" class="form-control mb-2" rows="2"
+                placeholder="Ej: modifica el prompt de A4 para que siempre use type hints"></textarea>
+      <input id="fmBranch" class="form-control form-control-sm mb-2" placeholder="rama destino (ej: feature/20260620-prompt-a4)">
+      <button class="btn btn-sm btn-warning" onclick="buildFactoryChange()">Generar propuesta + plan</button>
+      <pre id="fmOut" class="mt-2" style="display:none;font-size:.72rem;background:#111;padding:.6rem;border-radius:6px;white-space:pre-wrap"></pre>
+    </div>
+  </div>
+
+  <!-- ── Auditoría de la fábrica + aprobación de propuestas ─────────────── -->
+  <div class="card mb-3" style="border:1px solid #3a2f6b">
+    <div class="card-header d-flex justify-content-between align-items-center" style="background:#16142a">
+      <span class="card-header-title"><i class="bi bi-clipboard-check"></i> Auditoría de la fábrica</span>
+      <span class="badge bg-{{ 'success' if factory_audit_enabled else 'secondary' }}">
+        {{ 'FACTORY_AUDIT_ENABLED' if factory_audit_enabled else 'auditor off' }}
+      </span>
+    </div>
+    <div class="card-body">
+      <div class="form-text" style="font-size:.72rem;color:#9bb;margin-bottom:.5rem">
+        La fábrica audita su propio código (programado en <a href="/config">Configuración general</a>:
+        LLM, cadencia por tiempo/features, on-off) y propone mejoras. Las de bajo riesgo se
+        auto-aplican a una rama; tú apruebas el resto: aplicar a rama → PR → mergear, con un clic.
+      </div>
+      <button class="btn btn-sm btn-primary" id="faRunBtn" onclick="runFactoryAudit()">
+        <i class="bi bi-play"></i> Auditar ahora
+      </button>
+      <span id="faSpin" style="display:none;font-size:.8rem;color:#888"> ⏳ auditando…</span>
+      <div id="faSummary" class="mt-2" style="font-size:.78rem"></div>
+
+      <div id="faProposals" class="mt-2">
+        {% for p in factory_proposals %}
+        <div class="card mb-2" data-pid="{{ p.id }}" style="border:1px solid #2a2a3a">
+          <div class="card-body py-2">
+            <div class="d-flex justify-content-between align-items-start">
+              <div style="font-size:.78rem">
+                <span class="badge bg-{{ 'success' if p.risk=='low' else 'warning' if p.risk=='medium' else 'danger' }}">{{ p.risk }}</span>
+                <code>{{ p.change.kind }}</code>
+                {% if p.change.agent_id %}· {{ p.change.agent_id }}.{{ p.change.field }}{% endif %}
+                {% if p.change.target %}· {{ p.change.target }}{% endif %}
+                <span class="badge bg-secondary ms-1">{{ p.status }}</span>
+              </div>
+            </div>
+            <div style="font-size:.74rem;color:#aaa;margin:.3rem 0">{{ p.rationale or '—' }}</div>
+            <div class="d-flex gap-2">
+              {% if p.status in ['pending', 'applied'] %}
+              <button class="btn btn-xs btn-outline-info" onclick="faApply('{{ p.id }}', this)">Aplicar a rama + PR</button>
+              {% endif %}
+              {% if p.status == 'pr_open' %}
+              <a href="{{ p.pr_url }}" target="_blank" class="btn btn-xs btn-outline-light">Ver PR</a>
+              <button class="btn btn-xs btn-success" onclick="faMerge('{{ p.id }}', this)">Mergear</button>
+              {% endif %}
+              {% if p.status != 'merged' %}
+              <button class="btn btn-xs btn-outline-danger" onclick="faDismiss('{{ p.id }}', this)">Descartar</button>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+        {% else %}
+        <p class="text-muted" style="font-size:.78rem">No hay propuestas pendientes.</p>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let _agentDef = null;
+let _convHistory = [], _convDraft = null;
+
+function _renderWarnings(id, warnings, label) {
+  const el = document.getElementById(id);
+  if (!warnings || !warnings.length) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  const rows = warnings.map(w => '<li><code>' + (w.id || w.name) + '</code>' +
+    (w.role ? ' — ' + w.role : '') + (w.pipeline ? ' (' + w.pipeline + ')' : '') +
+    ' · similitud ' + Math.round(w.score * 100) + '%</li>').join('');
+  el.style.display = 'block';
+  el.innerHTML = '<div class="alert alert-warning py-2" style="font-size:.74rem">⚠️ Ya existe ' +
+    label + ' parecido en la fábrica:<ul class="mb-0">' + rows + '</ul>' +
+    'Revisa si de verdad necesitas crear otro.</div>';
+}
+
+function _convAppend(role, text) {
+  const log = document.getElementById('convLog');
+  const who = role === 'user' ? '🧑 Tú' : '🤖 Arquitecto';
+  const color = role === 'user' ? '#9cf' : '#cea';
+  log.innerHTML += '<div style="margin-bottom:.4rem"><b style="color:' + color + '">' + who +
+    ':</b> <span style="white-space:pre-wrap">' + text.replace(/</g, '&lt;') + '</span></div>';
+  log.scrollTop = log.scrollHeight;
+}
+
+async function convSend() {
+  const inp = document.getElementById('convInput'), btn = document.getElementById('convBtn');
+  const msg = inp.value.trim();
+  if (!msg) return;
+  _convAppend('user', msg); inp.value = ''; btn.disabled = true;
+  try {
+    const res = await _post('/api/meta/converse', {history: _convHistory, message: msg});
+    if (!res.ok) { _convAppend('assistant', '❌ ' + res.error); return; }
+    _convAppend('assistant', res.reply);
+    _convHistory.push({role: 'user', content: msg});
+    _convHistory.push({role: 'assistant', content: res.reply});
+    const dd = document.getElementById('convDraft');
+    if (res.ready && res.draft) {
+      _convDraft = res.draft;
+      dd.style.display = 'block';
+      dd.querySelector('pre').textContent = JSON.stringify(res.draft, null, 2);
+      if (res.warnings && res.warnings.length) {
+        _convAppend('assistant', '⚠️ Ya existe un pipeline parecido: ' +
+          res.warnings.map(w => w.name + ' (' + Math.round(w.score * 100) + '%)').join(', '));
+      }
+    } else if (res.draft && res.errors && res.errors.length) {
+      _convAppend('assistant', '⚠️ Draft con errores: ' + res.errors.join('; '));
+      dd.style.display = 'none';
+    }
+  } finally { btn.disabled = false; }
+}
+
+async function convRegister() {
+  if (!_convDraft) return;
+  const res = await _post('/api/meta/register-draft', {draft: _convDraft});
+  _convAppend('assistant', res.ok
+    ? '✅ Registrado: pipeline ' + res.pipeline + ' con agentes ' + (res.agents || []).join(', ') +
+      ' · ' + (res.prompts || []).length + ' nodo(s) con lógica dedicada'
+    : '❌ ' + res.error);
+  if (res.ok) document.getElementById('convDraft').style.display = 'none';
+}
+
+async function _post(url, body) {
+  const r = await fetch(url, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+  return r.json();
+}
+function _show(id, text) { const el = document.getElementById(id); el.style.display = 'block'; el.textContent = text; }
+
+async function buildAgent() {
+  _show('agentOut', 'Generando…');
+  const res = await _post('/api/meta/build-agent', {
+    request:  document.getElementById('agentReq').value,
+    pipeline: document.getElementById('agentPipeline').value,
+  });
+  if (!res.ok) { _show('agentOut', '❌ ' + res.error); return; }
+  _agentDef = res.definition;
+  _renderWarnings('agentWarn', res.warnings, 'un agente');
+  const errs = (res.errors || []).length ? '\n\n⚠️ ' + res.errors.join('; ') : '\n\n✅ válido';
+  _show('agentOut', JSON.stringify(res.definition, null, 2) + errs);
+  document.getElementById('agentRegBtn').style.display = (res.errors || []).length ? 'none' : 'inline-block';
+}
+async function registerAgent() {
+  const res = await _post('/api/meta/register-agent', {definition: _agentDef});
+  _show('agentOut', res.ok ? '✅ Agente registrado: ' + res.id : '❌ ' + res.error);
+  if (res.ok) document.getElementById('agentRegBtn').style.display = 'none';
+}
+
+async function launchGeneric() {
+  const btn = document.getElementById('gBtn'), spin = document.getElementById('gSpin');
+  const out = document.getElementById('gResult');
+  const pipeline = document.getElementById('gPipeline').value;
+  const brief = document.getElementById('gBrief').value.trim();
+  if (!brief) { out.style.display = 'block'; out.innerHTML = '<span class="text-warning">El brief es requerido.</span>'; return; }
+  btn.disabled = true; spin.style.display = 'inline'; out.style.display = 'none';
+  try {
+    const res = await _post('/api/pipeline/launch', {pipeline, brief});
+    out.style.display = 'block';
+    if (!res.ok) { out.innerHTML = '<span class="text-danger">❌ ' + res.error + '</span>'; return; }
+    out.innerHTML = (res.outputs || []).map(o =>
+      '<div style="margin-bottom:.5rem"><b style="font-size:.78rem">' + o.agent + ' — ' + o.role + '</b>' +
+      '<pre style="font-size:.72rem;background:#111;padding:.5rem;border-radius:6px;white-space:pre-wrap">' +
+      (o.output || '').replace(/</g, '&lt;') + '</pre></div>'
+    ).join('') || '<span class="text-muted">Sin salidas.</span>';
+  } catch (e) {
+    out.style.display = 'block'; out.innerHTML = '<span class="text-danger">❌ ' + e.message + '</span>';
+  } finally {
+    btn.disabled = false; spin.style.display = 'none';
+  }
+}
+
+async function buildFactoryChange() {
+  _show('fmOut', 'Generando…');
+  const res = await _post('/api/meta/build-factory-change', {
+    request: document.getElementById('fmReq').value,
+    branch:  document.getElementById('fmBranch').value,
+  });
+  if (!res.ok) { _show('fmOut', '❌ ' + res.error); return; }
+  _show('fmOut', res.plan + '\n\n' + res.note);
+}
+
+// ── Auditoría de la fábrica + aprobación de propuestas ───────────────────────
+async function runFactoryAudit() {
+  const btn = document.getElementById('faRunBtn'), spin = document.getElementById('faSpin');
+  const out = document.getElementById('faSummary');
+  btn.disabled = true; spin.style.display = 'inline'; out.textContent = '';
+  try {
+    const res = await _post('/api/meta/factory-audit/run', {});
+    if (!res.ok) { out.innerHTML = '<span class="text-danger">❌ ' + res.error + '</span>'; return; }
+    const s = res.summary;
+    out.innerHTML = '✅ Generadas ' + s.generated + ' · auto-aplicadas ' + s.auto_applied +
+      ' · pendientes ' + s.pending + (s.errors && s.errors.length ? ' · errores ' + s.errors.length : '');
+    setTimeout(() => window.location.reload(), 1200);
+  } finally { btn.disabled = false; spin.style.display = 'none'; }
+}
+
+function _faRow(pid) { return document.querySelector('[data-pid="' + pid + '"]'); }
+
+async function faApply(pid, btn) {
+  btn.disabled = true; btn.textContent = 'Aplicando…';
+  const res = await _post('/api/meta/factory-audit/proposals/' + pid + '/apply', {});
+  if (!res.ok) { alert('❌ ' + res.error); btn.disabled = false; btn.textContent = 'Aplicar a rama + PR'; return; }
+  window.location.reload();
+}
+async function faMerge(pid, btn) {
+  btn.disabled = true; btn.textContent = 'Mergeando…';
+  const res = await _post('/api/meta/factory-audit/proposals/' + pid + '/merge', {});
+  if (!res.ok) { alert('❌ ' + res.error); btn.disabled = false; btn.textContent = 'Mergear'; return; }
+  window.location.reload();
+}
+async function faDismiss(pid, btn) {
+  if (!confirm('¿Descartar esta propuesta?')) return;
+  const res = await _post('/api/meta/factory-audit/proposals/' + pid + '/dismiss', {});
+  if (!res.ok) { alert('❌ ' + res.error); return; }
+  const row = _faRow(pid); if (row) row.remove();
+}
+</script>
+{% endblock %}

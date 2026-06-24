@@ -371,6 +371,39 @@ def call_agent(
         except Exception:
             pass
 
+    # M6 (PLAN_PLATAFORMA_V2): A/B testing de modelos. En AB_TESTING_PCT de los features,
+    # el agente usa su modelo alternativo (model_fallbacks del registry). Opt-in; no-op si
+    # el flag está off o el agente no tiene alternativas declaradas.
+    try:
+        from config import AB_TESTING_ENABLED, AB_TESTING_PCT
+        if AB_TESTING_ENABLED and _fid:
+            from tools.agent_registry import all_agents
+            from tools.ab_testing import choose_model
+            _match = next((a for a in all_agents() if a.get("agent_key") == agent_key), None)
+            if _match and _match.get("model_fallbacks"):
+                model, _ab_variant = choose_model(
+                    _fid, _match["id"], model, _match["model_fallbacks"], AB_TESTING_PCT,
+                )
+                if _ab_variant:
+                    logger.info("%s: A/B testing → modelo variante %s", agent_label, model)
+    except Exception as _ab_exc:
+        logger.warning("A/B testing de modelos falló (ignorado): %s", _ab_exc)
+
+    # R2 (PLAN_PLATAFORMA_V2): hook pre_agent. Sin hooks registrados es no-op
+    # (comportamiento idéntico). Un hook puede devolver `model`/`task_content`
+    # para influir en la llamada (opt-in, gobernado por quien lo registra).
+    try:
+        from tools.hook_engine import run_hooks
+        _pre = run_hooks("pre_agent", {
+            "agent_key": agent_key, "agent_label": agent_label,
+            "model": model, "task_content": task_content,
+            "feature_id": _fid, "repo_path": repo_path,
+        })
+        model = _pre.get("model", model)
+        task_content = _pre.get("task_content", task_content)
+    except Exception as _hook_exc:
+        logger.warning("hook pre_agent falló (ignorado): %s", _hook_exc)
+
     if USE_OPENCLAW:
         logger.info("→ %s [OpenClaw] | repo: %s", agent_label, repo_path or "—")
         text, cost_entry = _call_openclaw(
@@ -396,7 +429,40 @@ def call_agent(
                 return _call_google_native(**kwargs)
             return _call_openai_compat(provider=provider, **kwargs)
 
-        text, cost_entry = retry_sync(_dispatch, label=agent_label)
+        # M5 (PLAN_PLATAFORMA_V2): caché local para proveedores SIN caché nativa.
+        # Anthropic ya cachea → se salta. Opt-in; default off → comportamiento idéntico.
+        _cache_key = None
+        try:
+            from config import SEMANTIC_CACHE_ENABLED, SEMANTIC_CACHE_TTL_SECONDS
+            if SEMANTIC_CACHE_ENABLED and provider != "anthropic":
+                from tools import prompt_cache
+                _ctx_blob = "".join(f"{k}={v}" for k, v in sorted(resolved_extra.items()))
+                _cache_key = prompt_cache.make_key(
+                    model, read_system_prompt(agent_key), task_content, _ctx_blob,
+                )
+                _hit = prompt_cache.get(_cache_key, ttl_seconds=SEMANTIC_CACHE_TTL_SECONDS)
+            else:
+                _hit = None
+        except Exception as _cache_exc:
+            logger.warning("prompt_cache lookup falló (ignorado): %s", _cache_exc)
+            _cache_key, _hit = None, None
+
+        if _hit is not None:
+            logger.info("→ %s [caché] | modelo: %s (sin llamada al LLM)", agent_label, model)
+            text = _hit
+            cost_entry = make_cost_entry(agent_label, model, _FakeUsage(0, 0))
+        else:
+            # M7 (PLAN_PLATAFORMA_V2): span OTel por agente (no-op si OTEL_ENABLED=false
+            # o el SDK no está instalado). Reusa el trace_id de E1.1.
+            from tools.otel_tracing import span as _otel_span
+            with _otel_span(f"agent.{agent_key}", **{"agent.label": agent_label, "llm.model": model}):
+                text, cost_entry = retry_sync(_dispatch, label=agent_label)
+            if _cache_key is not None:
+                try:
+                    from tools import prompt_cache
+                    prompt_cache.set(_cache_key, text)
+                except Exception as _cache_exc:
+                    logger.warning("prompt_cache store falló (ignorado): %s", _cache_exc)
 
     # VII-2: señal de fin con métricas reales
     if _fid:
@@ -411,5 +477,16 @@ def call_agent(
             )
         except Exception:
             pass
+
+    # R2: hook post_agent (observacional por defecto; no-op sin hooks registrados).
+    try:
+        from tools.hook_engine import run_hooks
+        run_hooks("post_agent", {
+            "agent_key": agent_key, "agent_label": agent_label,
+            "model": model, "feature_id": _fid, "output_text": text,
+            "cost_usd": cost_entry.get("cost_usd", 0.0),
+        })
+    except Exception as _hook_exc:
+        logger.warning("hook post_agent falló (ignorado): %s", _hook_exc)
 
     return text, cost_entry

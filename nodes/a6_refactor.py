@@ -148,6 +148,32 @@ La última línea DEBE ser exactamente una de:
     approved = "✅ LISTO PARA QA" in output
     bloqueante = "🚫 BLOQUEANTE CRÍTICO" in output
 
+    # M4 (PLAN_PLATAFORMA_V2): diff inteligente entrada↔salida. Mide cuánto reescribió
+    # A6 respecto al código que recibió de A4/A5. Observacional por defecto; si
+    # INTELLIGENT_DIFF_GATE está on y el ratio supera el umbral, escala (sobre-refactor).
+    import logging as _diff_log
+    _diff_logger = _diff_log.getLogger(__name__)
+    refactor_change_ratio = 0.0
+    try:
+        from config import INTELLIGENT_DIFF_GATE, INTELLIGENT_DIFF_THRESHOLD
+        from tools.code_diff import diff_report
+        before_code = (state.get("backend_code", "") or "") + "\n" + (state.get("frontend_code", "") or "")
+        rep = diff_report(before_code, output, threshold=INTELLIGENT_DIFF_THRESHOLD)
+        refactor_change_ratio = rep.change_ratio
+        if INTELLIGENT_DIFF_GATE and rep.exceeds_threshold and before_code.strip():
+            _diff_logger.warning(
+                "A6: ratio de cambio %.2f supera el umbral %.2f — posible sobre-refactor",
+                rep.change_ratio, rep.threshold,
+            )
+            notify_escalation(
+                feature_name=state.get("feature_name", state["feature_id"]),
+                reason=(f"A6 diff inteligente — reescritura {rep.change_ratio:.0%} "
+                        f"(> {rep.threshold:.0%}); revisar sobre-refactor"),
+                project_name=state.get("project_name"),
+            )
+    except Exception as _diff_exc:
+        _diff_logger.warning("diff inteligente A6 falló (ignorado): %s", _diff_exc)
+
     # Actualizar memoria del proyecto cuando el código es aprobado
     if approved and state.get("project_id"):
         try:
@@ -174,6 +200,7 @@ La última línea DEBE ser exactamente una de:
     return {
         "refactor_doc_output": output,
         "refactor_doc_approved": approved,
+        "refactor_change_ratio": refactor_change_ratio,
         "current_agent": "a6_refactor",
         "cost_entries": [cost],
         "errors": (

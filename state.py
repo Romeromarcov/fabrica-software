@@ -66,6 +66,7 @@ class FabricaState(TypedDict):
     # ── Revisión y unificación de código (pre-QA) ────────────────────────────
     refactor_doc_output: Optional[str]   # Agente 5 (Revisor/Unificador — corre antes de QA)
     refactor_doc_approved: bool          # True = "✅ LISTO PARA QA" emitido
+    refactor_change_ratio: float         # M4: ratio de cambio entrada↔salida de A6 (0..1)
 
     # ── PR Final ──────────────────────────────────────────────────────────────
     pr_message: Optional[str]
@@ -161,6 +162,7 @@ def initial_state(
         sandbox_iterations=0,
         refactor_doc_output=None,
         refactor_doc_approved=False,
+        refactor_change_ratio=0.0,
         pr_message=None,
         needs_mcp=True,
         skip_backend=False,
@@ -187,3 +189,43 @@ def initial_state(
         errors=[],
         cost_entries=[],
     )
+
+
+# ── PLAN_PIPELINE_MARKETING §3 — estado del pipeline `marketing` ──────────────
+# State propio del dominio (segundo dominio de referencia de la Plataforma V2). La
+# EJECUCIÓN del grafo de marketing la hace el runtime; este TypedDict es el contrato
+# de estado que `state_schema: MarketingState` referencia en pipelines/marketing/pipeline.yaml.
+class MarketingState(TypedDict, total=False):
+    # ── Entrada / brief (M0) ──────────────────────────────────────────────────
+    objetivo: str
+    marca: str
+    canal: str                       # instagram, tiktok, ...
+    pieza_nombre: str
+    brief: str
+    mode: Literal["campaña", "post", "lightning"]
+
+    # ── Plan (M1 Estratega) ───────────────────────────────────────────────────
+    plan: Optional[str]
+    risk_level: str
+    confidence_score: int
+    needs_human_asset: bool          # D1: requiere material del mundo real
+
+    # ── Producción (M2 copy / M3 arte en paralelo → M4 ensambla) ──────────────
+    copy_output: Optional[str]
+    arte_output: Optional[str]
+    pieza_ensamblada: Optional[str]
+
+    # ── Gates de dominio ──────────────────────────────────────────────────────
+    brand_passed: bool               # M5 QA de Marca
+    compliance_clear: bool           # M6 Compliance / Brand Safety
+    adversarial_clear: bool          # M6_5 Adversarial
+    preview_passed: bool             # M7 Preview / specs del canal
+
+    # ── Publicación (M8) ──────────────────────────────────────────────────────
+    published: bool
+    publish_ref: Optional[str]       # id/url del post programado o publicado
+
+    # ── Comunes (mismo contrato que FabricaState) ─────────────────────────────
+    current_agent: str
+    errors: Annotated[list[str], operator.add]
+    cost_entries: Annotated[list[CostEntry], operator.add]

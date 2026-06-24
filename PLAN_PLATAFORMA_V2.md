@@ -147,63 +147,135 @@ funcionalidad (todos los gates, modos completo/lite/lightning, checkpoints human
 > Orden = dependencias técnicas. Cada fase entrega valor por sí sola y deja la base para la
 > siguiente. Esfuerzo: 🟢 bajo · 🟡 medio · 🔴 alto.
 
-### FASE 0 — Cimientos del refactor (prerequisito de todo)
+### FASE 0 — Cimientos del refactor (prerequisito de todo) — ✅ IMPLEMENTADA (2026-06-18)
 **Objetivo:** desacoplar agentes del grafo sin cambiar comportamiento observable.
-- 🟡 [C2-base] Crear `agents/registry.json` y migrar A0–A11 a ese formato.
-- 🟡 [C3-base] `graph_builder.py`: construir el grafo desde registry + pipeline.yaml.
-- 🟢 [M1] Schemas Pydantic por salida de agente (`schemas/`), validación en `base.py`.
-- 🟢 [R2] Hook engine: puntos `pre_agent`, `post_agent`, `pre_write`, `post_qa`,
-  `on_approval`, `on_error`, `pre_pr`. Registrables desde `config.py`/pipeline.yaml.
-- ✅ **Gate de la fase:** el pipeline `software` corre idéntico a hoy, ahora data-driven.
-- ✅ **Invariante verificada:** `model` por agente sigue funcionando vía resolución en cascada.
+- ✅ [C2-base] `agents/registry.json` (14 agentes A0–A11 + A0_revisor + A8.5) +
+  `tools/agent_registry.py` (loader + `resolve_model` cascada). *Test:* `test_agent_registry.py` (8).
+- ✅ [C3-base] `graph_builder.py` + `tools/pipeline_loader.py` + `pipelines/software/pipeline.yaml`:
+  arma la spec data-driven y un StateGraph desde registry + yaml. *Tests:* `test_graph_builder.py` (5),
+  `test_pipeline_loader.py` (4).
+- ✅ [M1] Schemas Pydantic por salida de agente (`schemas/agent_outputs.py`: BackendCode,
+  QAReport, SecOpsReport, …) + `validate_output`. *Test:* `test_schemas.py` (7).
+- ✅ [R2] Hook engine (`tools/hook_engine.py`): puntos `pre_agent`, `post_agent`, `pre_write`,
+  `post_qa`, `on_approval`, `on_error`, `pre_pr`. Cableado **no-op-by-default** en
+  `base.call_agent`. *Tests:* `test_hook_engine.py` (7), `test_hook_integration.py` (3).
+- ✅ **Gate de la fase:** el pipeline `software` corre idéntico a hoy. `graph.py` sigue siendo
+  el path de producción (con su routing condicional); el builder es el cimiento data-driven,
+  validado por **parity test** (cada `node_name` del registry existe en `build_graph()`).
+- ✅ **Invariante verificada:** `model` por agente sigue funcionando vía resolución en cascada
+  (`agente.model → pipeline.default_model → config.GLOBAL_DEFAULT_MODEL`); test confirma fidelidad
+  a `config.MODEL_Ax`.
+
+> **Nota de alcance:** la migración del *routing condicional* completo de `graph.py` al
+> `graph_builder` (modos completo/lite/lightning, checkpoints, escalaciones) es el incremento
+> siguiente. Fase 0 entrega el cimiento data-driven sin tocar el comportamiento de producción.
 
 ### FASE 1 — Calidad y confiabilidad (gana robustez ya)
-- 🟡 [M3] LLM-as-judge: evaluador ligero (modelo barato) puntúa cada output antes de pasar
-  al siguiente agente; bajo umbral → reintento o escalación.
-- 🟢 [M4] Diff inteligente en A6: diff input↔output, justificación por cambio, escalación si
-  cambia > umbral (p.ej. 30%).
-- 🟡 [M2] Replay/debugging: persistir checkpoints navegables + comando
-  `fabrica-cli replay <feature> --from A6`. UI para reanudar desde cualquier nodo.
-- 🟢 [R4] Validador de input (AIDefence lite): `tools/input_validator.py` antes de A0 —
-  prompt injection, PII/credenciales, instrucciones maliciosas.
+- ✅ [M3] LLM-as-judge: `tools/llm_judge.py` (evaluador ligero, modelo barato) puntúa la
+  salida de cada agente vía hook `post_agent` (R2), reentrante-seguro (no se juzga a sí
+  mismo). Bajo `LLM_JUDGE_MIN_SCORE` → registra/escala. Gate `LLM_JUDGE_ENABLED` (opt-in);
+  el hook se registra en `build_graph()` (no-op si off). *Test:* `test_llm_judge.py` (13).
+  **IMPLEMENTADO 2026-06-18.** (El reintento automático por routing del grafo queda para
+  un incremento posterior — hoy se registra/escala.)
+- ✅ [M4] Diff inteligente en A6: `tools/code_diff.py` (ratio de cambio entrada↔salida vía
+  difflib + diff unificado recortado) cableado en `a6_refactor` (gate `INTELLIGENT_DIFF_GATE`):
+  registra `refactor_change_ratio` en el state y escala si supera el umbral (sobre-refactor).
+  *Test:* `test_code_diff.py` (8) + `test_a6_intelligent_diff.py` (3). **IMPLEMENTADO 2026-06-18.**
+- ✅ [M2] Replay/debugging: `tools/replay.py` (checkpoints desde `output_<nodo>.md`,
+  `load_run_state`, `replay_plan` desde un nodo reutilizando checkpoints previos) + comando
+  `fabrica-cli replay <feature> [--from <nodo>]`. *Test:* `test_replay.py` (9).
+  **IMPLEMENTADO 2026-06-18.** (La re-ejecución real desde el nodo y la UI de reanudar quedan
+  para un incremento posterior; hoy se inspecciona y se calcula el plan.)
+
+### FASE 1 — COMPLETA ✅ (R4 #18 · M4 #19 · M3 #20 · M2) — 2026-06-18
+- ✅ [R4] Validador de input (AIDefence lite): `tools/input_validator.py` cableado en
+  `a0_arquitecto` (gate `INPUT_VALIDATION_GATE`) — detecta inyección de prompt (es/en),
+  PII (email/tarjeta/teléfono) y secretos (reusa `log_sanitizer`); neutraliza el brief
+  antes de que llegue al LLM. *Test:* `test_input_validator.py` (14). **IMPLEMENTADO 2026-06-18.**
 
 ### FASE 2 — Rendimiento y costo
-- 🟢 [R3] Paralelismo A4+A5 en worktrees aislados cuando ambos están activos; A6 unifica.
-- 🟡 [M5] Caché semántica local (hash de system prompt + fingerprint del repo) para
-  proveedores sin cache nativa (Google/OpenAI). Anthropic ya cacheado.
-- 🔴 [M8] Contexto dinámico: seleccionar archivos relevantes del repo por
-  imports/módulos/keywords en vez del fingerprint estático completo.
-- 🟡 [R1] Memoria vectorial (ChromaDB): reemplaza/complementa `learning_memory.py` y
-  `fewshot_builder.py`. Query semántico de planes/soluciones pasadas para A1/A4/A5.
-  Namespaces por pipeline y por repo.
+- ✅ [R3] Paralelismo INTRA-feature A4+A5 (autorizado por el founder, rewire del grafo).
+  `nodes/a45_parallel.py` corre A4 y A5 concurrentes (`ThreadPoolExecutor` + `copy_context()`
+  por hilo → `trace_id` aislado; cada agente recibe copia del state) y A6 unifica. Routing del
+  grafo cableado (`_use_parallel_agents` + ramas en `_route_after_db`/`_route_after_mcp`/
+  `_route_after_approval`) bajo `PARALLEL_AGENTS_ENABLED` (opt-in, default off → ruta secuencial
+  idéntica; parity preservada). *Test:* `test_parallel_agents.py` (11). **IMPLEMENTADO 2026-06-18.**
+  NOTA: es intra-feature; NO es `PARALLEL_FEATURES_ENABLED` (paralelismo a nivel feature,
+  sigue en false / CTF-FABRICA-001). *(Con esto Fase 2 — M5/M8/R1/R3 — queda completa.)*
+- ✅ [M5] Caché local de prompts (`tools/prompt_cache.py`, content-addressed: hash de
+  modelo+system prompt+tarea+contexto) para proveedores sin caché nativa; Anthropic se salta
+  (ya cachea). Cableada en `base.call_agent` bajo `SEMANTIC_CACHE_ENABLED` (opt-in, default off
+  → idéntico). *Test:* `test_prompt_cache.py` (7, incl. integración: 2ª llamada sin LLM).
+  **IMPLEMENTADO 2026-06-18.**
+- ✅ [M8] Contexto dinámico: `tools/context_selector.py` selecciona los archivos del repo
+  más relevantes a la tarea (keywords en ruta+contenido, densidad, recencia) en vez del
+  fingerprint estático. Cableado en `a0_arquitecto` (modo continuar) bajo
+  `DYNAMIC_CONTEXT_ENABLED` (opt-in, default off). *Test:* `test_context_selector.py` (8).
+  **IMPLEMENTADO 2026-06-18.**
+- ✅ [R1] Memoria vectorial (`tools/vector_memory.py`): query semántico de planes/soluciones
+  pasadas con namespaces por pipeline+repo. Backend ChromaDB si está instalado y
+  `VECTOR_MEMORY_ENABLED=true`; si no, **fallback** por solapamiento de keywords sobre JSONL.
+  La fábrica NO requiere chromadb (dependencia opcional). *Test:* `test_vector_memory.py` (7,
+  ejercitan el fallback). **IMPLEMENTADO 2026-06-18.**
 
 ### FASE 3 — Observabilidad y optimización basada en datos
-- 🟡 [M7] OpenTelemetry → Jaeger/Grafana Tempo. Timeline por agente, latencia por modelo,
-  tokens/s, cuellos de botella. Reusa los trace IDs (E1.1) existentes.
-- 🟡 [M6] A/B testing de modelos por agente: en X% de features, agente usa modelo
-  alternativo; `quality_tracker.py` registra iteraciones/costo → recomienda modelo óptimo
-  por rol. (Explota directamente la ventaja de "modelo por agente".)
-- 🟢 [M10] Dry run: correr solo A0+A1 y proyectar tiempo/costo/riesgo/iteraciones esperadas
-  (usando memoria vectorial de features similares) antes de comprometer el pipeline.
+- ✅ [M7] OpenTelemetry (`tools/otel_tracing.py`): spans por agente cableados en
+  `base.call_agent` (reusa el trace_id de E1.1); export OTLP a Jaeger/Tempo si hay endpoint.
+  Dep OPCIONAL (no-op si opentelemetry no está instalado o `OTEL_ENABLED=false`). *Test:*
+  `test_otel_tracing.py` (6, ejercitan el no-op). **IMPLEMENTADO 2026-06-18.**
 
-### FASE 4 — Runtime multi-pipeline (la separación por dominio) [C3]
-- 🟡 Descubrimiento automático de `pipelines/*/pipeline.yaml`.
+### FASE 3 — COMPLETA ✅ (M7 · M6 · M10) — 2026-06-18
+- ✅ [M6] A/B testing de modelos por agente (`tools/ab_testing.py`): bucketing determinista
+  por `hash(feature+agente)`; en `AB_TESTING_PCT` de features el agente usa su modelo
+  alternativo (`model_fallbacks` del registry). `record_result`/`recommend_model` comparan
+  score/costo/iteraciones y recomiendan el óptimo por rol. Cableado en `base.call_agent`
+  (opt-in `AB_TESTING_ENABLED`, no-op sin alternativas). *Test:* `test_ab_testing.py` (9).
+  **IMPLEMENTADO 2026-06-18.**
+- ✅ [M10] Dry run: `tools/dry_run.py` proyecta tiempo/costo/riesgo/iteraciones esperadas
+  desde el riesgo del plan (`risk_classifier`) + historial (`quality_tracker`), antes de
+  comprometer el pipeline. Comando `fabrica-cli dry-run "<brief>" [--project <id>]`.
+  *Test:* `test_dry_run.py` (6). **IMPLEMENTADO 2026-06-18.**
+
+### FASE 4 — Runtime multi-pipeline (la separación por dominio) [C3] — EN PROGRESO
+- ✅ Descubrimiento automático de `pipelines/*/pipeline.yaml` (`pipeline_loader.discover_pipelines`, Fase 0).
 - 🟡 State por pipeline (`MarketingState`, etc.) + gates y output handlers por dominio.
 - 🟢 CLI: `fabrica-cli run <pipeline> "<objetivo>"`; UI lista pipelines disponibles.
-- 🟢 Output handlers pluggables: `github_pr`, `files`, `notion`, `email`, `api_call`.
-- ✅ **Entregable:** crear `pipelines/marketing/` como segundo dominio de referencia.
-  Diseño detallado en **`PLAN_PIPELINE_MARKETING.md`** (state, agentes M0–M10, gates de marca/
-  compliance, modos campaña/post/lightning, autonomía graduada y handlers de publicación).
+  - ✅ **`fabrica-cli pipelines`** — lista los dominios descubiertos (nombre/descripción/entry/
+    nº agentes/modelo) vía `pipeline_loader.pipeline_summaries` (pure, no rompe ante YAML
+    inválido). *Test:* `test_pipeline_summaries.py` (4). **2026-06-18.** (El subcomando `run`
+    que EJECUTA el grafo del pipeline queda pendiente: requiere LLM en vivo.)
+- ✅ Output handlers pluggables: `tools/output_handlers.py` — `files` (real), `noop`/`log`, y
+  `github_pr`/`notion`/`email`/`api_call` con estado honesto `not_configured` hasta cablear
+  credenciales (no se finge éxito). *Test:* `test_output_handlers.py` (8). **2026-06-18.**
+- ✅ **Entregable:** `pipelines/marketing/` EXISTE como segundo dominio de referencia
+  (antes era un claim; ahora real en disco): `pipelines/marketing/pipeline.yaml` (M0–M8+M6_5,
+  modos campaña/post/lightning, gates brand/specs/compliance/adversarial, trigger
+  software.feature_merged), 12 agentes marketing en `agents/registry.json` (M7/M8 deterministas
+  = no-llm, espejo de A9/A10), y `MarketingState` en `state.py`. Discovery + `build_pipeline_spec`
+  resuelven el dominio sin tocar `software`. Diseño en **`PLAN_PIPELINE_MARKETING.md`**.
+  *Test:* `tests/test_marketing_pipeline.py` (11). Suite 559. **IMPLEMENTADO 2026-06-18.**
+  (La EJECUCIÓN del grafo marketing —LLM por agente— la hace el runtime, fuera de alcance offline.)
 
-### FASE 5 — Agentes dinámicos: Agent Builder [C2]
-- 🟡 Agente conversacional que, dado "quiero un agente de SEO que…", genera definición +
-  prompt + posición en pipeline + schema, y lo **registra** en el registry.
-- 🟢 Aprobación humana del fundador antes de activar el nuevo agente.
-- 🟢 Validación: el agente nuevo respeta resolución de modelo en cascada (opcional).
+### FASE 5 — Agentes dinámicos: Agent Builder [C2] — ✅ IMPLEMENTADA (2026-06-18)
+- ✅ Agente conversacional que, dado "quiero un agente de SEO que…", genera definición +
+  posición en pipeline + schema, y lo **registra** en el registry. `tools/agent_builder.py`:
+  `build_agent_definition` (LLM inyectable/mockeable; sin JSON válido → lanza, no finge éxito),
+  `validate_agent_definition`/`normalize_agent_definition` (puras), `register_agent` (persiste).
+- ✅ Aprobación humana del fundador antes de activar: **doble gate** en `register_agent` —
+  `AGENT_BUILDER_ENABLED` (config, default off) Y `approved=True`. Sin ambos → `PermissionError`.
+- ✅ Validación: el agente nuevo respeta la resolución de modelo en cascada (`model=None` →
+  pipeline default → GLOBAL_DEFAULT_MODEL), id único/formato, coherencia uses_llm/model.
+- *Test:* `tests/test_agent_builder.py` (17). Suite 502. **IMPLEMENTADO 2026-06-18.**
+  Nota: la conexión del Agent Builder a una UI conversacional en vivo usa el LLM ya cableado
+  (Gemini); aquí se entrega el núcleo verificable (generación+validación+registro con gates).
 
-### FASE 6 — Pipeline Builder (crear pipelines conversacionalmente) [C3]
-- 🟡 Extiende Agent Builder: "crea un pipeline legal" → genera `pipeline.yaml` + prompts +
-  state + gates base, listo para iterar.
+### FASE 6 — Pipeline Builder (crear pipelines conversacionalmente) [C3] — ✅ IMPLEMENTADA (2026-06-18)
+- ✅ Extiende Agent Builder: "crea un pipeline legal" → genera `pipeline.yaml` (name, agents,
+  entry, gates, state, output), lo valida y lo escribe en `pipelines/<name>/pipeline.yaml`.
+  `tools/pipeline_builder.py`: `build_pipeline_definition` (LLM inyectable/mockeable; sin JSON
+  válido → lanza), `validate`/`normalize` (puras), `register_pipeline` (escribe el YAML).
+  Doble gate: `PIPELINE_BUILDER_ENABLED` (default off) + `approved=True`. *Test:*
+  `tests/test_pipeline_builder.py` (14). Suite 516. **IMPLEMENTADO 2026-06-18.**
 
 ### FASE 7 — Meta-capa conversacional: Factory Modifier [C1]
 > La fábrica modificándose a sí misma = **autofagia controlada**. Requiere los gates más
@@ -213,30 +285,53 @@ funcionalidad (todos los gates, modos completo/lite/lightning, checkpoints human
 - 🔴 Meta-pipeline: meta-conversación → Meta-A1 propone cambio → **diff mostrado al
   fundador** → aprobación explícita (nivel superior al normal) → Meta-A10 escribe → tests de
   la fábrica corren → deploy/rollback.
-- 🟢 Interfaz unificada en lenguaje natural: "modifica el prompt de A4", "añade un paso de
-  traducción antes de A1", "crea un agente de marketing" → enruta a Factory Modifier /
-  Agent Builder / Pipeline Builder.
+- ✅ Interfaz unificada en lenguaje natural: `tools/factory_router.py` (`route_request`)
+  clasifica la petición y la enruta a Agent Builder / Pipeline Builder / Factory Modifier con
+  reglas DETERMINISTAS (LLM opcional inyectable para casos ambiguos). `is_executable()` marca
+  que los builders son ejecutables y que el Factory Modifier NO lo es autónomamente. *Test:*
+  `tests/test_factory_router.py` (10). Suite 548. **IMPLEMENTADO 2026-06-18.**
+- ⏸️ Meta-pipeline de auto-modificación (Meta-A1→diff→aprobación→Meta-A10 escribe→tests→
+  deploy/rollback) — **ESCALADO**: la fábrica reescribiendo su propio código es autofagia de
+  máximo riesgo (hard-to-reverse, auto-modificación). Requiere diseño y sign-off humano
+  explícito antes de implementarse; no se construye autónomamente.
 
-### FASE 8 — Orquestación entre pipelines (eventos) [C3]
-- 🟡 Pipeline Orchestrator: bus de eventos desacoplado.
-  `software.feature_merged` → dispara `marketing` con el changelog mapeado.
-- 🟢 Triggers configurables por el fundador en `pipeline.yaml`.
+### FASE 8 — Orquestación entre pipelines (eventos) [C3] — EN PROGRESO
+- ✅ Pipeline Orchestrator (`tools/pipeline_orchestrator.py`): resuelve QUÉ pipelines dispara
+  un evento (`triggers_for_event`) y CÓMO se mapea el payload al input (`map_event_to_input`,
+  resuelve `input.*`). `on_event` devuelve el PLAN de despacho (la ejecución del pipeline
+  destino, que requiere LLM, la hace el runtime). Maneja el quirk YAML 1.1 `on:`→bool.
+  *Test:* `test_pipeline_orchestrator.py` (6). **2026-06-18.**
+- ✅ Triggers configurables por el fundador en `pipeline.yaml` (campo `triggers`, ya en el schema).
 - 📎 Caso estrella detallado en `PLAN_PIPELINE_MARKETING.md` §8: al mergear un feature del ERP,
   marketing **propone automáticamente** el contenido para anunciarlo.
 
 ### FASE 9 — Auto-mejora y trazabilidad
-- 🔴 [M9] Meta-agente de auto-mejora: analiza historial (iteraciones QA, rollbacks,
-  escalaciones) y propone mejoras a los **prompts de los agentes**. Se ejecuta a través del
-  Factory Modifier (Fase 7) con aprobación. Cierra el ciclo: la fábrica que se mejora sola.
-- 🔴 [R5] Trazabilidad objetivo→backlog→código: validar que el backlog cubre el objetivo
-  (apoyado en el dependency graph de `branch_manager.py`); planificación con búsqueda sobre
-  espacio de estados para garantizar completitud.
+- ✅ [M9] Meta-agente de auto-mejora: `tools/self_improvement.py` agrega señales reales
+  (quality_tracker.compute_trend + evals.eval_trend + learning_memory.recurring_error_patterns)
+  y propone mejoras **priorizadas** con un motor de reglas DETERMINISTA (verificable sin LLM):
+  `gather_signals` / `propose_improvements` / `format_improvement_report`. *Test:*
+  `tests/test_self_improvement.py` (11). Suite 527. **IMPLEMENTADO 2026-06-18.**
+  Nota: la *aplicación* de las propuestas a los prompts pasa por el Factory Modifier (Fase 7,
+  alto riesgo) con aprobación; M9 entrega el análisis y las acciones priorizadas.
+- ✅ [R5] Trazabilidad objetivo→backlog: `tools/traceability.py` valida que el backlog
+  cubre el objetivo con un motor DETERMINISTA de cobertura por solapamiento de términos
+  (`extract_requirements` con LLM inyectable/fallback, `coverage`, `is_complete`,
+  `format_traceability_report`): reporta requisitos cubiertos vs gaps + % de cobertura.
+  *Test:* `tests/test_traceability.py` (11). Suite 538. **IMPLEMENTADO 2026-06-18.**
 
 ### FASE 10 — Extensiones de valor
-- 🟢 [M11] Agente documentador A12 (modelo barato): changelog humano, README, diagramas
-  Mermaid de endpoints, actualización de DECISION_LOG.md. Entregable: código **+** docs.
-- 🟡 [M12] Integración con issue trackers (Linear/Jira/GitHub Issues): feature desde issue,
-  cierre automático al merge, sub-issues por agente, trazabilidad requisito→PR.
+- ✅ [M11] Documentador A12: `tools/doc_generator.py` genera (determinista, sin LLM)
+  changelog humano agrupado por capa + diagramas Mermaid de endpoints y ER de modelos.
+  Cableado en `a1_pr_final` (changelog en el cuerpo del PR). *Test:* `test_doc_generator.py`
+  (8). **IMPLEMENTADO 2026-06-18.** *(El pulido con LLM barato es opt-in futuro; la estructura
+  sale del tool, no se inventa.)*
+- ✅ [M12] Integración con issue trackers (`tools/issue_tracker.py`): parseo issue→feature
+  spec, extracción de criterios de aceptación, keyword `Closes #N` (auto-cierre al merge),
+  bloque de trazabilidad requisito→PR. Las APIs de red (`fetch_issue`/`create_subissues`)
+  reportan `not_configured` hasta cablear credenciales (no se finge). *Test:*
+  `test_issue_tracker.py` (10). **IMPLEMENTADO 2026-06-18.**
+
+### FASE 10 — COMPLETA ✅ (M11 · M12) — 2026-06-18
 
 ### FUTURO (no priorizado)
 - 🔴 [R6] Federation (mTLS + ed25519): agentes distribuidos en varias máquinas. Solo si se

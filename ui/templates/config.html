@@ -518,6 +518,81 @@
     </div>
   </div>
 
+  <!-- ── Autonomía (alto riesgo) ──────────────────────────────────────────── -->
+  <div class="card mb-4" style="border:1px solid #6b3030">
+    <div class="card-header" style="background:#2a1414">
+      <i class="bi bi-exclamation-triangle" style="color:#e0a030"></i>
+      <span class="card-header-title">Autonomía de la Fábrica (alto riesgo)</span>
+    </div>
+    <div class="card-body">
+      <div class="form-text" style="font-size:.72rem;color:#c98; margin-bottom:.75rem">
+        Estos interruptores entregan autonomía a la fábrica. Por diseño vienen en <code>false</code>.
+        Actívalos solo de forma consciente: cada uno tiene precondiciones de seguridad (ver RUNBOOK §7.4
+        y CTF-FABRICA-001). El cambio persiste en el volumen (<code>/data/.env</code>) y gana sobre el entorno.
+      </div>
+      <div class="row g-3">
+
+        <!-- AUTO_MERGE_ENABLED -->
+        <div class="col-md-4">
+          <label class="form-label" style="font-size:.78rem;color:#888;text-transform:uppercase;letter-spacing:.05em">
+            Auto-merge
+          </label>
+          <div class="form-check form-switch mb-0 mt-1">
+            <input class="form-check-input" type="checkbox" role="switch"
+                   id="autoMergeSwitch" name="auto_merge_enabled"
+                   {% if cfg.get('AUTO_MERGE_ENABLED', 'false') == 'true' %}checked{% endif %}>
+            <label class="form-check-label" for="autoMergeSwitch" style="font-size:.82rem;color:#ccc">
+              Fusionar PRs LOW con gate verde
+            </label>
+          </div>
+          <div class="form-text" style="font-size:.7rem;color:#555">
+            Solo tier LOW + gate verde se auto-fusiona (squash, revertible). MEDIUM avisa; HIGH siempre humano.
+            <strong>Precondición:</strong> tasa de falsos-OK = 0 sostenida (RUNBOOK §7.4).
+          </div>
+        </div>
+
+        <!-- PARALLEL_FEATURES_ENABLED -->
+        <div class="col-md-4">
+          <label class="form-label" style="font-size:.78rem;color:#888;text-transform:uppercase;letter-spacing:.05em">
+            Features en paralelo
+          </label>
+          <div class="form-check form-switch mb-0 mt-1">
+            <input class="form-check-input" type="checkbox" role="switch"
+                   id="parallelSwitch" name="parallel_features_enabled"
+                   {% if cfg.get('PARALLEL_FEATURES_ENABLED', 'false') == 'true' %}checked{% endif %}>
+            <label class="form-check-label" for="parallelSwitch" style="font-size:.82rem;color:#ccc">
+              Ejecutar features concurrentes (worktree aislado)
+            </label>
+          </div>
+          <div class="form-text" style="font-size:.7rem;color:#555">
+            Cada feature corre en su propio git worktree. <strong>Precondición:</strong> cerrar
+            CTF-FABRICA-001 con una corrida E2E real (langgraph + claves vivas).
+          </div>
+        </div>
+
+        <!-- FACTORY_MODIFIER_ENABLED -->
+        <div class="col-md-4">
+          <label class="form-label" style="font-size:.78rem;color:#888;text-transform:uppercase;letter-spacing:.05em">
+            Factory Modifier
+          </label>
+          <div class="form-check form-switch mb-0 mt-1">
+            <input class="form-check-input" type="checkbox" role="switch"
+                   id="factoryModifierSwitch" name="factory_modifier_enabled"
+                   {% if cfg.get('FACTORY_MODIFIER_ENABLED', 'false') == 'true' %}checked{% endif %}>
+            <label class="form-check-label" for="factoryModifierSwitch" style="font-size:.82rem;color:#ccc">
+              Auto-modificación de la fábrica
+            </label>
+          </div>
+          <div class="form-text" style="font-size:.7rem;color:#555">
+            Permite aplicar cambios acotados (prompts/registry) a la propia fábrica. Doble gate:
+            además exige aprobación explícita por cambio y ruteo por PR (nunca toca <code>main</code>).
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
   <!-- ── Límites ────────────────────────────────────────────────────────── -->
   <div class="card mb-4">
     <div class="card-header">
@@ -706,6 +781,87 @@
 
       <!-- Estado del scheduler -->
       <div id="auditorStatusBadge" class="mt-2" style="font-size:.72rem;color:#555"></div>
+    </div>
+  </div>
+
+  <!-- ── Auditor de la propia Fábrica (Factory Modifier) ───────────────────── -->
+  <div class="card mb-4" style="border:1px solid #3a2f6b">
+    <div class="card-header">
+      <i class="bi bi-clipboard-check" style="color:var(--brand-light)"></i>
+      <span class="card-header-title">Auditor de la Fábrica</span>
+      <span class="ms-auto d-flex align-items-center gap-2">
+        <div class="form-check form-switch mb-0 d-flex align-items-center gap-2">
+          <input class="form-check-input" type="checkbox" role="switch" id="factoryAuditSwitch"
+                 {% if cfg.get('FACTORY_AUDIT_ENABLED','false') == 'true' %}checked{% endif %}
+                 onchange="document.getElementById('factoryAuditField').checked = this.checked">
+          <label class="form-check-label" for="factoryAuditSwitch" style="font-size:.78rem;color:#888">
+            {% if cfg.get('FACTORY_AUDIT_ENABLED','false') == 'true' %}Auditor activo{% else %}Auditor inactivo{% endif %}
+          </label>
+        </div>
+        <input type="checkbox" name="factory_audit_enabled" id="factoryAuditField"
+               {% if cfg.get('FACTORY_AUDIT_ENABLED','false') == 'true' %}checked{% endif %} style="display:none">
+      </span>
+    </div>
+    <div class="card-body">
+      <div class="form-text" style="font-size:.74rem;color:#9bb;margin-bottom:.75rem">
+        La fábrica audita su propio código y propone mejoras (Factory Modifier). Las propuestas
+        se revisan/aprueban en <a href="/meta">Meta-agentes</a>. Requiere FACTORY_MODIFIER_ENABLED
+        para aplicar/mergear. Las de bajo riesgo se auto-aplican a una rama si lo activas abajo.
+      </div>
+      <div class="row g-3">
+        <div class="col-md-3">
+          <label class="form-label" style="font-size:.78rem;color:#888">Cadencia</label>
+          {% set fm = cfg.get('FACTORY_AUDIT_MODE','time') %}
+          <select name="factory_audit_mode" class="form-select form-select-sm">
+            <option value="time" {% if fm == 'time' %}selected{% endif %}>Por tiempo</option>
+            <option value="features" {% if fm == 'features' %}selected{% endif %}>Por nº de features</option>
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label" style="font-size:.78rem;color:#888">Día (modo tiempo)</label>
+          <select name="factory_audit_weekday" class="form-select form-select-sm">
+            {% set fwd = cfg.get('FACTORY_AUDIT_WEEKDAY','0')|string %}
+            <option value="0" {% if fwd=='0' %}selected{% endif %}>Lunes</option>
+            <option value="1" {% if fwd=='1' %}selected{% endif %}>Martes</option>
+            <option value="2" {% if fwd=='2' %}selected{% endif %}>Miércoles</option>
+            <option value="3" {% if fwd=='3' %}selected{% endif %}>Jueves</option>
+            <option value="4" {% if fwd=='4' %}selected{% endif %}>Viernes</option>
+            <option value="5" {% if fwd=='5' %}selected{% endif %}>Sábado</option>
+            <option value="6" {% if fwd=='6' %}selected{% endif %}>Domingo</option>
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label" style="font-size:.78rem;color:#888">Hora (VET)</label>
+          <input type="number" name="factory_audit_hour" class="form-control form-control-sm"
+                 value="{{ cfg.get('FACTORY_AUDIT_HOUR', '6') }}" min="0" max="23">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label" style="font-size:.78rem;color:#888">Cada N features</label>
+          <input type="number" name="factory_audit_every_features" class="form-control form-control-sm"
+                 value="{{ cfg.get('FACTORY_AUDIT_EVERY_FEATURES', '10') }}" min="1" max="500">
+        </div>
+        <div class="col-md-2 d-flex align-items-end">
+          <div class="form-check form-switch">
+            <input class="form-check-input" type="checkbox" role="switch" id="faAutoSwitch"
+                   {% if cfg.get('FACTORY_AUDIT_AUTOAPPLY','true') == 'true' %}checked{% endif %}
+                   onchange="document.getElementById('faAutoField').checked = this.checked">
+            <label class="form-check-label" for="faAutoSwitch" style="font-size:.74rem;color:#888">Auto-aplicar bajo riesgo</label>
+          </div>
+          <input type="checkbox" name="factory_audit_autoapply" id="faAutoField"
+                 {% if cfg.get('FACTORY_AUDIT_AUTOAPPLY','true') == 'true' %}checked{% endif %} style="display:none">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label" style="font-size:.78rem;color:#888">Modelo IA del auditor</label>
+          <input type="text" name="factory_audit_model" class="form-control form-control-sm"
+                 value="{{ cfg.get('FACTORY_AUDIT_MODEL', 'claude-sonnet-4-6') }}"
+                 placeholder="claude-sonnet-4-6">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label" style="font-size:.78rem;color:#888">Repo (owner/repo para los PRs)</label>
+          <input type="text" name="github_repo" class="form-control form-control-sm"
+                 value="{{ cfg.get('GITHUB_REPO', '') }}" placeholder="Romeromarcov/fabrica-software">
+        </div>
+      </div>
     </div>
   </div>
 

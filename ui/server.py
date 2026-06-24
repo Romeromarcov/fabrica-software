@@ -263,6 +263,44 @@ def _reschedule_auditor(enabled: bool, weekday: int, hour: int) -> None:
         logger.exception("Error al reconfigurar scheduler de auditoría: %s", e)
 
 
+def _run_factory_audit_job() -> None:
+    """Job del scheduler: corre la auditoría de la fábrica con los parámetros de config."""
+    try:
+        import config as _cfg
+        from tools.factory_audit import run_factory_audit
+        run_factory_audit(
+            max_files=int(getattr(_cfg, "AUDITOR_MAX_FILES", 30) or 30),
+            auto_apply_low=getattr(_cfg, "FACTORY_AUDIT_AUTOAPPLY", True),
+        )
+    except Exception as e:  # noqa: BLE001
+        logger.exception("Error en la auditoría programada de la fábrica: %s", e)
+
+
+def _reschedule_factory_audit(enabled: bool, weekday: int, hour: int) -> None:
+    """Reconfigura el job de auditoría de la fábrica (modo tiempo) sin reiniciar el proceso."""
+    global _audit_scheduler
+    if _audit_scheduler is None:
+        return
+    try:
+        from apscheduler.triggers.cron import CronTrigger
+        try:
+            _audit_scheduler.remove_job("factory_audit")
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("no había job factory_audit que remover: %s", exc)
+        if enabled:
+            _audit_scheduler.add_job(
+                _run_factory_audit_job,
+                trigger=CronTrigger(day_of_week=weekday, hour=hour, minute=0),
+                id="factory_audit",
+                name="Auditoría periódica de la fábrica",
+                replace_existing=True,
+                misfire_grace_time=3600,
+            )
+            logger.info("Auditor de la fábrica reconfigurado — día %d a las %02d:00", weekday, hour)
+    except Exception as e:  # noqa: BLE001
+        logger.exception("Error al reconfigurar el auditor de la fábrica: %s", e)
+
+
 def _start_telegram_bot() -> None:
     """Arranca el bot de Telegram interactivo en un daemon thread."""
     global _tg_bot_stop_event, _tg_bot_thread
@@ -1058,6 +1096,7 @@ async def skills_page(request: Request, repo: str = ""):
     if not repo and repos:
         repo = repos[0]["name"]
 
+    from tools.skill_tools import group_skills_by_pipeline
     skills = []
     if repo:
         try:
@@ -1069,8 +1108,402 @@ async def skills_page(request: Request, repo: str = ""):
         "repos":       repos,
         "selected_repo": repo,
         "skills":      skills,
+        "skill_groups": group_skills_by_pipeline(skills),
         "active_page": "skills",
     })
+
+
+# ── Pipelines: hub + sección por dominio (Software, Marketing, …) ──────────────
+
+@app.get("/pipelines", response_class=HTMLResponse)
+async def pipelines_hub(request: Request):
+    """Hub de pipelines: una tarjeta por dominio → entra a su sección con pestañas."""
+    from tools.pipeline_loader import pipeline_summaries
+    from tools.agent_registry import all_agents
+    dedicated = {"software", "marketing"}
+    try:
+        summaries = pipeline_summaries()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("pipelines hub: no se pudieron listar pipelines (%s)", exc)
+        summaries = []
+    for s in summaries:
+        s["dedicated"] = s.get("name") in dedicated
+        try:
+            s["agent_count"] = len(all_agents(s.get("name")))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("pipelines hub: conteo de agentes falló para %s (%s)", s.get("name"), exc)
+            s["agent_count"] = 0
+    return templates.TemplateResponse(request, "pipelines.html", {
+        **_base_ctx(request),
+        "active_page": "pipelines",
+        "pipelines": summaries,
+    })
+
+
+@app.get("/pipeline/{name}", response_class=HTMLResponse)
+async def pipeline_section(request: Request, name: str):
+    """
+    Sección de un pipeline con pestañas (Resumen/Lanzar, Agentes, Skills). Es la 'sección
+    de Software/Marketing/…' que se autogenera para cada pipeline registrado.
+    """
+    from tools.pipeline_loader import load_pipeline
+    from tools.agent_registry import all_agents
+    from tools.skill_tools import list_global_skills
+    try:
+        pdef = load_pipeline(name)
+    except Exception as exc:  # noqa: BLE001
+        logger.info("sección de pipeline '%s' no encontrada: %s", name, exc)
+        return HTMLResponse(f"Pipeline '{name}' no encontrado.", status_code=404)
+
+    dedicated = name in {"software", "marketing"}
+    try:
+        agents = all_agents(name)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("sección %s: no se pudieron listar agentes (%s)", name, exc)
+        agents = []
+    # Skills globales etiquetadas con este pipeline (frontmatter pipeline: <name>).
+    try:
+        skills = [s for s in list_global_skills() if (s.get("pipeline") or "general") == name]
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("sección %s: no se pudieron listar skills (%s)", name, exc)
+        skills = []
+    return templates.TemplateResponse(request, "pipeline_section.html", {
+        **_base_ctx(request),
+        "active_page": "pipelines",
+        "name": name,
+        "pdef": pdef,
+        "dedicated": dedicated,
+        "agents": agents,
+        "skills": skills,
+    })
+
+
+# ── Meta-agentes: Agent Builder / Pipeline Builder / Factory Modifier ──────────
+
+@app.get("/meta", response_class=HTMLResponse)
+async def meta_page(request: Request):
+    """Página de la meta-capa: construir agentes/pipelines, lanzarlos y proponer auto-modificaciones."""
+    import config as _cfg
+    from tools.pipeline_loader import pipeline_summaries
+    # Pipelines con runtime DEDICADO; el resto es lanzable con el runtime GENÉRICO (v0).
+    dedicated = {"software", "marketing"}
+    try:
+        summaries = pipeline_summaries()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("meta: no se pudieron listar pipelines (%s)", exc)
+        summaries = []
+    for s in summaries:
+        s["dedicated"] = s.get("name") in dedicated
+    try:
+        from tools.factory_proposals import list_proposals
+        proposals = [p for p in list_proposals() if p.get("status") != "dismissed"]
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("meta: no se pudieron listar propuestas (%s)", exc)
+        proposals = []
+    return templates.TemplateResponse(request, "meta.html", {
+        **_base_ctx(request),
+        "active_page": "meta",
+        "pipelines": summaries,
+        "agent_builder_enabled":    getattr(_cfg, "AGENT_BUILDER_ENABLED", False),
+        "pipeline_builder_enabled": getattr(_cfg, "PIPELINE_BUILDER_ENABLED", False),
+        "factory_modifier_enabled": getattr(_cfg, "FACTORY_MODIFIER_ENABLED", False),
+        "factory_audit_enabled":    getattr(_cfg, "FACTORY_AUDIT_ENABLED", False),
+        "factory_proposals":        proposals,
+    })
+
+
+# ── Marketing: lanzamiento desde la web ───────────────────────────────────────
+
+@app.get("/marketing", response_class=HTMLResponse)
+async def marketing_page(request: Request):
+    """Página para lanzar una pieza del pipeline `marketing` (M0→M8)."""
+    import config as _cfg
+    return templates.TemplateResponse(request, "marketing.html", {
+        **_base_ctx(request),
+        "active_page": "marketing",
+        "publish_enabled": getattr(_cfg, "MARKETING_PUBLISH_ENABLED", False),
+    })
+
+
+@app.post("/api/marketing/launch")
+async def api_marketing_launch(request: Request):
+    """
+    Ejecuta el pipeline marketing (M0→M8) inline y devuelve el resultado. La publicación
+    real está gated por MARKETING_PUBLISH_ENABLED (dry-run por defecto). Body:
+    {pieza, brief, marca?, canal?, mode?}.
+    """
+    _require_perm(request, "launch_feature")
+    from starlette.concurrency import run_in_threadpool
+    from graph_marketing import run_marketing, initial_marketing_state
+    data = await request.json()
+    pieza = (data.get("pieza") or "").strip()
+    brief = (data.get("brief") or "").strip()
+    if not pieza or not brief:
+        return JSONResponse({"ok": False, "error": "pieza y brief son requeridos"}, status_code=400)
+    state = initial_marketing_state(
+        marca=(data.get("marca") or "").strip(),
+        canal=(data.get("canal") or "instagram").strip(),
+        pieza_nombre=pieza,
+        brief=brief,
+        mode=(data.get("mode") or "post").strip(),
+    )
+    try:
+        final = await run_in_threadpool(run_marketing, state, thread_id=f"web_{pieza[:20]}")
+        return JSONResponse({"ok": True, "result": {
+            "pieza_ensamblada": final.get("pieza_ensamblada"),
+            "risk_level":       final.get("risk_level"),
+            "brand_passed":     final.get("brand_passed"),
+            "compliance_clear": final.get("compliance_clear"),
+            "adversarial_clear": final.get("adversarial_clear"),
+            "preview_passed":   final.get("preview_passed"),
+            "published":        final.get("published"),
+            "publish_ref":      final.get("publish_ref"),
+        }})
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("marketing launch error: %s", exc)
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=200)
+
+
+@app.post("/api/pipeline/launch")
+async def api_pipeline_launch(request: Request):
+    """
+    Lanza CUALQUIER pipeline registrado con el runtime genérico (Fase 4 v0): cada agente
+    corre como una llamada LLM lineal desde su role/prompt_file. Sirve para pipelines creados
+    en /meta que aún no tienen runtime dedicado. Body: {pipeline, brief}.
+    """
+    _require_perm(request, "launch_feature")
+    from starlette.concurrency import run_in_threadpool
+    from graph_generic import run_generic_pipeline
+    data = await request.json()
+    pipeline = (data.get("pipeline") or "").strip()
+    brief = (data.get("brief") or "").strip()
+    if not pipeline or not brief:
+        return JSONResponse({"ok": False, "error": "pipeline y brief son requeridos"}, status_code=400)
+    try:
+        final = await run_in_threadpool(run_generic_pipeline, pipeline, brief, thread_id=f"gen_{pipeline}")
+        return JSONResponse({"ok": True, "outputs": final.get("outputs", []),
+                             "errors": final.get("errors", [])})
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("generic pipeline launch error: %s", exc)
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=200)
+
+
+@app.post("/api/meta/build-agent")
+async def api_meta_build_agent(request: Request):
+    """
+    Genera+valida una definición de agente (NO registra). Body: {request, pipeline?}.
+    `pipeline` fija el dominio destino del agente. Devuelve además `warnings`: agentes ya
+    existentes que harían algo parecido (anti-duplicados; no bloquea, solo avisa).
+    """
+    from starlette.concurrency import run_in_threadpool
+    from tools.agent_builder import build_agent_definition, validate_agent_definition
+    from tools.dedup_check import find_similar_agents
+    data = await request.json()
+    req = (data.get("request") or "").strip()
+    pipeline = (data.get("pipeline") or "").strip()
+    if not req:
+        return JSONResponse({"ok": False, "error": "request requerido"}, status_code=400)
+    try:
+        definition = await run_in_threadpool(build_agent_definition, req)
+        if pipeline:
+            definition["pipeline"] = pipeline
+        errors = validate_agent_definition(definition)
+        warnings = await run_in_threadpool(find_similar_agents, definition.get("role", ""))
+        return JSONResponse({"ok": True, "definition": definition,
+                             "errors": errors, "warnings": warnings})
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("meta build-agent error: %s", exc)
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=200)
+
+
+@app.post("/api/meta/register-agent")
+async def api_meta_register_agent(request: Request):
+    """Registra un agente en el registry (doble gate: flag + aprobación owner)."""
+    _require_perm(request, "config")
+    from tools.agent_builder import register_agent
+    data = await request.json()
+    definition = data.get("definition") or {}
+    try:
+        register_agent(definition, approved=True)
+        return JSONResponse({"ok": True, "id": definition.get("id")})
+    except (PermissionError, ValueError) as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=200)
+
+
+@app.post("/api/meta/build-pipeline")
+async def api_meta_build_pipeline(request: Request):
+    """Genera+valida una definición de pipeline (NO registra). Body: {request}."""
+    from starlette.concurrency import run_in_threadpool
+    from tools.pipeline_builder import build_pipeline_definition, validate_pipeline_definition
+    data = await request.json()
+    req = (data.get("request") or "").strip()
+    if not req:
+        return JSONResponse({"ok": False, "error": "request requerido"}, status_code=400)
+    try:
+        definition = await run_in_threadpool(build_pipeline_definition, req)
+        errors = validate_pipeline_definition(definition)
+        return JSONResponse({"ok": True, "definition": definition, "errors": errors})
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("meta build-pipeline error: %s", exc)
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=200)
+
+
+@app.post("/api/meta/register-pipeline")
+async def api_meta_register_pipeline(request: Request):
+    """Escribe pipelines/<name>/pipeline.yaml (doble gate: flag + aprobación owner)."""
+    _require_perm(request, "config")
+    from tools.pipeline_builder import register_pipeline
+    data = await request.json()
+    definition = data.get("definition") or {}
+    try:
+        path = register_pipeline(definition, approved=True)
+        return JSONResponse({"ok": True, "name": definition.get("name"), "path": str(path)})
+    except (PermissionError, ValueError) as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=200)
+
+
+@app.post("/api/meta/build-factory-change")
+async def api_meta_build_factory_change(request: Request):
+    """
+    Propone+valida un cambio del factory_modifier y devuelve su PLAN. PROPOSE-ONLY:
+    la UI nunca aplica autofagia (eso exige rama + PR vía CLI). Body: {request, branch?}.
+    """
+    from starlette.concurrency import run_in_threadpool
+    from tools.factory_modifier import build_factory_change, validate_factory_change, plan_factory_change
+    data = await request.json()
+    req = (data.get("request") or "").strip()
+    branch = (data.get("branch") or "").strip()
+    if not req:
+        return JSONResponse({"ok": False, "error": "request requerido"}, status_code=400)
+    try:
+        change = await run_in_threadpool(build_factory_change, req)
+        errors = validate_factory_change(change)
+        plan = plan_factory_change(change, branch=branch)
+        return JSONResponse({"ok": True, "change": change, "errors": errors, "plan": plan,
+                             "note": "Para aplicarlo, genera la propuesta desde la Auditoría de la "
+                                     "fábrica: se aplica a una rama y entra por PR (CI + revisor)."})
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("meta build-factory-change error: %s", exc)
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=200)
+
+
+# ── Auditoría de la fábrica + aprobación de propuestas desde la UI (PR3) ───────
+
+@app.post("/api/meta/factory-audit/run")
+async def api_factory_audit_run(request: Request):
+    """Lanza una auditoría de la fábrica ahora (gated). Genera propuestas; auto-aplica low a rama."""
+    _require_perm(request, "config")
+    import config as _cfg
+    from starlette.concurrency import run_in_threadpool
+    from tools.factory_audit import run_factory_audit
+    try:
+        summary = await run_in_threadpool(
+            run_factory_audit,
+            max_files=int(getattr(_cfg, "AUDITOR_MAX_FILES", 30) or 30),
+            auto_apply_low=getattr(_cfg, "FACTORY_AUDIT_AUTOAPPLY", True),
+        )
+        return JSONResponse({"ok": True, "summary": summary})
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("factory-audit run error: %s", exc)
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=200)
+
+
+@app.get("/api/meta/factory-audit/proposals")
+async def api_factory_audit_proposals(request: Request):
+    """Lista las propuestas del factory modifier (todas o por estado ?status=)."""
+    from tools.factory_proposals import list_proposals
+    status = request.query_params.get("status") or None
+    return JSONResponse({"ok": True, "proposals": list_proposals(status)})
+
+
+@app.post("/api/meta/factory-audit/proposals/{pid}/apply")
+async def api_factory_audit_apply(pid: str, request: Request):
+    """Aplica una propuesta a una rama y abre el PR (gated). Estado → pr_open."""
+    _require_perm(request, "config")
+    from starlette.concurrency import run_in_threadpool
+    from tools.factory_proposals import get_proposal
+    from tools.factory_pr import apply_and_open_pr
+    item = get_proposal(pid)
+    if not item:
+        return JSONResponse({"ok": False, "error": "propuesta no encontrada"}, status_code=404)
+    try:
+        out = await run_in_threadpool(lambda: apply_and_open_pr(item, approved=True))
+        return JSONResponse({"ok": True, **out})
+    except (PermissionError, ValueError, RuntimeError) as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=200)
+
+
+@app.post("/api/meta/factory-audit/proposals/{pid}/merge")
+async def api_factory_audit_merge(pid: str, request: Request):
+    """Mergea el PR de una propuesta (gated; respeta la branch protection de main)."""
+    _require_perm(request, "config")
+    from starlette.concurrency import run_in_threadpool
+    from tools.factory_proposals import get_proposal
+    from tools.factory_pr import merge_pr
+    item = get_proposal(pid)
+    if not item:
+        return JSONResponse({"ok": False, "error": "propuesta no encontrada"}, status_code=404)
+    try:
+        out = await run_in_threadpool(lambda: merge_pr(item, approved=True))
+        return JSONResponse({"ok": True, **out})
+    except (PermissionError, ValueError, RuntimeError) as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=200)
+
+
+@app.post("/api/meta/factory-audit/proposals/{pid}/dismiss")
+async def api_factory_audit_dismiss(pid: str, request: Request):
+    """Descarta una propuesta (estado → dismissed)."""
+    _require_perm(request, "config")
+    from tools.factory_proposals import set_status
+    try:
+        set_status(pid, "dismissed")
+        return JSONResponse({"ok": True})
+    except KeyError:
+        return JSONResponse({"ok": False, "error": "propuesta no encontrada"}, status_code=404)
+
+
+@app.post("/api/meta/converse")
+async def api_meta_converse(request: Request):
+    """
+    Constructor conversacional de pipelines: avanza el diálogo y, cuando hay diseño completo,
+    devuelve un draft (pipeline + agentes) validado. Body: {history: [{role,content}], message}.
+    """
+    from starlette.concurrency import run_in_threadpool
+    from tools.conversational_builder import converse
+    from tools.dedup_check import find_similar_pipelines
+    data = await request.json()
+    message = (data.get("message") or "").strip()
+    history = data.get("history") or []
+    if not message:
+        return JSONResponse({"ok": False, "error": "message requerido"}, status_code=400)
+    try:
+        result = await run_in_threadpool(converse, history, message)
+        # Cuando hay diseño listo, avisa si ya existe un pipeline que hace lo mismo (no bloquea).
+        warnings: list = []
+        if result.get("ready") and result.get("draft"):
+            p = result["draft"].get("pipeline", {})
+            warnings = await run_in_threadpool(
+                find_similar_pipelines, p.get("name", ""), p.get("description", ""))
+        return JSONResponse({"ok": True, "warnings": warnings, **result})
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("meta converse error: %s", exc)
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=200)
+
+
+@app.post("/api/meta/register-draft")
+async def api_meta_register_draft(request: Request):
+    """Registra el draft conversacional (agentes + pipeline). Doble gate: flags + owner."""
+    _require_perm(request, "config")
+    from tools.conversational_builder import register_draft
+    data = await request.json()
+    draft = data.get("draft") or {}
+    if not draft.get("pipeline") or not draft.get("agents"):
+        return JSONResponse({"ok": False, "error": "draft incompleto"}, status_code=400)
+    try:
+        results = register_draft(draft, approved=True)
+        return JSONResponse({"ok": True, **results})
+    except (PermissionError, ValueError) as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=200)
 
 
 @app.post("/config")
@@ -1102,6 +1535,10 @@ async def save_config(
     # Comportamiento del pipeline
     write_to_repo:      str = Form("false"),   # checkbox: "on" cuando activo, ausente si no
     arch_review_interval: int = Form(3),
+    # Autonomía de la fábrica (alto riesgo) — checkboxes: "on" si activo, ausente si no
+    auto_merge_enabled:        str = Form("false"),
+    parallel_features_enabled: str = Form("false"),
+    factory_modifier_enabled:  str = Form("false"),
     # Límites
     max_qa_completo:    int = Form(3),
     max_qa_lite:        int = Form(2),
@@ -1115,6 +1552,15 @@ async def save_config(
     auditor_max_files: int = Form(30),
     auditor_model:     str = Form("claude-sonnet-4-6"),
     auditor_repo:      str = Form("all"),
+    # Auditoría de la propia fábrica (Factory Modifier)
+    factory_audit_enabled:  str = Form("false"),
+    factory_audit_mode:     str = Form("time"),
+    factory_audit_weekday:  int = Form(0),
+    factory_audit_hour:     int = Form(6),
+    factory_audit_every_features: int = Form(10),
+    factory_audit_autoapply: str = Form("false"),
+    factory_audit_model:    str = Form("claude-sonnet-4-6"),
+    github_repo:            str = Form(""),
     # Seguridad & Acceso
     ui_username:       str = Form(""),
     ui_password:       str = Form(""),
@@ -1147,6 +1593,9 @@ async def save_config(
         "MODEL_A8":  model_a8,
         "MODEL_A11": model_a11,
         "WRITE_TO_REPO":        "true" if write_to_repo == "on" else "false",
+        "AUTO_MERGE_ENABLED":        "true" if auto_merge_enabled == "on" else "false",
+        "PARALLEL_FEATURES_ENABLED": "true" if parallel_features_enabled == "on" else "false",
+        "FACTORY_MODIFIER_ENABLED":  "true" if factory_modifier_enabled == "on" else "false",
         "ARCH_REVIEW_INTERVAL": arch_review_interval,
         "MAX_QA_ITER_COMPLETO":       max_qa_completo,
         "MAX_QA_ITER_LITE":           max_qa_lite,
@@ -1159,6 +1608,14 @@ async def save_config(
         "AUDITOR_MAX_FILES": auditor_max_files,
         "AUDITOR_MODEL":     auditor_model,
         "AUDITOR_REPO":      auditor_repo,
+        "FACTORY_AUDIT_ENABLED":   "true" if factory_audit_enabled == "on" else "false",
+        "FACTORY_AUDIT_MODE":      factory_audit_mode,
+        "FACTORY_AUDIT_WEEKDAY":   factory_audit_weekday,
+        "FACTORY_AUDIT_HOUR":      factory_audit_hour,
+        "FACTORY_AUDIT_EVERY_FEATURES": factory_audit_every_features,
+        "FACTORY_AUDIT_AUTOAPPLY": "true" if factory_audit_autoapply == "on" else "false",
+        "FACTORY_AUDIT_MODEL":     factory_audit_model,
+        "GITHUB_REPO":             github_repo,
         # Seguridad & Acceso
         "UI_USERNAME":   ui_username,
         "UI_PASSWORD":   ui_password,
@@ -1172,6 +1629,11 @@ async def save_config(
         enabled=auditor_enabled == "on",
         weekday=auditor_weekday,
         hour=auditor_hour,
+    )
+    _reschedule_factory_audit(
+        enabled=(factory_audit_enabled == "on" and factory_audit_mode == "time"),
+        weekday=factory_audit_weekday,
+        hour=factory_audit_hour,
     )
     # Parsear variables adicionales (una por línea, formato KEY=VALUE)
     for line in extra_vars.splitlines():
@@ -1460,7 +1922,33 @@ async def start_feature(
     run_dir.mkdir(parents=True, exist_ok=True)
     (run_dir / "process.pid").write_text(str(proc.pid))
 
+    # Cadencia por features de la auditoría de la fábrica (no bloquea el redirect).
+    _maybe_factory_audit_on_feature()
+
     return RedirectResponse(f"/feature/{feature_id}", status_code=303)
+
+
+def _maybe_factory_audit_on_feature() -> None:
+    """Dispara, en un hilo aparte, la auditoría de la fábrica si la cadencia por features toca."""
+    try:
+        import threading
+        import config as _cfg
+        from tools.factory_audit import on_feature_started
+        if not getattr(_cfg, "FACTORY_AUDIT_ENABLED", False):
+            return
+        threading.Thread(
+            target=on_feature_started,
+            kwargs=dict(
+                enabled=True,
+                mode=getattr(_cfg, "FACTORY_AUDIT_MODE", "time"),
+                every_n=int(getattr(_cfg, "FACTORY_AUDIT_EVERY_FEATURES", 10) or 10),
+                auto_apply_low=getattr(_cfg, "FACTORY_AUDIT_AUTOAPPLY", True),
+                max_files=int(getattr(_cfg, "AUDITOR_MAX_FILES", 30) or 30),
+            ),
+            daemon=True,
+        ).start()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("no se pudo evaluar la cadencia de auditoría por features: %s", exc)
 
 
 # ── Rutas — Detalle de Feature ────────────────────────────────────────────────
@@ -1919,7 +2407,7 @@ async def api_get_skill(skill_name: str, repo: str = ""):
 
 @app.post("/api/skills")
 async def api_create_skill(request: Request):
-    """Crea una nueva skill en el repo. Body: {repo, name, description, content}."""
+    """Crea una nueva skill en el repo. Body: {repo, name, description, content, pipeline?}."""
     from tools.skill_tools import create_skill
     from config import resolve_repo_path
 
@@ -1928,11 +2416,12 @@ async def api_create_skill(request: Request):
     name    = data.get("name", "").strip()
     desc    = data.get("description", "").strip()
     content = data.get("content", "").strip()
+    pipeline = (data.get("pipeline") or "general").strip() or "general"
 
     if not repo or not name:
         raise HTTPException(status_code=400, detail="Se requieren 'repo' y 'name'")
 
-    path = create_skill(resolve_repo_path(repo), name, desc, content)
+    path = create_skill(resolve_repo_path(repo), name, desc, content, pipeline=pipeline)
     return {"ok": True, "path": path, "name": name}
 
 
@@ -1971,7 +2460,10 @@ async def api_generate_skill(request: Request):
 
 @app.put("/api/skills/{skill_name}")
 async def api_update_skill(skill_name: str, request: Request):
-    """Actualiza una skill existente. Body: {repo, description, content}."""
+    """Actualiza una skill existente. Body: {repo, description, content, pipeline?}.
+
+    Si no se envía `pipeline`, se PRESERVA el que ya tuviera la skill.
+    """
     from tools.skill_tools import list_skills, update_skill
     from config import resolve_repo_path, list_repos
 
@@ -1979,6 +2471,7 @@ async def api_update_skill(skill_name: str, request: Request):
     repo    = data.get("repo", "")
     desc    = data.get("description", "")
     content = data.get("content", "")
+    pipeline = data.get("pipeline")  # None → preservar el existente
 
     if not repo:
         repos = list_repos()
@@ -1989,7 +2482,7 @@ async def api_update_skill(skill_name: str, request: Request):
     if not skill:
         raise HTTPException(status_code=404, detail=f"Skill '{skill_name}' no encontrada")
 
-    update_skill(skill["path"], desc, content)
+    update_skill(skill["path"], desc, content, pipeline=pipeline)
     return {"ok": True, "name": skill_name}
 
 
