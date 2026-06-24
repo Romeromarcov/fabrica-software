@@ -2,7 +2,7 @@
 from state import FabricaState
 from nodes.base import call_agent
 from tools.file_tools import save_agent_output
-from tools.learning_memory import load_lessons, recurring_error_patterns, hard_instruction_block
+from tools.learning_memory import lessons_for_context, recurring_error_patterns, hard_instruction_block
 from tools.fewshot_builder import build_fewshots
 from config import MODEL_A4
 
@@ -17,7 +17,7 @@ def a4_backend(state: FabricaState) -> dict:
     fingerprint_block = get_relevant_context(state["repo_path"])
 
     # Sistema de aprendizaje: lecciones del proyecto + few-shots
-    lessons_block  = load_lessons(state["repo_path"])
+    lessons_block  = lessons_for_context(state["repo_path"], state.get("master_plan", ""))
     fewshot_block  = build_fewshots(state.get("project_id", ""), context="backend")
 
     # B3.3 Aprendizaje preventivo: patrones que fallaron ≥2 veces → instrucción DURA

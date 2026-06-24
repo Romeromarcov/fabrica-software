@@ -126,7 +126,7 @@ def test_a4_injects_hard_block_into_prompt(tmp_path, monkeypatch):
     (tmp_path / "repo").mkdir(parents=True, exist_ok=True)
 
     # Neutralizar dependencias externas de contexto para aislar el test
-    monkeypatch.setattr(a4, "load_lessons", lambda *a, **k: "")
+    monkeypatch.setattr(a4, "lessons_for_context", lambda *a, **k: "")
     monkeypatch.setattr(a4, "build_fewshots", lambda *a, **k: "")
 
     captured = {}

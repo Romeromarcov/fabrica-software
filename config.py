@@ -279,9 +279,9 @@ SEMANTIC_CACHE_TTL_SECONDS = int(os.getenv("SEMANTIC_CACHE_TTL_SECONDS", "86400"
 DYNAMIC_CONTEXT_ENABLED = os.getenv("DYNAMIC_CONTEXT_ENABLED", "false").lower() == "true"
 
 # R1 (PLAN_PLATAFORMA_V2 Fase 2) — Memoria vectorial. Si está habilitado Y chromadb
-# instalado → búsqueda semántica; si no, fallback por keywords sobre JSONL. La fábrica
-# NO requiere chromadb (dependencia opcional: `pip install chromadb`). Default off.
-VECTOR_MEMORY_ENABLED = os.getenv("VECTOR_MEMORY_ENABLED", "false").lower() == "true"
+# instalado → búsqueda semántica; si no, fallback por keywords sobre JSONL. chromadb +
+# sentence-transformers van en requirements (F0.2). Default ON; degrada a keyword si faltan.
+VECTOR_MEMORY_ENABLED = os.getenv("VECTOR_MEMORY_ENABLED", "true").lower() == "true"
 
 # M6 (PLAN_PLATAFORMA_V2 Fase 3) — A/B testing de modelos por agente. En AB_TESTING_PCT
 # de los features, el agente usa su modelo alternativo (model_fallbacks del registry) y se
