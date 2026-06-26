@@ -333,6 +333,13 @@ GITHUB_REPO             = os.getenv("GITHUB_REPO", "")
 # (no-op observable); con endpoint se exportan. Ver docker-compose.observability.yml.
 OTEL_ENABLED = os.getenv("OTEL_ENABLED", "true").lower() == "true"
 
+# F1 (PLAN_MAESTRO) — Contratos estructurados. Cuando está activo, los agentes con
+# `output_schema` declarado en agents/registry.json producen además un artefacto Pydantic
+# validado (validate_output) que viaja por el state en campos `*_artifact`; un artefacto
+# corrupto se reintenta con feedback de errores (nodes.base.call_agent_validated). Opt-in;
+# default off → el pipeline string-based de hoy es idéntico (sin regresión).
+STRUCTURED_ARTIFACTS_ENABLED = os.getenv("STRUCTURED_ARTIFACTS_ENABLED", "false").lower() == "true"
+
 # A2.3 — CORS explícito. Allowlist de orígenes (separados por comas). Vacío = no se
 # añade middleware CORS (comportamiento por defecto: sin orígenes cruzados permitidos).
 CORS_ALLOWED_ORIGINS = [

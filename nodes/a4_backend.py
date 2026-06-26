@@ -86,6 +86,15 @@ from sqlalchemy import Column, Integer
 ...
 ```
 """
+    # F1 — A4 recibe los artefactos estructurados validados de A1 (MasterPlan) y A2 (DBSchema).
+    from config import STRUCTURED_ARTIFACTS_ENABLED
+    if STRUCTURED_ARTIFACTS_ENABLED:
+        import logging as _l
+        mp = state.get("master_plan_artifact")
+        db = state.get("db_schema_artifact")
+        _l.getLogger(__name__).info(
+            "A4 recibió artefactos validados: MasterPlan=%s DBSchema=%s", bool(mp), bool(db))
+
     output, cost = call_agent(
         agent_key="a4-backend",
         agent_label="Agente 4 Backend",

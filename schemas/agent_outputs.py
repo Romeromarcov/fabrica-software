@@ -40,6 +40,14 @@ class FrontendCode(AgentOutput):
     summary: str = ""
 
 
+class FileChange(BaseModel):
+    """Cambio de un archivo dentro de un artefacto de código (F1)."""
+    path: str
+    action: str = "create"          # create | modify | delete
+    language: str = ""
+    summary: str = ""
+
+
 class QAReport(AgentOutput):
     passed: bool = False
     iterations: int = 0
@@ -48,6 +56,12 @@ class QAReport(AgentOutput):
 
 class SecOpsReport(AgentOutput):
     verdict: str = "PASS"          # PASS | BLOCK
+    findings: list[str] = Field(default_factory=list)
+
+
+class SecurityReport(AgentOutput):
+    """Contrato de seguridad (F1). Alias semántico de SecOpsReport con verdict de A8."""
+    verdict: str = "CLEARANCE"      # CLEARANCE | BLOCK
     findings: list[str] = Field(default_factory=list)
 
 
@@ -64,6 +78,7 @@ SCHEMA_REGISTRY: dict[str, Type[AgentOutput]] = {
     "FrontendCode":      FrontendCode,
     "QAReport":          QAReport,
     "SecOpsReport":      SecOpsReport,
+    "SecurityReport":    SecurityReport,
     "AdversarialReport": AdversarialReport,
 }
 

@@ -490,3 +490,40 @@ def call_agent(
         logger.warning("hook post_agent falló (ignorado): %s", _hook_exc)
 
     return text, cost_entry
+
+
+def call_agent_validated(
+    *,
+    schema_name: str,
+    contract_fields: list[str],
+    agent_key: str,
+    agent_label: str,
+    task_content: str,
+    model: str = MODEL_STANDARD,
+    include_static: list[str] | None = None,
+    extra_context: dict[str, str] | None = None,
+    repo_path: str | None = None,
+    feature_id: str | None = None,
+    max_retries: int = 2,
+):
+    """
+    F1 — Variante de `call_agent` que pide un artefacto estructurado, lo valida contra
+    `schema_name` y reintenta si es corrupto. Devuelve (texto, ValidationResult, [CostEntry]).
+
+    Añade un contrato JSON a la tarea (`contract_fields` = campos del schema). La validación
+    y el reintento viven en `tools.structured_artifacts` (testeable, sin lógica de proveedor).
+    """
+    from tools.structured_artifacts import contract_instruction, request_validated
+
+    base_task = task_content + contract_instruction(schema_name, contract_fields)
+
+    def _call(task: str):
+        return call_agent(
+            agent_key=agent_key, agent_label=agent_label, task_content=task,
+            model=model, include_static=include_static, extra_context=extra_context,
+            repo_path=repo_path, feature_id=feature_id,
+        )
+
+    return request_validated(
+        _call, schema_name=schema_name, base_task=base_task, max_retries=max_retries,
+    )
