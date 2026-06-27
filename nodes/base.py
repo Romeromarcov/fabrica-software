@@ -527,3 +527,47 @@ def call_agent_validated(
     return request_validated(
         _call, schema_name=schema_name, base_task=base_task, max_retries=max_retries,
     )
+
+
+def call_agent_react(
+    *,
+    agent_key: str,
+    agent_label: str,
+    task_content: str,
+    model: str = MODEL_STANDARD,
+    include_static: list[str] | None = None,
+    extra_context: dict[str, str] | None = None,
+    repo_path: str | None = None,
+    feature_id: str | None = None,
+    max_iterations: int = 6,
+):
+    """
+    F2 — Variante de `call_agent` que ejecuta un mini-loop ReAct: el agente pide tools del
+    `agent_toolbelt`, el harness las ejecuta y el agente observa e itera. Devuelve
+    (texto_final, [CostEntry]) — mismo tipo de salida que `call_agent` (lista de costos de
+    todas las iteraciones). La orquestación vive en `tools.react_loop` (testeable).
+
+    Sin `repo_path` no hay repo que leer → degrada a un único `call_agent` (sin loop).
+    """
+    from tools.agent_toolbelt import dispatch as _dispatch, tool_specs
+    from tools.react_loop import run_react
+
+    def _call(task: str):
+        return call_agent(
+            agent_key=agent_key, agent_label=agent_label, task_content=task,
+            model=model, include_static=include_static, extra_context=extra_context,
+            repo_path=repo_path, feature_id=feature_id,
+        )
+
+    if not repo_path:
+        text, cost = _call(task_content)
+        return text, [cost]
+
+    def _disp(tool_name: str, **kwargs):
+        return _dispatch(tool_name, repo_path, **kwargs)
+
+    final_text, costs, _n = run_react(
+        _call, base_task=task_content, dispatch_fn=_disp,
+        tool_specs=tool_specs(), max_iterations=max_iterations,
+    )
+    return final_text, costs
