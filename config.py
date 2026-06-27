@@ -340,6 +340,14 @@ OTEL_ENABLED = os.getenv("OTEL_ENABLED", "true").lower() == "true"
 # default off → el pipeline string-based de hoy es idéntico (sin regresión).
 STRUCTURED_ARTIFACTS_ENABLED = os.getenv("STRUCTURED_ARTIFACTS_ENABLED", "false").lower() == "true"
 
+# F2 (PLAN_MAESTRO) — Harness/ACI. Cuando está activo, `call_agent` se convierte en un
+# mini-loop ReAct: el agente pide tools de `tools/agent_toolbelt.py` (read_file, grep,
+# run_tests…), el harness las ejecuta y el agente observa e itera, en vez de recibir todo
+# el contexto en el prompt. Opt-in; default off → call_agent directo de hoy (sin regresión).
+# Esta primera entrega es el toolbelt; el cableado del loop (empezando por A4) es el paso
+# siguiente de F2.
+HARNESS_MODE_ENABLED = os.getenv("HARNESS_MODE_ENABLED", "false").lower() == "true"
+
 # A2.3 — CORS explícito. Allowlist de orígenes (separados por comas). Vacío = no se
 # añade middleware CORS (comportamiento por defecto: sin orígenes cruzados permitidos).
 CORS_ALLOWED_ORIGINS = [
