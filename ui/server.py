@@ -96,9 +96,64 @@ class _BasicAuthMiddleware(BaseHTTPMiddleware):
         )
 
 
+# ── F4.3: RBAC en el BACKEND (no solo en el render) ───────────────────────────
+# Autorización por rol para TODO endpoint mutante (POST/PUT/DELETE/PATCH), aplicada en el
+# middleware como backstop centralizado: una petición directa al API sin el rol requerido
+# recibe 403, aunque el endpoint olvide su `_require_perm`. Mapa ruta→acción (prefijo, en
+# orden — el primero que casa gana); el resto de mutaciones exige "launch_feature" por defecto.
+_MUTATING_METHODS = {"POST", "PUT", "DELETE", "PATCH"}
+
+# Endpoints mutantes que DEBEN ser accesibles sin rol elevado (auth/onboarding/uso normal).
+_AUTHZ_PUBLIC_MUTATIONS = ("/api/prechat", "/api/push/subscribe")
+
+_AUTHZ_RULES = [
+    ("/api/meta/",      "config"),         # meta-capa: construir agentes/pipelines/factory
+    ("/api/deploy/",    "deploy"),
+    ("/admin/users",    "manage_users"),
+    ("/api/auditor/",   "config"),
+    ("/api/news/",      "config"),
+    ("/news",           "config"),
+    ("/api/bot/",       "config"),
+    ("/api/skills",     "config"),
+    ("/config",         "config"),
+    ("/project/new",    "create_project"),
+    ("/api/projects/",  "create_project"),
+    ("/project/",       "approve"),        # approve-roadmap
+    ("/feature/",       "approve"),
+    ("/api/sessions/",  "intervene"),
+    ("/new",            "launch_feature"),
+]
+_AUTHZ_DEFAULT_ACTION = "launch_feature"
+
+
+def required_action_for(path: str) -> str:
+    """Acción RBAC requerida para mutar `path` (primer prefijo que casa, o el default)."""
+    for prefix, action in _AUTHZ_RULES:
+        if path == prefix or path.startswith(prefix):
+            return action
+    return _AUTHZ_DEFAULT_ACTION
+
+
+def authorize_mutation(method: str, path: str, user: dict | None) -> str | None:
+    """
+    Decide si `user` puede ejecutar `method path`. Devuelve None si se permite, o la acción
+    que falta si se deniega. Puro y testeable (sin request ni DB).
+    """
+    if method.upper() not in _MUTATING_METHODS:
+        return None
+    if any(path == p or path.startswith(p) for p in _AUTHZ_PUBLIC_MUTATIONS):
+        return None
+    action = required_action_for(path)
+    from tools.auth_manager import can
+    if user and can(user, action):
+        return None
+    return action
+
+
 class _RBACMiddleware(BaseHTTPMiddleware):
     """
-    IX-1: Si RBAC_ENABLED, todas las rutas protegidas requieren sesión activa.
+    IX-1 / F4.3: Si RBAC_ENABLED, todas las rutas protegidas requieren sesión activa Y, para
+    métodos mutantes, el ROL con permiso para la acción (autorización en backend, no solo render).
     Las rutas públicas (login, static, auth) están excluidas.
     """
     _PUBLIC = {
@@ -113,8 +168,18 @@ class _RBACMiddleware(BaseHTTPMiddleware):
         path = request.url.path
         if path in self._PUBLIC or any(path.startswith(p) for p in self._PUBLIC_PREFIXES):
             return await call_next(request)
-        if not request.session.get("user_id"):
+        user_id = request.session.get("user_id")
+        if not user_id:
             return RedirectResponse(f"/login?next={path}")
+        # F4.3 — autorización por rol en mutaciones.
+        if request.method.upper() in _MUTATING_METHODS:
+            user = _get_current_user(request)
+            missing = authorize_mutation(request.method, path, user)
+            if missing is not None:
+                return JSONResponse(
+                    {"error": "Permiso insuficiente", "required": missing},
+                    status_code=403,
+                )
         return await call_next(request)
 
 
