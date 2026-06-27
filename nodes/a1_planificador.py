@@ -269,7 +269,7 @@ IMPORTANTE: NO generes código de implementación. Solo el plan.
             import logging as _log
             _log.getLogger(__name__).warning("session_memory record en A1: %s", _rec_exc)
 
-    return {
+    result = {
         "master_plan":      output,
         "master_plan_path": path,
         "mode":             resolved_mode,
@@ -281,3 +281,19 @@ IMPORTANTE: NO generes código de implementación. Solo el plan.
         "current_agent":    "a1_planificador",
         "cost_entries":     [cost],
     }
+
+    # F1 — Contrato estructurado: emite un MasterPlan validado junto al string (additivo).
+    from config import STRUCTURED_ARTIFACTS_ENABLED
+    if STRUCTURED_ARTIFACTS_ENABLED:
+        from schemas.agent_outputs import validate_output
+        vr = validate_output("MasterPlan", {
+            "agent_id": "a1_pm", "model": MODEL_A1, "raw_text": output[:4000],
+            "risk_level": risk_level, "tasks": [],
+        })
+        if vr.ok and vr.model is not None:
+            result["master_plan_artifact"] = vr.model.model_dump()
+        else:
+            import logging as _l
+            _l.getLogger(__name__).warning("A1: artefacto MasterPlan inválido: %s", vr.errors)
+
+    return result

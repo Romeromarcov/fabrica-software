@@ -37,6 +37,11 @@ class FabricaState(TypedDict):
     master_plan_path: Optional[str]   # Ruta al archivo guardado
     founder_approval: bool            # True solo tras frase exacta
 
+    # F1 — Artefactos estructurados (Pydantic validados) que viajan junto a los strings.
+    # Solo se rellenan con STRUCTURED_ARTIFACTS_ENABLED=true (additivo; default off = None).
+    master_plan_artifact: Optional[dict]   # MasterPlan validado (A1)
+    db_schema_artifact: Optional[dict]     # DBSchema validado (A2)
+
     # ── Outputs de agentes (Modo Completo) ────────────────────────────────────
     db_schema: Optional[str]          # Agente 6
     mcp_tools: Optional[str]          # Agente 8

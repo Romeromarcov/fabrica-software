@@ -45,8 +45,28 @@ Sigue al pie de la letra las reglas de CODING_STANDARDS y DECISION_LOG.
         repo_path=state["repo_path"],
     )
     save_agent_output(state["feature_id"], "a2_db", output)
-    return {
+    result = {
         "db_schema": output,
         "current_agent": "a2_db",
         "cost_entries": [cost],
     }
+
+    # F1 — Consume el MasterPlan validado de A1 y emite un DBSchema validado (additivo).
+    from config import STRUCTURED_ARTIFACTS_ENABLED
+    if STRUCTURED_ARTIFACTS_ENABLED:
+        import logging as _l
+        from schemas.agent_outputs import validate_output
+        upstream = state.get("master_plan_artifact")
+        if upstream:
+            _l.getLogger(__name__).info(
+                "A2 recibió MasterPlan validado de A1 (risk=%s)", upstream.get("risk_level"))
+        vr = validate_output("DBSchema", {
+            "agent_id": "a2-db", "model": MODEL_A2, "raw_text": output[:4000],
+            "models": [], "needs_migrations": ("migration" in output.lower()),
+        })
+        if vr.ok and vr.model is not None:
+            result["db_schema_artifact"] = vr.model.model_dump()
+        else:
+            _l.getLogger(__name__).warning("A2: artefacto DBSchema inválido: %s", vr.errors)
+
+    return result
