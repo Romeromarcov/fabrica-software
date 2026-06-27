@@ -176,7 +176,7 @@ def _call_anthropic(*, agent_key, agent_label, model, static_keys, extra_context
     user_content.append({"type": "text", "text": f"## TU TAREA\n\n{task_content}"})
 
     response = client.messages.create(
-        model=model, max_tokens=8192, system=system_prompt,
+        model=model, max_tokens=16384, system=system_prompt,
         messages=[{"role": "user", "content": user_content}],
         extra_headers={"anthropic-beta": "prompt-caching-2024-07-31"},
     )
@@ -233,7 +233,7 @@ def _call_google_native(*, agent_key, agent_label, model, static_keys, extra_con
     gen_cfg = gtypes.GenerateContentConfig(
         system_instruction=system_prompt or None,
         thinking_config=gtypes.ThinkingConfig(thinking_level="MEDIUM"),
-        max_output_tokens=8192,
+        max_output_tokens=16384,
     )
 
     response = client.models.generate_content(
@@ -272,7 +272,7 @@ def _call_openai_compat(*, provider, agent_key, agent_label, model, static_keys,
     parts.append(f"## TU TAREA\n\n{task_content}")
 
     response = client.chat.completions.create(
-        model=model, max_tokens=8192,
+        model=model, max_tokens=16384,
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user",   "content": "\n\n---\n\n".join(parts)},
