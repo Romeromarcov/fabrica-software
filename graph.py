@@ -679,25 +679,21 @@ def compile_graph():
     """
     Modo feature standalone: Stop Protocol espera aprobación humana del MASTER_PLAN.
     Solo dos puntos de interrupción: aprobación del plan y escalación.
+
+    Los nodos humanos (stop_protocol, qa_escalation) suspenden con `interrupt()` DINÁMICO,
+    que entrega el payload (tipo, mensaje) al stream. NO se usa `interrupt_before` estático:
+    en langgraph 1.x produce un `{"__interrupt__": ()}` vacío (sin payload) ANTES de que el
+    nodo emita su interrupt dinámico → rompía el manejo en cli.py (IndexError). Ver F6.
     """
     checkpointer = _make_sqlite_checkpointer()
-    return build_graph().compile(
-        checkpointer=checkpointer,
-        interrupt_before=[
-            "stop_protocol",   # ⛔ Founder revisa y aprueba el MASTER_PLAN
-            "qa_escalation",   # ⚠️ QA o SecOps no pudo resolver → Founder decide
-        ],
-    )
+    return build_graph().compile(checkpointer=checkpointer)
 
 
 def compile_graph_project_mode():
     """
     Modo project loop: el PM no espera aprobación manual (A0 ya dio la instrucción).
-    Interrumpe ante: veto_window (Founder puede vetar) y escalaciones QA.
-    confidence_auto_approve no necesita interrupt_before — aprueba sin suspender.
+    Interrumpe ante: veto_window (Founder puede vetar) y escalaciones QA — ambos con
+    `interrupt()` dinámico (sin `interrupt_before` estático; ver compile_graph).
     """
     checkpointer = _make_sqlite_checkpointer()
-    return build_graph().compile(
-        checkpointer=checkpointer,
-        interrupt_before=["veto_window", "qa_escalation"],
-    )
+    return build_graph().compile(checkpointer=checkpointer)
