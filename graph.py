@@ -223,6 +223,21 @@ def _route_after_qa(state: FabricaState) -> str:
     return "reintentar"
 
 
+def _route_after_escalation(state: FabricaState) -> str:
+    """
+    F6 — Honra la decisión del Founder en qa_escalation:
+      ACEPTAR   → continuar (acepta deuda técnica) → a8_secops (como si QA hubiera pasado)
+      REDISEÑAR → reconstruir → a4_backend (qa_iterations ya reseteado por el nodo)
+      CANCELAR / otro → detener el pipeline
+    """
+    d = (state.get("escalation_decision") or "").upper()
+    if d == "ACEPTAR":
+        return "aceptar"
+    if d in ("REDISEÑAR", "REDISENAR"):
+        return "redisenar"
+    return "cancelar"
+
+
 def _route_after_secops(state: FabricaState) -> str:
     """
     SecOps:
@@ -601,8 +616,17 @@ def build_graph() -> StateGraph:
         },
     )
 
-    # 7. QA Escalation → fin
-    g.add_edge("qa_escalation", "pipeline_detenido")
+    # 7. QA Escalation → honra la decisión del Founder (F6): ACEPTAR continúa, REDISEÑAR
+    #    reconstruye, CANCELAR detiene (antes SIEMPRE detenía, ignorando la decisión).
+    g.add_conditional_edges(
+        "qa_escalation",
+        _route_after_escalation,
+        {
+            "aceptar":   "a8_secops",
+            "redisenar": "a4_backend",
+            "cancelar":  "pipeline_detenido",
+        },
+    )
 
     # 8. SecOps: limpio → A10 Code Writer (G1 fix) | corrigió → retest QA | no puede → escala
     g.add_conditional_edges(

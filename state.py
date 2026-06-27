@@ -72,6 +72,10 @@ class FabricaState(TypedDict):
     sandbox_passed: bool              # True = todos los checks pasaron (o sin herramientas)
     sandbox_iterations: int           # Iteraciones del ciclo Sandbox→A6 (máx MAX_SANDBOX_ITER)
 
+    # F6 — Decisión del Founder en qa_escalation (ACEPTAR|REDISEÑAR|CANCELAR) que el grafo
+    # honra para enrutar (antes la escalación siempre terminaba el pipeline). None = sin escalar.
+    escalation_decision: Optional[str]
+
     # ── Revisión y unificación de código (pre-QA) ────────────────────────────
     refactor_doc_output: Optional[str]   # Agente 5 (Revisor/Unificador — corre antes de QA)
     refactor_doc_approved: bool          # True = "✅ LISTO PARA QA" emitido
@@ -169,6 +173,7 @@ def initial_state(
         sandbox_results=None,
         sandbox_passed=False,
         sandbox_iterations=0,
+        escalation_decision=None,
         refactor_doc_output=None,
         refactor_doc_approved=False,
         refactor_change_ratio=0.0,
