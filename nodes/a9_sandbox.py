@@ -31,9 +31,28 @@ def a9_sandbox(state: FabricaState) -> dict:
             msg += f" — gates duros: {', '.join(hard_failed)}"
         errors = [msg]
 
+    passed = result["passed"]
+
+    # F3.2 — Gate de regresión: bloquea si el cambio rompió un test que antes pasaba.
+    # Gated; solo aplica si A1 capturó un baseline. Es un gate DURO (no regresiones a prod).
+    from config import REGRESSION_GATE_ENABLED
+    baseline = state.get("test_baseline_failures")
+    if REGRESSION_GATE_ENABLED and baseline is not None and repo_path:
+        from tools.regression_gate import regression_report, format_block_message
+        reg = regression_report(repo_path, baseline)
+        if reg.get("ran") and not reg["ok"]:
+            passed = False
+            block = format_block_message(reg)
+            errors.append(block)
+            gate_failures = gate_failures + [{
+                "gate": "regression", "layer": "backend",
+                "stderr": block[:2000], "hard": True,
+            }]
+            summary = summary + "\n\n" + block
+
     return {
         "sandbox_results":      summary,
-        "sandbox_passed":       result["passed"],
+        "sandbox_passed":       passed,
         "sandbox_iterations":   iteration,
         "sandbox_gate_failures": gate_failures,
         "current_agent":        "a9_sandbox",
