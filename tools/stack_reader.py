@@ -39,129 +39,47 @@ logger = logging.getLogger(__name__)
 
 # ── Stacks soportados y sus instrucciones específicas por agente ──────────────
 
-BACKEND_INSTRUCTIONS = {
-    "django": {
-        "structure": (
-            "Usa la estructura estándar de Django: `apps/[modulo]/models.py`, "
-            "`serializers.py`, `services.py`, `views.py`, `signals.py`, `urls.py`. "
-            "Los ViewSets delegan toda la lógica a services. "
-            "Usa Django REST Framework para las APIs."
-        ),
-        "testing": "pytest-django con fixtures de factory_boy. Test de aislamiento multi-tenant obligatorio.",
-        "imports": "from django.db import models\nfrom rest_framework import serializers, viewsets",
-    },
-    "fastapi": {
-        "structure": (
-            "Estructura FastAPI: `app/routers/[modulo].py`, `app/models/[modulo].py` (SQLAlchemy), "
-            "`app/schemas/[modulo].py` (Pydantic), `app/services/[modulo].py`. "
-            "Usa dependency injection de FastAPI para DB sessions y auth."
-        ),
-        "testing": "pytest con httpx.AsyncClient para tests de endpoints.",
-        "imports": "from fastapi import APIRouter, Depends\nfrom sqlalchemy.orm import Session",
-    },
-    "express": {
-        "structure": (
-            "Estructura Express/Node: `src/routes/[modulo].ts`, `src/controllers/[modulo].ts`, "
-            "`src/services/[modulo].ts`, `src/models/[modulo].ts`. "
-            "Usa middleware para autenticación JWT."
-        ),
-        "testing": "Jest con supertest para tests de endpoints.",
-        "imports": "import express from 'express';\nimport { Request, Response } from 'express';",
-    },
-    "laravel": {
-        "structure": (
-            "Estructura Laravel: `app/Http/Controllers/[Modulo]Controller.php`, "
-            "`app/Models/[Modulo].php`, `app/Services/[Modulo]Service.php`, "
-            "`routes/api.php`. Usa Eloquent ORM."
-        ),
-        "testing": "PHPUnit con factories de Laravel.",
-        "imports": "use App\\Models\\[Modulo];\nuse App\\Http\\Controllers\\Controller;",
-    },
-}
+# F4.2 — Reducir sesgo de stack. Las instrucciones por framework viven en archivos externos
+# `pipelines/software/stacks/{framework}.md` (no incrustadas en los prompts/código), para que
+# un repo FastAPI+Vue reciba instrucciones FastAPI+Vue SIN fugas de Django/React. Se cargan una
+# vez al importar; cada .md tiene secciones `## Estructura`, `## Imports`, `## Testing`, `## QA`.
+_STACKS_DIR = Path(__file__).resolve().parent.parent / "pipelines" / "software" / "stacks"
 
-FRONTEND_INSTRUCTIONS = {
-    "react": {
-        "structure": (
-            "Estructura React + TypeScript: `src/types/[modulo].ts`, "
-            "`src/services/[modulo]Service.ts`, `src/hooks/use[Feature].ts` (TanStack Query), "
-            "`src/components/[Feature]/`, `src/pages/[Feature]Page.tsx`. "
-            "Nunca usar `any`. Nunca usar `useEffect` para fetching de datos."
-        ),
-        "testing": "Vitest + Testing Library para componentes.",
-        "imports": "import React from 'react';\nimport { useQuery } from '@tanstack/react-query';",
-    },
-    "vue": {
-        "structure": (
-            "Estructura Vue 3 + TypeScript (Composition API): `src/types/[modulo].ts`, "
-            "`src/composables/use[Feature].ts` (VueQuery o Pinia), "
-            "`src/components/[Feature].vue`, `src/views/[Feature]View.vue`."
-        ),
-        "testing": "Vitest + @vue/test-utils.",
-        "imports": "import { ref, computed } from 'vue';\nimport { useQuery } from '@tanstack/vue-query';",
-    },
-    "nextjs": {
-        "structure": (
-            "Estructura Next.js 14+ (App Router): `app/[modulo]/page.tsx`, "
-            "`app/[modulo]/layout.tsx`, `components/[Feature].tsx`, "
-            "`lib/[modulo].ts` para server actions y data fetching."
-        ),
-        "testing": "Jest + Testing Library + Playwright para E2E.",
-        "imports": "import { Suspense } from 'react';\nimport type { Metadata } from 'next';",
-    },
-    "vanilla": {
-        "structure": (
-            "JavaScript/TypeScript vanilla: `src/[modulo]/index.ts`, "
-            "`src/[modulo]/api.ts` para llamadas HTTP, `src/[modulo]/ui.ts` para DOM."
-        ),
-        "testing": "Jest o Vitest.",
-        "imports": "// Vanilla TS — no framework",
-    },
-}
 
-QA_INSTRUCTIONS = {
-    "django": (
-        "Tests obligatorios:\n"
-        "1. Aislamiento multi-tenant (if aplicable)\n"
-        "2. Permisos (403 para usuarios sin acceso)\n"
-        "3. Happy path de cada endpoint\n"
-        "4. Casos límite (vacío, extremos)\n"
-        "5. Soft-delete (si aplica)\n"
-        "6. Auditoría (LogAuditoria si existe el modelo)\n"
-        "Usar: pytest-django, factory_boy, APIClient de DRF"
-    ),
-    "fastapi": (
-        "Tests obligatorios:\n"
-        "1. Auth (401 sin token, 403 con permisos insuficientes)\n"
-        "2. Happy path de cada endpoint\n"
-        "3. Validación de schemas (422 con datos inválidos)\n"
-        "4. Transacciones de DB (rollback en error)\n"
-        "Usar: pytest, httpx.AsyncClient, pytest-asyncio"
-    ),
-    "express": (
-        "Tests obligatorios:\n"
-        "1. Auth middleware (401/403)\n"
-        "2. Happy path de cada ruta\n"
-        "3. Validación de input\n"
-        "4. Manejo de errores (500 controlado)\n"
-        "Usar: Jest, supertest"
-    ),
-    "react": (
-        "Tests de frontend:\n"
-        "1. Render sin crash (snapshot o RTL)\n"
-        "2. Loading state\n"
-        "3. Error state\n"
-        "4. Interacciones de usuario (click, submit)\n"
-        "5. Datos vacíos\n"
-        "Usar: Vitest, @testing-library/react"
-    ),
-    "vue": (
-        "Tests de frontend Vue:\n"
-        "1. Render sin crash\n"
-        "2. Props y emits correctos\n"
-        "3. Estados reactivos\n"
-        "Usar: Vitest, @vue/test-utils"
-    ),
-}
+def _parse_stack_md(text: str) -> dict:
+    """Parsea un .md de stack en {seccion_lower: contenido} (secciones `## Titulo`)."""
+    sections: dict[str, str] = {}
+    current = None
+    buf: list[str] = []
+    for line in text.splitlines():
+        if line.startswith("## "):
+            if current is not None:
+                sections[current] = "\n".join(buf).strip()
+            current = line[3:].strip().lower()
+            buf = []
+        elif current is not None:
+            buf.append(line)
+    if current is not None:
+        sections[current] = "\n".join(buf).strip()
+    return sections
+
+
+def _load_stacks() -> dict[str, dict]:
+    """Carga todas las instrucciones de stack desde los .md (framework = nombre de archivo)."""
+    stacks: dict[str, dict] = {}
+    if not _STACKS_DIR.is_dir():
+        logger.warning("stack_reader: no existe el directorio de stacks %s", _STACKS_DIR)
+        return stacks
+    for md in _STACKS_DIR.glob("*.md"):
+        try:
+            stacks[md.stem.lower()] = _parse_stack_md(md.read_text(encoding="utf-8"))
+        except OSError as exc:
+            logger.warning("stack_reader: no se pudo leer %s (%s)", md, exc)
+    return stacks
+
+
+# Mapa framework → {estructura, imports, testing, qa}. Fuente de verdad: los .md de stacks.
+STACK_INSTRUCTIONS: dict[str, dict] = _load_stacks()
 
 
 def _infer_stack_from_files(repo: Path) -> dict:
@@ -283,44 +201,36 @@ def read_stack(repo_path: str) -> dict:
     return stack
 
 
+def _format_instructions(layer: str, framework: str) -> str:
+    """Bloque de estructura+imports para un framework, o "" si no se reconoce (SIN fallback)."""
+    info = STACK_INSTRUCTIONS.get((framework or "").lower())
+    if not info or not info.get("estructura"):
+        return ""   # F4.2 — sin fuga: un stack desconocido NO recibe Django/React por defecto
+    block = f"**Stack {layer}: {framework.upper()}**\n\nEstructura de archivos:\n{info['estructura']}"
+    if info.get("imports"):
+        block += f"\n\nImports típicos:\n```\n{info['imports']}\n```"
+    return block
+
+
 def get_backend_instructions(stack: dict) -> str:
-    """Devuelve las instrucciones de estructura para el agente backend."""
-    backend = stack.get("backend", "unknown")
-    info = BACKEND_INSTRUCTIONS.get(backend, BACKEND_INSTRUCTIONS.get("django"))
-    if not info:
-        return ""
-    return (
-        f"**Stack Backend: {backend.upper()}**\n\n"
-        f"Estructura de archivos:\n{info['structure']}\n\n"
-        f"Imports típicos:\n```\n{info['imports']}\n```"
-    )
+    """Instrucciones de estructura para el agente backend (desde stacks/{framework}.md)."""
+    return _format_instructions("Backend", stack.get("backend", "unknown"))
 
 
 def get_frontend_instructions(stack: dict) -> str:
-    """Devuelve las instrucciones de estructura para el agente frontend."""
-    frontend = stack.get("frontend", "unknown")
-    info = FRONTEND_INSTRUCTIONS.get(frontend, FRONTEND_INSTRUCTIONS.get("react"))
-    if not info:
-        return ""
-    return (
-        f"**Stack Frontend: {frontend.upper()}**\n\n"
-        f"Estructura de archivos:\n{info['structure']}\n\n"
-        f"Imports típicos:\n```\n{info['imports']}\n```"
-    )
+    """Instrucciones de estructura para el agente frontend (desde stacks/{framework}.md)."""
+    return _format_instructions("Frontend", stack.get("frontend", "unknown"))
 
 
 def get_qa_instructions(stack: dict) -> str:
-    """Devuelve las instrucciones de testing para el agente QA."""
+    """Instrucciones de testing para el agente QA (desde stacks/{framework}.md)."""
     lines = []
-    backend  = stack.get("backend", "unknown")
-    frontend = stack.get("frontend", "unknown")
-
-    if backend in QA_INSTRUCTIONS:
-        lines.append(f"**Tests Backend ({backend}):**\n{QA_INSTRUCTIONS[backend]}")
-    if frontend in QA_INSTRUCTIONS:
-        lines.append(f"\n**Tests Frontend ({frontend}):**\n{QA_INSTRUCTIONS[frontend]}")
-
-    return "\n".join(lines) if lines else ""
+    for layer, key in (("Backend", "backend"), ("Frontend", "frontend")):
+        fw = (stack.get(key, "unknown") or "").lower()
+        info = STACK_INSTRUCTIONS.get(fw)
+        if info and info.get("qa"):
+            lines.append(f"**Tests {layer} ({fw}):**\n{info['qa']}")
+    return "\n\n".join(lines) if lines else ""
 
 
 def generate_stack_md(
@@ -332,7 +242,7 @@ def generate_stack_md(
     database: str = "postgresql",
 ) -> str:
     """Genera el contenido de un STACK.md nuevo para un proyecto."""
-    backend_test = BACKEND_INSTRUCTIONS.get(backend, {}).get("testing", "pytest")
+    backend_test = STACK_INSTRUCTIONS.get((backend or "").lower(), {}).get("testing", "pytest")
     frontend_test = "vitest" if frontend in ("react", "vue", "nextjs") else "jest"
 
     lines = [
