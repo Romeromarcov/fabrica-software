@@ -308,7 +308,15 @@ def qa_escalation(state: FabricaState) -> dict:
     decision = founder_input.strip().upper()
     save_run_metadata(state["feature_id"], {"escalation_decision": decision})
 
-    return {
+    # F6 — El grafo enruta según la decisión (antes la escalación siempre detenía el pipeline).
+    result: dict = {
         "current_agent": "qa_escalation",
-        "errors": [f"Escalación. Decisión del Founder: {decision}"],
+        "escalation_decision": decision,
     }
+    if decision == "REDISEÑAR" or decision == "REDISENAR":
+        # Reintento con enfoque distinto: reset del contador de QA para no re-escalar de inmediato.
+        result["qa_iterations"] = 0
+    elif decision != "ACEPTAR":
+        # CANCELAR o respuesta no reconocida → se detiene (con el motivo registrado).
+        result["errors"] = [f"Escalación cancelada. Decisión del Founder: {decision}"]
+    return result
