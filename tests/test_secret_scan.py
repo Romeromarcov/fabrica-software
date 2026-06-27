@@ -99,3 +99,22 @@ def test_gate_skipped_when_flag_disabled(tmp_path, monkeypatch):
     sr = result["results"]["secret_scan"]
     assert sr["skipped"] is True
     assert sr["skip_reason"] == "disabled"
+
+
+def test_spanish_changeme_placeholder_not_flagged(tmp_path):
+    """F6 — un default 'cambiar_en_produccion...' es un placeholder, no un secreto real."""
+    from tools.code_sandbox import scan_secrets
+    f = tmp_path / "config.py"
+    # Placeholder de plantilla (no es un secreto real). gitleaks:allow
+    placeholder = "cambiar_en_produccion_" + "clave_muy_larga_123456789"  # gitleaks:allow
+    f.write_text(f"_DEFAULT_SECRET = '{placeholder}'\n", encoding="utf-8")
+    assert scan_secrets(str(tmp_path)) == []
+
+
+def test_real_secret_still_flagged(tmp_path):
+    # Patrón obviamente falso (como el resto de este archivo) — lo detecta scan_secrets pero
+    # no es un secreto real (evita disparar gitleaks en el repo).
+    from tools.code_sandbox import scan_secrets
+    f = tmp_path / "config.py"
+    f.write_text('API_KEY = "sk-ant-api03-AAAABBBBCCCCDDDD1234"\n', encoding="utf-8")
+    assert len(scan_secrets(str(tmp_path))) >= 1
