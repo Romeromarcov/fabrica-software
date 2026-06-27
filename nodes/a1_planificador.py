@@ -296,4 +296,15 @@ IMPORTANTE: NO generes código de implementación. Solo el plan.
             import logging as _l
             _l.getLogger(__name__).warning("A1: artefacto MasterPlan inválido: %s", vr.errors)
 
+    # F3.2 — Captura el baseline de tests que YA fallaban (antes del feature). El sandbox (A9)
+    # lo usará para bloquear solo regresiones nuevas. Gated; default off → no se corre nada.
+    from config import REGRESSION_GATE_ENABLED
+    if REGRESSION_GATE_ENABLED and repo_path:
+        from tools.regression_gate import collect_failures
+        baseline = collect_failures(repo_path)
+        result["test_baseline_failures"] = sorted(baseline["failures"])
+        import logging as _l
+        _l.getLogger(__name__).info(
+            "A1: baseline de regresión = %d test(s) ya fallando", len(baseline["failures"]))
+
     return result

@@ -42,6 +42,10 @@ class FabricaState(TypedDict):
     master_plan_artifact: Optional[dict]   # MasterPlan validado (A1)
     db_schema_artifact: Optional[dict]     # DBSchema validado (A2)
 
+    # F3.2 — Baseline de tests que ya fallaban antes del feature (capturado en A1 con
+    # REGRESSION_GATE_ENABLED). El sandbox (A9) bloquea si aparece un fallo nuevo. None = sin baseline.
+    test_baseline_failures: Optional[list]
+
     # ── Outputs de agentes (Modo Completo) ────────────────────────────────────
     db_schema: Optional[str]          # Agente 6
     mcp_tools: Optional[str]          # Agente 8

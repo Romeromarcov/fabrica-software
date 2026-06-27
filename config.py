@@ -348,6 +348,12 @@ STRUCTURED_ARTIFACTS_ENABLED = os.getenv("STRUCTURED_ARTIFACTS_ENABLED", "false"
 # siguiente de F2.
 HARNESS_MODE_ENABLED = os.getenv("HARNESS_MODE_ENABLED", "false").lower() == "true"
 
+# F3.2 (PLAN_MAESTRO) — Gate de regresión sobre la suite EXISTENTE del repo. Captura los
+# tests que ya fallaban antes del feature (baseline en A1) y BLOQUEA en el sandbox (A9) si el
+# cambio rompe un test que antes pasaba (regresión). Opt-in; default off → sandbox de hoy
+# (que ya falla ante cualquier test roto, sin distinguir preexistentes). Ver tools/regression_gate.py.
+REGRESSION_GATE_ENABLED = os.getenv("REGRESSION_GATE_ENABLED", "false").lower() == "true"
+
 # A2.3 — CORS explícito. Allowlist de orígenes (separados por comas). Vacío = no se
 # añade middleware CORS (comportamiento por defecto: sin orígenes cruzados permitidos).
 CORS_ALLOWED_ORIGINS = [
