@@ -79,13 +79,15 @@ def _route_after_plan(state: FabricaState) -> str:
     confidence >= 60 + risk≠HIGH  → veto_window (aprobación automática tras N min)
     demás casos                   → stop_protocol (aprobación manual)
     """
-    from tools.risk_classifier import approval_action
+    from tools.risk_classifier import approval_action, apply_autonomy_level
     action = approval_action(
         tier=state.get("risk_level", "MEDIUM"),
         confidence=state.get("confidence_score", 70),
         mode=state.get("mode", "completo"),
         project_mode=bool(state.get("project_mode")),
     )
+    # F4.1 — el "dial" de autonomía modula la decisión (AUTONOMY_LEVEL leído dinámicamente).
+    action = apply_autonomy_level(action)
     return {
         "auto":  "confidence_auto_approve",
         "veto":  "veto_window",

@@ -54,6 +54,9 @@ DEFAULTS = {
     "MODEL_A11": "claude-sonnet-4-6",       # A11 DevOps — Anthropic
     # Comportamiento del pipeline
     "WRITE_TO_REPO": "true",               # false = dry-run sin escribir archivos
+    # F4.1 — HITL dial: AUTO|VETO|CHECKPOINTS|MANUAL ("" = decide confianza/riesgo).
+    # Cambiarlo aquí altera cuánto pausa el pipeline para el humano, sin tocar código.
+    "AUTONOMY_LEVEL": "",
     # Autonomía de la fábrica (alto riesgo) — default seguro false; se activan desde la UI.
     # El default vive aquí y en config.py; la UI persiste el opt-in en /data/.env.
     "AUTO_MERGE_ENABLED":        "false",  # fusiona PRs LOW con gate verde (RUNBOOK §7.4)
