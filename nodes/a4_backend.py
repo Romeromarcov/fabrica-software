@@ -95,16 +95,30 @@ from sqlalchemy import Column, Integer
         _l.getLogger(__name__).info(
             "A4 recibió artefactos validados: MasterPlan=%s DBSchema=%s", bool(mp), bool(db))
 
-    output, cost = call_agent(
-        agent_key="a4-backend",
-        agent_label="Agente 4 Backend",
-        task_content=task,
-        model=MODEL_A4,
-        repo_path=state["repo_path"],
-    )
+    # F2 — Harness/ACI: en modo harness, A4 construye leyendo el repo real con tools
+    # (mini-loop ReAct). Gated; flag off → call_agent directo de hoy (idéntico).
+    from config import HARNESS_MODE_ENABLED
+    if HARNESS_MODE_ENABLED:
+        from nodes.base import call_agent_react
+        output, costs = call_agent_react(
+            agent_key="a4-backend",
+            agent_label="Agente 4 Backend",
+            task_content=task,
+            model=MODEL_A4,
+            repo_path=state["repo_path"],
+        )
+    else:
+        output, cost = call_agent(
+            agent_key="a4-backend",
+            agent_label="Agente 4 Backend",
+            task_content=task,
+            model=MODEL_A4,
+            repo_path=state["repo_path"],
+        )
+        costs = [cost]
     save_agent_output(state["feature_id"], f"a4_backend_iter{state['qa_iterations']}", output)
     return {
         "backend_code": output,
         "current_agent": "a4_backend",
-        "cost_entries": [cost],
+        "cost_entries": costs,
     }
