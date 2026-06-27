@@ -62,3 +62,13 @@ def test_base_call_agent_span_does_not_break(monkeypatch):
     text, _ = base.call_agent(agent_key="a4_backend", agent_label="A4",
                               model="claude-sonnet-4-6", task_content="t", include_static=[])
     assert text == "ok"
+
+
+def test_span_propagates_body_exception_cleanly(monkeypatch):
+    """F6: una excepción dentro de span() debe PROPAGARSE como tal (no 'generator didn't stop')."""
+    monkeypatch.setattr("config.OTEL_ENABLED", True, raising=False)
+    ot.reset_for_tests()
+    import pytest as _pytest
+    with _pytest.raises(ValueError, match="boom"):
+        with ot.span("agent.test"):
+            raise ValueError("boom")

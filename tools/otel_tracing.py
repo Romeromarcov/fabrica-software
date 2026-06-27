@@ -80,22 +80,30 @@ def span(name: str, **attributes) -> Iterator[None]:
     if not enabled() or not init_tracing():
         yield
         return
+    # Setup del span (import/tracer). Si falla → no-op observable. IMPORTANTE: el `yield` del
+    # cuerpo NO va dentro de este try — una excepción del cuerpo (p. ej. un agente que agota
+    # reintentos) debe PROPAGARSE, no tragarse. Antes, el except hacía `yield` de nuevo tras el
+    # del cuerpo → "generator didn't stop after throw()" y enmascaraba el error real (F6).
     try:
         from opentelemetry import trace
         from tools.trace import get_trace_id
 
         tracer = trace.get_tracer("fabrica")
-        with tracer.start_as_current_span(name) as sp:
-            try:
-                sp.set_attribute("fabrica.trace_id", get_trace_id())
-                for k, v in attributes.items():
-                    if v is not None:
-                        sp.set_attribute(k, v)
-            except Exception:  # noqa: BLE001 — atributos best-effort
-                logger.debug("otel_tracing: no se pudieron fijar atributos", exc_info=True)
-            yield
-    except Exception as exc:  # noqa: BLE001 — degradar a no-op
-        logger.warning("otel_tracing: span '%s' falló (%s); continúa sin traza", name, exc)
+        _trace_id = get_trace_id()
+    except Exception as exc:  # noqa: BLE001 — setup falló → degradar a no-op
+        logger.warning("otel_tracing: span '%s' no se pudo iniciar (%s); continúa sin traza", name, exc)
+        yield
+        return
+
+    with tracer.start_as_current_span(name) as sp:
+        try:
+            sp.set_attribute("fabrica.trace_id", _trace_id)
+            for k, v in attributes.items():
+                if v is not None:
+                    sp.set_attribute(k, v)
+        except Exception:  # noqa: BLE001 — atributos best-effort
+            logger.debug("otel_tracing: no se pudieron fijar atributos", exc_info=True)
+        # El cuerpo corre aquí; si lanza, el span lo registra y la excepción se propaga.
         yield
 
 
