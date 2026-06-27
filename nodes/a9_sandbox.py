@@ -33,6 +33,23 @@ def a9_sandbox(state: FabricaState) -> dict:
 
     passed = result["passed"]
 
+    # F3.2 — Gate de convenciones: el código nuevo debe seguir las convenciones del repo.
+    # Gated; conservador. Si se desvía, enruta a A6 (gate blando: passed=False, hard=False).
+    from config import CONVENTIONS_GATE_ENABLED
+    if CONVENTIONS_GATE_ENABLED and repo_path:
+        from tools.conventions_gate import conventions_report, format_block_message
+        code_text = (state.get("backend_code") or "") + "\n" + (state.get("frontend_code") or "")
+        conv = conventions_report(repo_path, code_text)
+        if conv["checked"] and not conv["ok"]:
+            passed = False
+            block = format_block_message(conv)
+            errors.append(block)
+            gate_failures = gate_failures + [{
+                "gate": "conventions", "layer": "backend",
+                "stderr": block[:2000], "hard": False,
+            }]
+            summary = summary + "\n\n" + block
+
     # F3.2 — Gate de regresión: bloquea si el cambio rompió un test que antes pasaba.
     # Gated; solo aplica si A1 capturó un baseline. Es un gate DURO (no regresiones a prod).
     from config import REGRESSION_GATE_ENABLED

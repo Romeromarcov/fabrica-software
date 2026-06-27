@@ -354,6 +354,12 @@ HARNESS_MODE_ENABLED = os.getenv("HARNESS_MODE_ENABLED", "false").lower() == "tr
 # (que ya falla ante cualquier test roto, sin distinguir preexistentes). Ver tools/regression_gate.py.
 REGRESSION_GATE_ENABLED = os.getenv("REGRESSION_GATE_ENABLED", "false").lower() == "true"
 
+# F3.2 (PLAN_MAESTRO) — Gate de convenciones. Verifica que el código nuevo respete las
+# convenciones de ALTA confianza del repo (logger de módulo, prefijo id_ en FKs). Si se desvía,
+# el sandbox (A9) lo reporta y enruta a A6 para ajustar. Opt-in; default off. Conservador (solo
+# reglas inequívocas) para no bloquear de más. Ver tools/conventions_gate.py.
+CONVENTIONS_GATE_ENABLED = os.getenv("CONVENTIONS_GATE_ENABLED", "false").lower() == "true"
+
 # A2.3 — CORS explícito. Allowlist de orígenes (separados por comas). Vacío = no se
 # añade middleware CORS (comportamiento por defecto: sin orígenes cruzados permitidos).
 CORS_ALLOWED_ORIGINS = [
