@@ -464,8 +464,11 @@ _GENERIC_SECRET = re.compile(
 # línea completa en minúsculas.
 _PLACEHOLDER_MARKERS = (
     "os.getenv", "os.environ", "process.env", "getenv", "environ[",
-    "...", "xxx", "your-", "your_", "<", "changeme", "change-me",
+    "...", "xxx", "your-", "your_", "<", "changeme", "change-me", "change_me",
     "example", "placeholder", "dummy", "fake", "todo", "redacted",
+    # Placeholders de "cámbiame" en español/inglés (defaults de plantilla, no secretos reales).
+    "cambiar", "cambiame", "cambia_", "cambia-", "changeit", "replaceme",
+    "replace_me", "replace-me", "default_secret", "tu_clave", "tu_secreto", "tu-clave",
 )
 
 # Directorios que nunca se escanean.

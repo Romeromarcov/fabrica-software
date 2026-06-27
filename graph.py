@@ -232,6 +232,12 @@ def _route_after_escalation(state: FabricaState) -> str:
     """
     d = (state.get("escalation_decision") or "").upper()
     if d == "ACEPTAR":
+        # Si la escalación vino del SANDBOX (sus iteraciones agotadas sin pasar), aceptar la
+        # deuda técnica = SALTAR el sandbox → revisión adversarial → PR Final, en vez de re-entrar
+        # al loop build→sandbox (que volvería a fallar el mismo gate). F6.
+        if not state.get("sandbox_passed", False) and \
+                state.get("sandbox_iterations", 0) >= MAX_SANDBOX_ITER:
+            return "aceptar_sandbox"
         return "aceptar"
     if d in ("REDISEÑAR", "REDISENAR"):
         return "redisenar"
@@ -622,9 +628,10 @@ def build_graph() -> StateGraph:
         "qa_escalation",
         _route_after_escalation,
         {
-            "aceptar":   "a8_secops",
-            "redisenar": "a4_backend",
-            "cancelar":  "pipeline_detenido",
+            "aceptar":         "a8_secops",       # escalación QA/SecOps → continúa a seguridad
+            "aceptar_sandbox": "a85_adversarial", # escalación sandbox → salta a adversarial → PR
+            "redisenar":       "a4_backend",
+            "cancelar":        "pipeline_detenido",
         },
     )
 

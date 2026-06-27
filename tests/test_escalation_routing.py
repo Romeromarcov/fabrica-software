@@ -10,7 +10,17 @@ from unittest.mock import patch
 
 
 def test_router_aceptar_continues():
+    # Escalación de QA/SecOps (sandbox no agotado) → continúa a SecOps.
     assert _route_after_escalation({"escalation_decision": "ACEPTAR"}) == "aceptar"
+
+
+def test_router_aceptar_sandbox_bypasses_to_adversarial():
+    # Escalación originada en el SANDBOX (iteraciones agotadas, no pasó) → salta a adversarial,
+    # NO re-entra al loop build→sandbox.
+    from config import MAX_SANDBOX_ITER
+    st = {"escalation_decision": "ACEPTAR", "sandbox_passed": False,
+          "sandbox_iterations": MAX_SANDBOX_ITER}
+    assert _route_after_escalation(st) == "aceptar_sandbox"
 
 
 def test_router_redisenar_rebuilds():
