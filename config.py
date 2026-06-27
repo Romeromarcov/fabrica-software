@@ -360,6 +360,16 @@ REGRESSION_GATE_ENABLED = os.getenv("REGRESSION_GATE_ENABLED", "false").lower() 
 # reglas inequívocas) para no bloquear de más. Ver tools/conventions_gate.py.
 CONVENTIONS_GATE_ENABLED = os.getenv("CONVENTIONS_GATE_ENABLED", "false").lower() == "true"
 
+# F4.1 (PLAN_MAESTRO) — HITL graduado (el "dial"). Modula cuánto pausa el pipeline para el
+# humano, sobre la decisión por confianza/riesgo. Niveles:
+#   AUTO        → auto-aprueba siempre (sin pausa)
+#   VETO        → nunca auto-aprueba del todo: al menos una ventana de veto
+#   CHECKPOINTS → pausa en los checkpoints (aprobación manual del plan)
+#   MANUAL      → aprobación manual siempre
+#   "" (vacío)  → comportamiento actual (la confianza/riesgo decide). Default → sin cambio.
+# Cambiable en /config sin tocar código (ver ui/config_store.py).
+AUTONOMY_LEVEL = os.getenv("AUTONOMY_LEVEL", "").upper()
+
 # A2.3 — CORS explícito. Allowlist de orígenes (separados por comas). Vacío = no se
 # añade middleware CORS (comportamiento por defecto: sin orígenes cruzados permitidos).
 CORS_ALLOWED_ORIGINS = [

@@ -160,6 +160,33 @@ def approval_action(tier: str, confidence: int, mode: str, project_mode: bool) -
     return "human"                          # HIGH (o baja confianza) → humano obligatorio
 
 
+VALID_AUTONOMY_LEVELS = {"AUTO", "VETO", "CHECKPOINTS", "MANUAL"}
+
+
+def apply_autonomy_level(action: str, level: str | None = None) -> str:
+    """
+    F4.1 — Modula la acción de aprobación ("auto"|"veto"|"human") según AUTONOMY_LEVEL (el
+    "dial" de HITL). Puro. Si `level` es None se lee dinámicamente de config (cambiable en
+    runtime / /config). Un nivel vacío o desconocido NO altera la decisión (comportamiento actual).
+
+      AUTO        → "auto"  (sin pausa)
+      VETO        → cap en "veto": un "auto" se degrada a ventana de veto; "human" se respeta
+      CHECKPOINTS → "human" (pausa en el checkpoint de aprobación del plan)
+      MANUAL      → "human" (aprobación manual siempre)
+    """
+    if level is None:
+        import config
+        level = getattr(config, "AUTONOMY_LEVEL", "") or ""
+    level = level.upper()
+    if level == "AUTO":
+        return "auto"
+    if level == "VETO":
+        return "veto" if action == "auto" else action
+    if level in ("CHECKPOINTS", "MANUAL"):
+        return "human"
+    return action
+
+
 def final_risk_for_merge(files_written: list[str], base_risk: str, gate_all_green: bool) -> str:
     """Tier final para la decisión de auto-merge: máx(base, rutas del diff); gate no
     verde fuerza HIGH (F3.4). Única fuente de verdad usada por a1_pr_final."""
