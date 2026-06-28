@@ -1,5 +1,5 @@
 """F6 — _detect_structure capta el layout real del repo (no una plantilla genérica)."""
-from tools.repo_scanner import _detect_structure
+from tools.repo_scanner import _detect_structure, detect_pythonpath_roots
 
 
 def test_detects_backend_routers_layout(tmp_path):
@@ -32,3 +32,24 @@ def test_detects_app_package_layout(tmp_path):
 
 def test_empty_repo_no_structure(tmp_path):
     assert _detect_structure(tmp_path) == []
+
+
+def test_pythonpath_roots_includes_backend_subdir(tmp_path):
+    (tmp_path / "backend").mkdir()
+    (tmp_path / "backend" / "main.py").write_text(
+        "from fastapi import FastAPI\napp = FastAPI()\n", encoding="utf-8")
+    roots = detect_pythonpath_roots(str(tmp_path))
+    assert str(tmp_path) in roots
+    assert str(tmp_path / "backend") in roots
+
+
+def test_pythonpath_roots_root_entrypoint_only_root(tmp_path):
+    (tmp_path / "main.py").write_text(
+        "from fastapi import FastAPI\napp = FastAPI()\n", encoding="utf-8")
+    roots = detect_pythonpath_roots(str(tmp_path))
+    assert roots == [str(tmp_path)]
+
+
+def test_pythonpath_roots_empty_repo(tmp_path):
+    # Sin entrypoint detectable: solo la raíz (inocuo).
+    assert detect_pythonpath_roots(str(tmp_path)) == [str(tmp_path)]
