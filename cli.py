@@ -489,6 +489,9 @@ def _handle_project_interrupt(app, config: dict, interrupt_data: dict, project_i
 
 
 def _print_project_progress(node_name: str, output: dict) -> None:
+    # Algunos nodos (p. ej. project_complete) o pasos de langgraph emiten un update vacío/None
+    # al reanudar tras un checkpoint → evitar AttributeError sobre None.
+    output = output or {}
     labels = {
         "a0_arquitecto":        "📐 A0 — Arquitecto",
         "human_approve_roadmap":"⛔ Esperando aprobación de roadmap",
