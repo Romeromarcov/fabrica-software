@@ -810,15 +810,14 @@ def build_project_graph() -> StateGraph:
 
 
 def compile_project_graph():
-    """Compila el grafo de proyecto con persistencia SQLite."""
+    """Compila el grafo de proyecto con persistencia SQLite.
+
+    F6: NO se usa `interrupt_before` estático. Los nodos human_approve_roadmap y
+    present_suggestions ya suspenden con `interrupt()` DINÁMICO (entregan payload al
+    stream). En langgraph 1.x, `interrupt_before` emite un `{"__interrupt__": ()}` vacío
+    ANTES de que el nodo corra → cli.py hacía `node_output[0].value` sobre una tupla vacía
+    → IndexError (mismo bug ya corregido en compile_graph para el modo feature).
+    """
     from graph import _make_sqlite_checkpointer
     checkpointer = _make_sqlite_checkpointer()
-    return build_project_graph().compile(
-        checkpointer=checkpointer,
-        interrupt_before=[
-            "human_approve_roadmap",  # ⛔ Founder aprueba roadmap inicial
-            "present_suggestions",    # ⛔ Founder decide continuar/cerrar al vaciar backlog
-            # Nota: a0_revisor y merge_coordinator usan interrupt() interno
-            # solo cuando hay DERIVACION_CRITICA o conflicto HIGH de merge
-        ],
-    )
+    return build_project_graph().compile(checkpointer=checkpointer)
