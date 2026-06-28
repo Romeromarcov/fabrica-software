@@ -408,13 +408,46 @@ def _check_makemigrations(repo_path: str, stack: dict) -> dict:
     return _result(gate, "makemigrations-check", ok, out[:1500])
 
 
-def _check_coverage(repo_path: str, stack: dict, min_pct: int = 70) -> dict:
+_COV_SKIP_DIRS = {".git", "node_modules", "__pycache__", ".venv", "venv", "dist",
+                  "build", ".next", "migrations", "tests", "test", "__tests__"}
+
+
+def _is_greenfield(repo_path: str, files: list[str] | None) -> bool:
+    """True si el feature ES casi todo el repo (proyecto nuevo): los archivos escritos
+    cubren la mayor parte de los .py del repo. False en un feature incremental sobre un
+    repo existente grande — donde exigir cobertura GLOBAL del 70% es irreal (mide código
+    legado ajeno al feature)."""
+    if not files:
+        return True   # sin filtro → trato como full/greenfield (comportamiento previo)
+    repo = Path(repo_path)
+    written = {os.path.normpath(f) for f in files if f.endswith(".py")}
+    if not written:
+        return False
+    all_py = [p for p in repo.glob("**/*.py")
+              if not any(part in _COV_SKIP_DIRS for part in p.relative_to(repo).parts)]
+    all_norm = {os.path.normpath(str(p.relative_to(repo))) for p in all_py}
+    if not all_norm:
+        return True
+    ratio = len(written & all_norm) / len(all_norm)
+    return ratio >= 0.6
+
+
+def _check_coverage(repo_path: str, stack: dict, min_pct: int = 70,
+                    files: list[str] | None = None) -> dict:
     """Cobertura mínima de tests backend."""
     gate = "coverage"
     if not stack["python"] or not stack["has_pytest"]:
         return _skip(gate, "no_tests", "Sin tests pytest.")
     if not _has_pytest():
         return _skip(gate, "tool_missing", "pytest no instalado.")
+    # Feature incremental sobre repo existente: el umbral GLOBAL mide el repo entero
+    # (código legado sin tests), no el feature → bloqueo irreal. Se vuelve advisory; la
+    # cobertura del código NUEVO la cubre el gate `new-code-coverage` (per-archivo). En
+    # greenfield (proyecto nuevo) sí se exige el umbral global.
+    if not _is_greenfield(repo_path, files):
+        return _skip(gate, "incremental",
+                     "Feature incremental: cobertura global no exigida (usar new-code-coverage "
+                     "para el código nuevo). Los tests deben pasar igual en el gate pytest.")
     ok, out = _run_tests_autoinstall(
         _pytest_base() + ["--cov=.", f"--cov-fail-under={min_pct}", "--cov-report=term-missing",
          "--tb=no", "-q", "--no-header"],
@@ -1080,7 +1113,7 @@ def run_all_checks(repo_path: str, install_deps: bool = True,
     # Orden: backend primero, luego frontend.
     checks = {
         "python_tests":  _check_pytest(repo_path, stack),
-        "python_cover":  _check_coverage(repo_path, stack),
+        "python_cover":  _check_coverage(repo_path, stack, files=files),
         "python_migr":   _check_migrations(repo_path, stack),
         "python_mkmigr": _check_makemigrations(repo_path, stack),   # F1.3
         "python_type":   _check_mypy(repo_path, stack),

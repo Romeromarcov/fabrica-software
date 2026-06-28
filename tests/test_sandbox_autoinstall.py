@@ -74,6 +74,33 @@ def test_autoinstall_disabled_no_install(tmp_path, monkeypatch):
     assert installed == []
 
 
+def test_greenfield_when_written_is_most_of_repo(tmp_path):
+    (tmp_path / "main.py").write_text("x=1\n", encoding="utf-8")
+    (tmp_path / "models.py").write_text("y=1\n", encoding="utf-8")
+    assert cs._is_greenfield(str(tmp_path), ["main.py", "models.py"]) is True
+
+
+def test_incremental_when_repo_has_much_legacy(tmp_path):
+    # Repo con muchos .py preexistentes; el feature toca solo 1 → incremental.
+    for i in range(10):
+        (tmp_path / f"legacy_{i}.py").write_text("z=1\n", encoding="utf-8")
+    (tmp_path / "new_feature.py").write_text("n=1\n", encoding="utf-8")
+    assert cs._is_greenfield(str(tmp_path), ["new_feature.py"]) is False
+
+
+def test_coverage_skips_for_incremental(tmp_path, monkeypatch):
+    """El gate coverage global no se exige (skip 'incremental') en feature incremental."""
+    for i in range(10):
+        (tmp_path / f"legacy_{i}.py").write_text("z=1\n", encoding="utf-8")
+    (tmp_path / "new_feature.py").write_text("n=1\n", encoding="utf-8")
+    (tmp_path / "requirements.txt").write_text("pytest\n", encoding="utf-8")
+    stack = {"python": True, "django": False, "has_pytest": True}
+    monkeypatch.setattr(cs, "_has_pytest", lambda: True)
+    res = cs._check_coverage(str(tmp_path), stack, files=["new_feature.py"])
+    assert res["skipped"] is True
+    assert res["skip_reason"] == "incremental"
+
+
 def test_autoinstall_stops_when_no_progress(tmp_path, monkeypatch):
     """Si la instalación falla, no hace loop infinito."""
     (tmp_path / "requirements.txt").write_text("fastapi\n", encoding="utf-8")
