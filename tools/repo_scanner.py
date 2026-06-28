@@ -458,6 +458,89 @@ def _detect_env_vars(repo: Path) -> list[str]:
     return env_vars[:20]
 
 
+_SKIP_STRUCT_DIRS = {".git", "node_modules", "__pycache__", ".venv", "venv", "dist",
+                     "build", ".next", "migrations", "tests", "test", "__tests__"}
+
+
+def _detect_structure(repo: Path) -> list[str]:
+    """
+    F6 — Detecta el LAYOUT real del repo (dónde vive el código y con qué estilo de import),
+    para que los agentes constructores repliquen la estructura EXISTENTE en vez de una plantilla
+    genérica. Devuelve líneas markdown; vacío si el repo está vacío/no reconocible.
+
+    Heurísticas baratas (no AST): busca el entrypoint (FastAPI/Flask/Express), el directorio de
+    routers/endpoints y el de modelos, y deduce el prefijo de import (p. ej. `app.` vs plano).
+    """
+    lines: list[str] = []
+    py_files = [p for p in repo.glob("**/*.py")
+                if not any(part in _SKIP_STRUCT_DIRS for part in p.relative_to(repo).parts)][:400]
+
+    def _rel(p: Path) -> str:
+        return str(p.relative_to(repo)).replace("\\", "/")
+
+    # Entrypoint: archivo que instancia la app.
+    entry = None
+    for p in py_files:
+        try:
+            txt = p.read_text(encoding="utf-8", errors="ignore")
+        except OSError as exc:
+            logger.debug("_detect_structure: no se pudo leer %s (%s)", p, exc)
+            continue
+        if "FastAPI(" in txt or "Flask(__name__" in txt or "= Flask(" in txt:
+            entry = p
+            break
+    if entry is not None:
+        lines.append(f"- **Entrypoint:** `{_rel(entry)}`")
+
+    # Directorios de routers/endpoints (FastAPI APIRouter / Flask Blueprint / Express Router).
+    router_dirs: dict[str, int] = {}
+    model_dirs: dict[str, int] = {}
+    for p in py_files:
+        try:
+            txt = p.read_text(encoding="utf-8", errors="ignore")
+        except OSError as exc:
+            logger.debug("_detect_structure: no se pudo leer %s (%s)", p, exc)
+            continue
+        d = str(p.parent.relative_to(repo)).replace("\\", "/") or "."
+        if "APIRouter(" in txt or "Blueprint(" in txt or "@router." in txt:
+            router_dirs[d] = router_dirs.get(d, 0) + 1
+        if "(Base)" in txt or "declarative_base" in txt or "db.Model" in txt or "Column(" in txt:
+            model_dirs[d] = model_dirs.get(d, 0) + 1
+
+    def _top(dct: dict[str, int]) -> str | None:
+        return max(dct, key=dct.get) if dct else None
+
+    rdir, mdir = _top(router_dirs), _top(model_dirs)
+    if rdir:
+        lines.append(f"- **Routers/endpoints en:** `{rdir}/` (replica AHÍ los endpoints nuevos)")
+    if mdir:
+        lines.append(f"- **Modelos en:** `{mdir}/`")
+
+    # Estilo de import: ¿usa un paquete raíz (`from app.`/`from src.`) o imports planos?
+    if entry is not None:
+        try:
+            etxt = entry.read_text(encoding="utf-8", errors="ignore")
+        except OSError as exc:
+            logger.debug("_detect_structure: no se pudo leer entrypoint %s (%s)", entry, exc)
+            etxt = ""
+        import re as _r
+        roots = _r.findall(r"^\s*from\s+(\w+)[\s.]", etxt, _r.MULTILINE)
+        pkg_roots = [r for r in roots if r not in ("fastapi", "starlette", "pydantic",
+                     "sqlalchemy", "os", "sys", "logging", "typing", "datetime", "contextlib")]
+        top_dirs = {d.name for d in repo.iterdir() if d.is_dir() and d.name not in _SKIP_STRUCT_DIRS}
+        local = [r for r in pkg_roots if r in top_dirs or (entry.parent / r).exists()]
+        if any(r in ("app", "src") for r in local):
+            lines.append(f"- **Estilo de import:** con paquete raíz `{[r for r in local if r in ('app','src')][0]}.` "
+                         f"(p. ej. `from app.models...`)")
+        elif local:
+            lines.append("- **Estilo de import:** imports PLANOS dentro del dir del entrypoint "
+                         f"(p. ej. `from {local[0]} import ...`) — NO uses un paquete `app.` inexistente")
+
+    if lines:
+        lines.insert(0, "_Replica esta estructura — NO inventes un layout `app/api/v1/...` si el repo no lo usa._")
+    return lines
+
+
 def build_fingerprint(repo_path: str) -> str:
     """
     Escanea el repo completo y genera `agents/CODEBASE_FINGERPRINT.md`.
@@ -482,6 +565,7 @@ def build_fingerprint(repo_path: str) -> str:
     modules     = _find_django_modules(repo)
     conventions = _detect_conventions(repo)
     env_vars    = _detect_env_vars(repo)
+    structure   = _detect_structure(repo)
 
     # ── Construir el documento ────────────────────────────────────────────────
     lines = [
@@ -508,6 +592,14 @@ def build_fingerprint(repo_path: str) -> str:
     if not be and not fe:
         lines.append("- Stack no identificado (ver requirements.txt / package.json)")
     lines.append("")
+
+    # F6 — Estructura real del repo (PROMINENTE: los constructores deben replicarla, no la
+    # plantilla genérica de stack). Va justo tras el stack para máxima visibilidad en el prompt.
+    if structure:
+        lines.append("## Estructura del proyecto (SEGUIR ESTA, no una plantilla genérica)")
+        for s in structure:
+            lines.append(s)
+        lines.append("")
 
     if conventions:
         lines.append("## Convenciones detectadas (del código real)")

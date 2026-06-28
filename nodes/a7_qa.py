@@ -16,6 +16,12 @@ def a7_qa(state: FabricaState) -> dict:
     qa_instructions = get_qa_instructions(stack)
     stack_block = f"\n## INSTRUCCIONES DE TESTING\n{qa_instructions}\n" if qa_instructions else ""
 
+    # F6 — Fingerprint con la ESTRUCTURA REAL del repo: A7 debe escribir tests que importen con
+    # el layout/estilo de import reales (p. ej. `from routers import ...`), NO un `app.*` inventado
+    # (causa de que pytest fallara en el sandbox). Antes A7 no recibía el fingerprint.
+    from tools.context_retriever import get_relevant_context
+    fingerprint_block = get_relevant_context(state["repo_path"])
+
     # Lecciones aprendidas del proyecto (patrones de error anteriores)
     lessons_block = lessons_for_context(state["repo_path"], state.get("master_plan", ""))
 
@@ -35,7 +41,10 @@ def a7_qa(state: FabricaState) -> dict:
 
     task = f"""
 Eres el Agente 7 — QA Test. Esta es la iteración QA {iteration} de máximo {max_iter}.
-{adr_block}{stack_block}{lessons_block}{retest_note}
+{adr_block}{fingerprint_block}{stack_block}{lessons_block}{retest_note}
+⚠️ Los tests deben usar el LAYOUT y ESTILO DE IMPORT REALES del repo (ver fingerprint arriba),
+no una estructura genérica `app/...` inexistente.
+
 CRITERIOS DE ACEPTACIÓN (del MASTER_PLAN):
 ---
 {state['master_plan']}

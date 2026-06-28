@@ -35,7 +35,14 @@ def a4_backend(state: FabricaState) -> dict:
     stack_block = ""
     backend_instructions = get_backend_instructions(stack)
     if backend_instructions:
-        stack_block = f"\n## INSTRUCCIONES DE STACK\n{backend_instructions}\n"
+        stack_block = (
+            "\n## INSTRUCCIONES DE STACK (plantilla genérica — precedencia BAJA)\n"
+            f"{backend_instructions}\n"
+            "⚠️ PRECEDENCIA: si el CODEBASE FINGERPRINT de arriba muestra la estructura REAL del "
+            "repo (entrypoint, dónde van routers/modelos, estilo de import), REPLÍCALA EXACTAMENTE e "
+            "IGNORA esta plantilla. No inventes `app/api/v1/...` ni imports `from app.` si el repo no "
+            "los usa — usa el mismo layout y estilo de import que el código existente.\n"
+        )
 
     qa_context = ""
     if state.get("qa_report") and state["qa_iterations"] > 0:

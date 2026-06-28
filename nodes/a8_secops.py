@@ -38,6 +38,10 @@ def _extract_corrected_section(output: str, header: str) -> str | None:
 
 def a8_secops(state: FabricaState) -> dict:
     """Único pase de seguridad — después de que QA pasa."""
+    from tools.context_retriever import get_relevant_context
+    # F6 — al corregir vulnerabilidades, A8 reescribe código: debe mantener el LAYOUT/estilo de
+    # import REALES del repo (fingerprint), no introducir una estructura genérica `app/...`.
+    fingerprint_block = get_relevant_context(state["repo_path"])
     iteration      = state.get("secops_iterations", 0) + 1
     is_retest      = state.get("secops_iterations", 0) > 0
     retest_context = ""
@@ -52,6 +56,8 @@ def a8_secops(state: FabricaState) -> dict:
     task = f"""
 Eres el Agente 8 — SecOps. Revisas el código implementado en busca de
 vulnerabilidades de seguridad y las corriges directamente.
+{fingerprint_block}⚠️ Si reescribes código corregido, mantén el LAYOUT y estilo de import REALES
+del repo (fingerprint arriba); no lo muevas a una estructura genérica `app/...`.
 {retest_context}
 MASTER_PLAN (contexto del feature):
 ---
