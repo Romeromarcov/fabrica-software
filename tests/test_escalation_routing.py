@@ -64,3 +64,11 @@ def test_node_cancelar_sets_error():
     out = _run_node_with_input("CANCELAR")
     assert out["escalation_decision"] == "CANCELAR"
     assert out.get("errors")
+
+
+def test_router_aceptar_adversarial_goes_to_pr_final():
+    """Escalación originada en A8.5 adversarial → ACEPTAR salta directo a PR Final (no loop)."""
+    from config import MAX_ADVERSARIAL_ITER
+    st = {"escalation_decision": "ACEPTAR", "adversarial_clear": False,
+          "adversarial_iterations": MAX_ADVERSARIAL_ITER}
+    assert _route_after_escalation(st) == "aceptar_adversarial"
