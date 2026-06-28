@@ -72,3 +72,12 @@ def test_router_aceptar_adversarial_goes_to_pr_final():
     st = {"escalation_decision": "ACEPTAR", "adversarial_clear": False,
           "adversarial_iterations": MAX_ADVERSARIAL_ITER}
     assert _route_after_escalation(st) == "aceptar_adversarial"
+
+
+def test_router_aceptar_secops_writes_files():
+    """Escalación SecOps (block + iteraciones agotadas) → ACEPTAR escribe archivos (A10), no loop."""
+    from config import MAX_SECOPS_ITER
+    st = {"escalation_decision": "ACEPTAR", "security_block_2": "vuln X",
+          "secops_iterations": MAX_SECOPS_ITER, "sandbox_passed": False, "sandbox_iterations": 0,
+          "adversarial_clear": True}
+    assert _route_after_escalation(st) == "aceptar_secops"
