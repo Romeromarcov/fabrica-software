@@ -212,7 +212,11 @@ def clone_or_update_repo(
         if rcode != 0:
             logger.warning("clone_or_update: reset --hard falló en %s: %s", dest, redact(rerr))
             return False
-        logger.info("clone_or_update: %s actualizado a origin/%s", dest.name, br)
+        # Pristine: elimina archivos NO rastreados que quedaron de corridas previas (p. ej.
+        # código/tests/.coverage de un feature anterior) para que el PR del feature actual no
+        # los arrastre. `-fd` respeta .gitignore → conserva .env, node_modules, .venv ignorados.
+        _run(["git", "clean", "-fd"], dest)
+        logger.info("clone_or_update: %s actualizado a origin/%s (pristine)", dest.name, br)
         return True
 
     # Clonar nuevo.
@@ -312,19 +316,25 @@ def stage_all(repo_path: str) -> bool:
 
 
 _SENSITIVE_PATTERNS = [".env", "*.env", ".env.*", "*.key", "*.pem", "secrets/", "*.secret"]
+# Artefactos de build/test que NUNCA deben entrar al PR (los genera el sandbox al correr
+# pytest/coverage). Sin esto, `stage_all` (git add .) los barría al commit (p. ej. .coverage).
+_ARTIFACT_PATTERNS = [
+    ".coverage", "coverage.xml", "htmlcov/", ".pytest_cache/", ".mypy_cache/",
+    ".ruff_cache/", "__pycache__/", "*.pyc", ".tox/", "*.egg-info/",
+]
 
 
 def _ensure_gitignore(repo_path: str) -> None:
-    """Garantiza que patrones sensibles estén en .gitignore antes del commit."""
+    """Garantiza que patrones sensibles y de artefactos estén en .gitignore antes del commit."""
     gitignore = Path(repo_path) / ".gitignore"
     try:
         existing = gitignore.read_text(encoding="utf-8") if gitignore.exists() else ""
-        missing = [p for p in _SENSITIVE_PATTERNS if p not in existing]
+        missing = [p for p in (_SENSITIVE_PATTERNS + _ARTIFACT_PATTERNS) if p not in existing]
         if missing:
             with gitignore.open("a", encoding="utf-8") as f:
-                f.write("\n# Añadido por Fábrica de Software — archivos sensibles\n")
+                f.write("\n# Añadido por Fábrica de Software — sensibles + artefactos de build/test\n")
                 f.write("\n".join(missing) + "\n")
-            logger.info("git_tools: añadidos %d patrones sensibles a .gitignore", len(missing))
+            logger.info("git_tools: añadidos %d patrones a .gitignore", len(missing))
     except Exception as e:
         logger.warning("git_tools: no se pudo actualizar .gitignore: %s", redact(str(e)))
 
