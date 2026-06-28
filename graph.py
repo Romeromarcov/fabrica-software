@@ -232,13 +232,16 @@ def _route_after_escalation(state: FabricaState) -> str:
     """
     d = (state.get("escalation_decision") or "").upper()
     if d == "ACEPTAR":
-        # Si la escalación vino del SANDBOX (sus iteraciones agotadas sin pasar), aceptar la
-        # deuda técnica = SALTAR el sandbox → revisión adversarial → PR Final, en vez de re-entrar
-        # al loop build→sandbox (que volvería a fallar el mismo gate). F6.
+        # ACEPTAR = aceptar deuda técnica y AVANZAR, saltando el gate que escaló (sin re-entrar
+        # al loop que volvería a fallar el mismo gate). Se enruta al nodo POSTERIOR al gate de
+        # origen, detectado por su estado (gate más tardío primero). F6.
+        if not state.get("adversarial_clear", True) and \
+                state.get("adversarial_iterations", 0) >= MAX_ADVERSARIAL_ITER:
+            return "aceptar_adversarial"   # escalación adversarial → directo a PR Final
         if not state.get("sandbox_passed", False) and \
                 state.get("sandbox_iterations", 0) >= MAX_SANDBOX_ITER:
-            return "aceptar_sandbox"
-        return "aceptar"
+            return "aceptar_sandbox"       # escalación sandbox → salta a adversarial
+        return "aceptar"                   # escalación QA/SecOps → continúa a SecOps
     if d in ("REDISEÑAR", "REDISENAR"):
         return "redisenar"
     return "cancelar"
@@ -628,10 +631,11 @@ def build_graph() -> StateGraph:
         "qa_escalation",
         _route_after_escalation,
         {
-            "aceptar":         "a8_secops",       # escalación QA/SecOps → continúa a seguridad
-            "aceptar_sandbox": "a85_adversarial", # escalación sandbox → salta a adversarial → PR
-            "redisenar":       "a4_backend",
-            "cancelar":        "pipeline_detenido",
+            "aceptar":             "a8_secops",       # escalación QA/SecOps → continúa a seguridad
+            "aceptar_sandbox":     "a85_adversarial", # escalación sandbox → salta a adversarial
+            "aceptar_adversarial": "a1_pr_final",      # escalación adversarial → directo a PR Final
+            "redisenar":           "a4_backend",
+            "cancelar":            "pipeline_detenido",
         },
     )
 

@@ -194,71 +194,46 @@ def cmd_marketing(
     ))
 
 
-def _handle_interrupt(app, config: dict, interrupt_data: dict, feature_id: str) -> None:
-    """Maneja cualquier interrupción humana del pipeline."""
-    from langgraph.types import Command
+def _prompt_for_interrupt(interrupt_data: dict) -> None:
+    """Muestra el panel + prompt apropiado para un tipo de interrupción."""
     tipo = interrupt_data.get("tipo", "unknown")
-
     if tipo == "stop_protocol":
-        console.print(Panel(
-            Markdown(interrupt_data.get("mensaje", "")),
-            title="⛔ STOP PROTOCOL — Agente 1",
-            border_style="red"
-        ))
+        console.print(Panel(Markdown(interrupt_data.get("mensaje", "")),
+                            title="⛔ STOP PROTOCOL — Agente 1", border_style="red"))
         console.print("\n[bold]Tu respuesta:[/bold] ", end="")
-        respuesta = input().strip()
-
-        # Reanudar el grafo — el nodo recibe respuesta via interrupt() y calcula founder_approval
-        for chunk in app.stream(
-            Command(resume=respuesta),
-            config=config,
-            stream_mode="updates",
-        ):
-            node_name = list(chunk.keys())[0]
-            if node_name == "__interrupt__":
-                _handle_interrupt(app, config, chunk[node_name][0].value, feature_id)
-                return
-            _print_node_progress(node_name, chunk[node_name])
-
     elif tipo == "checkpoint":
-        checkpoint_id = interrupt_data.get("checkpoint", "?")
-        console.print(Panel(
-            interrupt_data.get("mensaje", ""),
-            title=f"🔔 Checkpoint {checkpoint_id}",
-            border_style="blue"
-        ))
+        cid = interrupt_data.get("checkpoint", "?")
+        console.print(Panel(interrupt_data.get("mensaje", ""),
+                            title=f"🔔 Checkpoint {cid}", border_style="blue"))
         console.print("[dim]Presiona Enter para continuar (o escribe PAUSA):[/dim] ", end="")
-        respuesta = input().strip()
-
-        for chunk in app.stream(
-            Command(resume=respuesta),
-            config=config,
-            stream_mode="updates",
-        ):
-            node_name = list(chunk.keys())[0]
-            if node_name == "__interrupt__":
-                _handle_interrupt(app, config, chunk[node_name][0].value, feature_id)
-                return
-            _print_node_progress(node_name, chunk[node_name])
-
     elif tipo == "qa_escalation":
-        console.print(Panel(
-            interrupt_data.get("mensaje", ""),
-            title="⚠️  QA Escalation",
-            border_style="yellow"
-        ))
+        console.print(Panel(interrupt_data.get("mensaje", ""),
+                            title="⚠️  QA Escalation", border_style="yellow"))
         console.print("[bold]Tu decisión (REDISEÑAR / ACEPTAR / CANCELAR):[/bold] ", end="")
+    else:
+        console.print(Panel(interrupt_data.get("mensaje", ""),
+                            title="🔔 Intervención requerida", border_style="cyan"))
+        console.print("[bold]Tu respuesta:[/bold] ", end="")
+
+
+def _handle_interrupt(app, config: dict, interrupt_data: dict, feature_id: str) -> None:
+    """
+    Maneja cualquier interrupción humana del pipeline de forma ITERATIVA (F6: antes recursaba
+    por cada interrupción → RecursionError tras muchas escalaciones encadenadas).
+    """
+    from langgraph.types import Command
+    while interrupt_data is not None:
+        _prompt_for_interrupt(interrupt_data)
         respuesta = input().strip()
-        for chunk in app.stream(
-            Command(resume=respuesta),
-            config=config,
-            stream_mode="updates",
-        ):
+
+        next_interrupt = None
+        for chunk in app.stream(Command(resume=respuesta), config=config, stream_mode="updates"):
             node_name = list(chunk.keys())[0]
             if node_name == "__interrupt__":
-                _handle_interrupt(app, config, chunk[node_name][0].value, feature_id)
-                return
+                next_interrupt = chunk[node_name][0].value
+                break
             _print_node_progress(node_name, chunk[node_name])
+        interrupt_data = next_interrupt   # itera en vez de recursar
 
 
 def _print_node_progress(node_name: str, output: dict) -> None:
