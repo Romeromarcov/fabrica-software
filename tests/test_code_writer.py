@@ -86,3 +86,20 @@ def test_write_files_backs_up_overwritten_file(tmp_path, monkeypatch):
     result = cw.write_files(str(tmp_path), {"backend": text}, dry_run=False)
     assert result["files_backup"]["apps/core/models.py"] == "OLD CONTENT"
     assert target.read_text() == "NEW CONTENT"
+
+
+def test_extract_files_unfenced_markers():
+    """F6: código con marcadores `# === ruta ===` pero SIN fences ``` (p.ej. corregido por A8)."""
+    from tools.code_writer import _extract_files
+    text = (
+        "# === app/models/tag.py ===\n"
+        "import logging\n"
+        "class Tag:\n    pass\n"
+        "# === app/schemas/tag.py ===\n"
+        "from pydantic import BaseModel\n"
+        "class TagSchema(BaseModel):\n    name: str\n"
+    )
+    files = _extract_files(text)
+    assert set(files) == {"app/models/tag.py", "app/schemas/tag.py"}
+    assert "class Tag" in files["app/models/tag.py"]
+    assert "TagSchema" in files["app/schemas/tag.py"]
