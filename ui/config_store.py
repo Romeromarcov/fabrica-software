@@ -62,11 +62,13 @@ DEFAULTS = {
     "AUTO_MERGE_ENABLED":        "false",  # fusiona PRs LOW con gate verde (RUNBOOK §7.4)
     "PARALLEL_FEATURES_ENABLED": "false",  # features concurrentes (CTF-FABRICA-001)
     "FACTORY_MODIFIER_ENABLED":  "false",  # auto-modificación de la fábrica (doble gate)
-    # Límites del pipeline
+    # Límites del pipeline (cuántas veces auto-corrige cada gate antes de escalar al Founder)
     "MAX_QA_ITER_COMPLETO":       "3",
     "MAX_QA_ITER_LITE":           "2",
     "MAX_SECOPS_ITER":            "2",
     "MAX_SANDBOX_ITER":           "2",
+    "MAX_ADVERSARIAL_ITER":       "2",
+    "VETO_WINDOW_MINUTES":        "30",
     "CHECKPOINT_TIMEOUT_SECONDS": "1800",
     # Auditoría Arquitectónica (A0 Revisor)
     "ARCH_REVIEW_INTERVAL":       "3",    # 0 = desactivado; default: cada 3 features
