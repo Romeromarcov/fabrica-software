@@ -35,6 +35,12 @@ STRICT_GATES = os.getenv("STRICT_GATES", "true").lower() == "true"
 # TENANT_ISOLATION_GATE: "auto" (activo si el repo es Django y usa id_empresa),
 # "true" (forzar), "false" (desactivar).
 TENANT_ISOLATION_GATE = os.getenv("TENANT_ISOLATION_GATE", "auto").lower()
+# Auto-instalación de dependencias faltantes durante los gates de tests: si un test
+# importa un paquete no declarado, el sandbox lo instala on-the-fly, lo registra en
+# requirements.txt (para que el PR/CI sea consistente) y reintenta. Desactivable.
+SANDBOX_AUTO_INSTALL = os.getenv("SANDBOX_AUTO_INSTALL_DEPS", "true").lower() == "true"
+# Tope de instalaciones por corrida de gate (evita loops/abuso).
+SANDBOX_MAX_AUTO_INSTALLS = int(os.getenv("SANDBOX_MAX_AUTO_INSTALLS", "8"))
 
 # Gates DUROS: bloquean el PR aunque sean el único gate ejecutado.
 HARD_GATES = {"tsc", "npm-build", "migrate-check", "makemigrations-check",
@@ -191,6 +197,127 @@ def _pytest_env(repo_path: str, stack: dict) -> dict:
     return {"PYTHONPATH": os.pathsep.join(parts)}
 
 
+# ── Auto-instalación de dependencias faltantes (a medida que surgen) ───────────
+# Mapeo nombre-de-import → nombre-de-paquete pip cuando difieren.
+_IMPORT_TO_PKG = {
+    "jose": "python-jose", "jwt": "PyJWT", "dotenv": "python-dotenv",
+    "cv2": "opencv-python", "yaml": "PyYAML", "bs4": "beautifulsoup4",
+    "sklearn": "scikit-learn", "PIL": "Pillow", "attr": "attrs",
+    "google": "google-api-python-client", "dateutil": "python-dateutil",
+    "multipart": "python-multipart",
+}
+# Stdlib / módulos locales que NUNCA se instalan (evita instalar basura ante un
+# import roto del propio repo). Lista corta; el filtro real es "no es local ni stdlib".
+_NEVER_INSTALL = {
+    "main", "app", "src", "backend", "frontend", "config", "models", "schemas",
+    "routers", "services", "core", "db", "api", "tests", "test", "utils", "crud",
+}
+_MISSING_MOD_RE = re.compile(r"No module named ['\"]([\w][\w\.]*)['\"]")
+# Firmas de plugins de pytest que se piden por su efecto, no por ModuleNotFoundError.
+_PLUGIN_SIGNATURES = [
+    ("unrecognized arguments: --cov", "pytest-cov"),
+    ("no module named 'pytest_cov'", "pytest-cov"),
+    ("async def functions are not natively supported", "pytest-asyncio"),
+    ("asyncio_mode", "pytest-asyncio"),
+]
+
+
+def _is_stdlib(mod: str) -> bool:
+    try:
+        import importlib.util
+        if mod in getattr(sys, "stdlib_module_names", ()):  # py3.10+
+            return True
+        spec = importlib.util.find_spec(mod)
+        return bool(spec and (spec.origin in (None, "built-in")
+                              or "site-packages" not in (spec.origin or "")))
+    except Exception as exc:
+        logger.debug("_is_stdlib(%s): find_spec falló (%s)", mod, exc)
+        return False
+
+
+def _missing_packages(output: str, repo_path: str) -> list[str]:
+    """Extrae los paquetes pip a instalar a partir de la salida de pytest."""
+    out_l = (output or "").lower()
+    pkgs: list[str] = []
+    repo = Path(repo_path)
+    for mod in _MISSING_MOD_RE.findall(output or ""):
+        top = mod.split(".")[0]
+        if not top or top in _NEVER_INSTALL:
+            continue
+        # No instalar si es un paquete/módulo local del repo o stdlib.
+        if (repo / top).exists() or (repo / f"{top}.py").exists():
+            continue
+        if _is_stdlib(top):
+            continue
+        pkg = _IMPORT_TO_PKG.get(top, top)
+        if pkg not in pkgs:
+            pkgs.append(pkg)
+    for sig, pkg in _PLUGIN_SIGNATURES:
+        if sig in out_l and pkg not in pkgs:
+            pkgs.append(pkg)
+    return pkgs
+
+
+def _pip_install(pkg: str, repo_path: str) -> bool:
+    ok, out = _run([sys.executable, "-m", "pip", "install", pkg, "-q",
+                    "--no-warn-script-location", "--disable-pip-version-check"],
+                   repo_path, timeout=180)
+    if ok:
+        logger.info("sandbox auto-install: %s OK", pkg)
+    else:
+        logger.warning("sandbox auto-install: %s FALLÓ — %s", pkg, (out or "")[:200])
+    return ok
+
+
+def _record_requirement(repo_path: str, pkg: str) -> None:
+    """Añade pkg a requirements.txt si no está (PR/CI consistente con lo instalado)."""
+    req = Path(repo_path) / "requirements.txt"
+    try:
+        existing = req.read_text(encoding="utf-8") if req.exists() else ""
+        names = {
+            re.split(r"[<>=!~ \[;]", ln.strip(), 1)[0].lower()
+            for ln in existing.splitlines()
+            if ln.strip() and not ln.lstrip().startswith("#")
+        }
+        if pkg.lower() in names:
+            return
+        with req.open("a", encoding="utf-8") as f:
+            if existing and not existing.endswith("\n"):
+                f.write("\n")
+            f.write(f"{pkg}\n")
+        logger.info("sandbox: '%s' añadido a requirements.txt (auto-install)", pkg)
+    except OSError as exc:
+        logger.warning("sandbox: no se pudo registrar '%s' en requirements.txt: %s", pkg, exc)
+
+
+def _run_tests_autoinstall(cmd: list[str], repo_path: str, env: dict | None,
+                           timeout: int = 120) -> tuple[bool, str]:
+    """Corre `cmd` (pytest) y, si falla por dependencias ausentes, las instala a medida
+    que surgen, las registra en requirements.txt y reintenta. Tope SANDBOX_MAX_AUTO_INSTALLS."""
+    ok, out = _run(cmd, repo_path, timeout=timeout, env=env)
+    if ok or not SANDBOX_AUTO_INSTALL:
+        return ok, out
+    installed = 0
+    while not ok and installed < SANDBOX_MAX_AUTO_INSTALLS:
+        pkgs = _missing_packages(out, repo_path)
+        if not pkgs:
+            break
+        progressed = False
+        for pkg in pkgs:
+            if installed >= SANDBOX_MAX_AUTO_INSTALLS:
+                break
+            if _pip_install(pkg, repo_path):
+                _record_requirement(repo_path, pkg)
+                installed += 1
+                progressed = True
+        if not progressed:
+            break
+        ok, out = _run(cmd, repo_path, timeout=timeout, env=env)
+    if installed:
+        out = f"[sandbox auto-install: {installed} paquete(s) instalado(s) y añadido(s) a requirements.txt]\n" + out
+    return ok, out
+
+
 def _check_pytest(repo_path: str, stack: dict) -> dict:
     gate = "pytest"
     if not stack["python"]:
@@ -199,9 +326,11 @@ def _check_pytest(repo_path: str, stack: dict) -> dict:
         return _skip(gate, "no_tests", "Sin tests pytest detectados.")
     if not stack["django"] and not _has_pytest():
         return _skip(gate, "tool_missing", "pytest no instalado.")
-    cmd = (["python", "manage.py", "test", "--verbosity=1"]
-           if stack["django"] else _pytest_base() + ["--tb=short", "-q", "--no-header"])
-    ok, out = _run(cmd, repo_path, env=_pytest_env(repo_path, stack))
+    if stack["django"]:
+        ok, out = _run(["python", "manage.py", "test", "--verbosity=1"], repo_path)
+    else:
+        cmd = _pytest_base() + ["--tb=short", "-q", "--no-header"]
+        ok, out = _run_tests_autoinstall(cmd, repo_path, _pytest_env(repo_path, stack))
     return _result(gate, "pytest", ok, out[:3000])
 
 
@@ -286,10 +415,10 @@ def _check_coverage(repo_path: str, stack: dict, min_pct: int = 70) -> dict:
         return _skip(gate, "no_tests", "Sin tests pytest.")
     if not _has_pytest():
         return _skip(gate, "tool_missing", "pytest no instalado.")
-    ok, out = _run(
+    ok, out = _run_tests_autoinstall(
         _pytest_base() + ["--cov=.", f"--cov-fail-under={min_pct}", "--cov-report=term-missing",
          "--tb=no", "-q", "--no-header"],
-        repo_path, timeout=120, env=_pytest_env(repo_path, stack),
+        repo_path, _pytest_env(repo_path, stack), timeout=120,
     )
     return _result(gate, "coverage", ok, out[:2000])
 
