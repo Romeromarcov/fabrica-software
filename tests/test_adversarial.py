@@ -83,6 +83,53 @@ def test_adversarial_clears_safe_repo(tmp_path, monkeypatch):
     assert "sandbox_gate_failures" not in result
 
 
+def test_ambiguous_llm_verdict_does_not_block_clean_repo(tmp_path, monkeypatch):
+    """Robustez glm-4.6: salida sin veredicto explícito NO bloquea un repo limpio.
+    Reintenta el veredicto; si sigue ambigua → CLEAR (la guardia estática AST sigue activa)."""
+    _patch_runs(tmp_path, monkeypatch)
+    # Ambas llamadas (análisis + reintento) devuelven texto SIN el marcador exacto.
+    monkeypatch.setattr(adv, "call_agent",
+                        Mock(return_value=("Parece razonable, no veo nada concluyente.", None)))
+    app = tmp_path / "repo" / "apps" / "ventas"
+    app.mkdir(parents=True)
+    (app / "views.py").write_text(SAFE, encoding="utf-8")
+
+    state = {
+        "feature_id": "f-adv-amb",
+        "repo_path": str(tmp_path / "repo"),
+        "files_written": ["apps/ventas/views.py"],
+        "risk_level": "HIGH",   # fuerza do_llm
+        "feature_name": "demo",
+        "master_plan": "",
+    }
+    result = adv.a85_adversarial(state)
+    assert result["adversarial_clear"] is True
+    assert "sandbox_gate_failures" not in result
+
+
+def test_explicit_block_still_blocks(tmp_path, monkeypatch):
+    """Un BLOCK explícito del LLM sigue bloqueando aunque el escaneo estático esté limpio."""
+    _patch_runs(tmp_path, monkeypatch)
+    monkeypatch.setattr(adv, "call_agent",
+                        Mock(return_value=("Encontré fuga en vista vecina.\nADVERSARIAL BLOCK", None)))
+    app = tmp_path / "repo" / "apps" / "ventas"
+    app.mkdir(parents=True)
+    (app / "views.py").write_text(SAFE, encoding="utf-8")
+
+    state = {
+        "feature_id": "f-adv-blk",
+        "repo_path": str(tmp_path / "repo"),
+        "files_written": ["apps/ventas/views.py"],
+        "risk_level": "HIGH",
+        "feature_name": "demo",
+        "master_plan": "",
+    }
+    result = adv.a85_adversarial(state)
+    assert result["adversarial_clear"] is False
+    gates = {gf["gate"] for gf in result["sandbox_gate_failures"]}
+    assert "adversarial-review" in gates
+
+
 def test_gather_repo_context_includes_neighbors(tmp_path):
     app = tmp_path / "apps" / "core"
     app.mkdir(parents=True)
