@@ -541,6 +541,40 @@ def _detect_structure(repo: Path) -> list[str]:
     return lines
 
 
+def detect_pythonpath_roots(repo_path: str) -> list[str]:
+    """
+    F6 — Devuelve los directorios que deben ir en PYTHONPATH para que `pytest` pueda
+    importar el código del repo. Imprescindible cuando el código vive en un subdir
+    (p. ej. `backend/main.py` con imports PLANOS `from main import app`): sin el subdir
+    en el path, pytest corriendo desde la raíz NO encuentra `main`/`routers`/`config`
+    y los tests fallan aunque el import sea el correcto para el layout real del repo.
+
+    Estrategia conservadora: siempre la raíz del repo; además el dir del entrypoint
+    (FastAPI/Flask) si está en un subdirectorio. Añadir dirs de más es inocuo.
+    """
+    repo = Path(repo_path)
+    if not repo.exists():
+        return []
+
+    roots = [str(repo)]
+    py_files = [p for p in repo.glob("**/*.py")
+                if not any(part in _SKIP_STRUCT_DIRS for part in p.relative_to(repo).parts)][:400]
+    for p in py_files:
+        try:
+            txt = p.read_text(encoding="utf-8", errors="ignore")
+        except OSError as exc:
+            logger.debug("detect_pythonpath_roots: no se pudo leer %s (%s)", p, exc)
+            continue
+        if "FastAPI(" in txt or "Flask(__name__" in txt or "= Flask(" in txt:
+            entry_dir = p.parent
+            if entry_dir != repo:
+                entry_str = str(entry_dir)
+                if entry_str not in roots:
+                    roots.append(entry_str)
+            break
+    return roots
+
+
 def build_fingerprint(repo_path: str) -> str:
     """
     Escanea el repo completo y genera `agents/CODEBASE_FINGERPRINT.md`.

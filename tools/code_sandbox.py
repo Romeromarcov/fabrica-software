@@ -23,6 +23,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import logging
 from pathlib import Path
 
@@ -60,9 +61,35 @@ def _has(tool: str) -> bool:
     return shutil.which(tool) is not None
 
 
-def _run(cmd: list[str], cwd: str, timeout: int = 120) -> tuple[bool, str]:
+def _has_pytest() -> bool:
+    """True si pytest es ejecutable, sea como CLI en PATH o como módulo (`python -m pytest`).
+    En muchos entornos (Windows Store Python, venvs sin Scripts en PATH) el binario `pytest`
+    no está en PATH pero el módulo sí — exigir el CLI hacía que el gate REQUERIDO fallara por
+    STRICT_GATES aunque pytest estuviese instalado."""
+    if _has("pytest"):
+        return True
     try:
-        r = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout)
+        import importlib.util
+        return importlib.util.find_spec("pytest") is not None
+    except Exception as exc:
+        logger.debug("_has_pytest: find_spec falló (%s)", exc)
+        return False
+
+
+def _pytest_base() -> list[str]:
+    """Comando base para invocar pytest, prefiriendo el CLI si está en PATH y cayendo a
+    `python -m pytest` (mismo intérprete que corre la fábrica)."""
+    if _has("pytest"):
+        return ["pytest"]
+    return [sys.executable, "-m", "pytest"]
+
+
+def _run(cmd: list[str], cwd: str, timeout: int = 120,
+         env: dict | None = None) -> tuple[bool, str]:
+    try:
+        merged_env = {**os.environ, **(env or {})}
+        r = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True,
+                           timeout=timeout, env=merged_env)
         return r.returncode == 0, (r.stdout + r.stderr).strip()
     except subprocess.TimeoutExpired:
         return False, f"Timeout ({timeout}s): {' '.join(cmd)}"
@@ -143,17 +170,38 @@ def _result(gate: str, tool: str, passed: bool, output: str, layer: str = "backe
             "skipped": False, "skip_reason": None, "layer": layer}
 
 
+def _pytest_env(repo_path: str, stack: dict) -> dict:
+    """
+    F6 — PYTHONPATH para que pytest importe el código del repo cuando vive en un subdir
+    (p. ej. `backend/main.py` con imports planos `from main import ...`). Django gestiona
+    su propio path vía manage.py, así que solo aplica al runner pytest puro.
+    """
+    if stack.get("django"):
+        return {}
+    try:
+        from tools.repo_scanner import detect_pythonpath_roots
+        roots = detect_pythonpath_roots(repo_path)
+    except Exception as exc:
+        logger.debug("_pytest_env: detect_pythonpath_roots falló (%s)", exc)
+        roots = [repo_path]
+    if not roots:
+        return {}
+    existing = os.environ.get("PYTHONPATH", "")
+    parts = roots + ([existing] if existing else [])
+    return {"PYTHONPATH": os.pathsep.join(parts)}
+
+
 def _check_pytest(repo_path: str, stack: dict) -> dict:
     gate = "pytest"
     if not stack["python"]:
         return _skip(gate, "n/a", "No es proyecto Python.")
     if not stack["has_pytest"]:
         return _skip(gate, "no_tests", "Sin tests pytest detectados.")
-    if not stack["django"] and not _has("pytest"):
+    if not stack["django"] and not _has_pytest():
         return _skip(gate, "tool_missing", "pytest no instalado.")
     cmd = (["python", "manage.py", "test", "--verbosity=1"]
-           if stack["django"] else ["pytest", "--tb=short", "-q", "--no-header"])
-    ok, out = _run(cmd, repo_path)
+           if stack["django"] else _pytest_base() + ["--tb=short", "-q", "--no-header"])
+    ok, out = _run(cmd, repo_path, env=_pytest_env(repo_path, stack))
     return _result(gate, "pytest", ok, out[:3000])
 
 
@@ -236,12 +284,12 @@ def _check_coverage(repo_path: str, stack: dict, min_pct: int = 70) -> dict:
     gate = "coverage"
     if not stack["python"] or not stack["has_pytest"]:
         return _skip(gate, "no_tests", "Sin tests pytest.")
-    if not _has("pytest"):
+    if not _has_pytest():
         return _skip(gate, "tool_missing", "pytest no instalado.")
     ok, out = _run(
-        ["pytest", "--cov=.", f"--cov-fail-under={min_pct}", "--cov-report=term-missing",
+        _pytest_base() + ["--cov=.", f"--cov-fail-under={min_pct}", "--cov-report=term-missing",
          "--tb=no", "-q", "--no-header"],
-        repo_path, timeout=120,
+        repo_path, timeout=120, env=_pytest_env(repo_path, stack),
     )
     return _result(gate, "coverage", ok, out[:2000])
 
