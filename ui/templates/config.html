@@ -645,6 +645,26 @@
             Tests reales antes de escalar al Founder
           </div>
         </div>
+        <div class="col-md-4">
+          <label class="form-label" style="font-size:.78rem;color:#888;text-transform:uppercase;letter-spacing:.05em">
+            Max iter. Adversarial
+          </label>
+          <input type="number" name="max_adversarial_iter" class="form-control"
+                 value="{{ cfg.get('MAX_ADVERSARIAL_ITER', '2') }}" min="1" max="5">
+          <div class="form-text" style="font-size:.7rem;color:#555">
+            Revisión adversarial a nivel repo antes de escalar al Founder
+          </div>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label" style="font-size:.78rem;color:#888;text-transform:uppercase;letter-spacing:.05em">
+            Ventana de veto (min)
+          </label>
+          <input type="number" name="veto_window_minutes" class="form-control"
+                 value="{{ cfg.get('VETO_WINDOW_MINUTES', '30') }}" min="0" max="240">
+          <div class="form-text" style="font-size:.7rem;color:#555">
+            Minutos para que el Founder vete una auto-aprobación (modo VETO)
+          </div>
+        </div>
       </div>
     </div>
   </div>

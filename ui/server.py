@@ -1609,6 +1609,8 @@ async def save_config(
     max_qa_lite:        int = Form(2),
     max_secops_iter:    int = Form(2),
     max_sandbox_iter:   int = Form(2),
+    max_adversarial_iter: int = Form(2),
+    veto_window_minutes:  int = Form(30),
     checkpoint_timeout: int = Form(1800),
     # Auditor periódico
     auditor_enabled:   str = Form("false"),
@@ -1666,6 +1668,8 @@ async def save_config(
         "MAX_QA_ITER_LITE":           max_qa_lite,
         "MAX_SECOPS_ITER":            max_secops_iter,
         "MAX_SANDBOX_ITER":           max_sandbox_iter,
+        "MAX_ADVERSARIAL_ITER":       max_adversarial_iter,
+        "VETO_WINDOW_MINUTES":        veto_window_minutes,
         "CHECKPOINT_TIMEOUT_SECONDS": checkpoint_timeout,
         "AUDITOR_ENABLED":   "true" if auditor_enabled == "on" else "false",
         "AUDITOR_WEEKDAY":   auditor_weekday,
