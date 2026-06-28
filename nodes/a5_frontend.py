@@ -33,7 +33,13 @@ def a5_frontend(state: FabricaState) -> dict:
     stack_block = ""
     frontend_instructions = get_frontend_instructions(stack)
     if frontend_instructions:
-        stack_block = f"\n## INSTRUCCIONES DE STACK\n{frontend_instructions}\n"
+        stack_block = (
+            "\n## INSTRUCCIONES DE STACK (plantilla genérica — precedencia BAJA)\n"
+            f"{frontend_instructions}\n"
+            "⚠️ PRECEDENCIA: si el CODEBASE FINGERPRINT de arriba muestra la estructura REAL del "
+            "repo, REPLÍCALA e IGNORA esta plantilla (mismo layout y estilo de import que el código "
+            "existente).\n"
+        )
 
     qa_context = ""
     if state.get("qa_report") and state["qa_iterations"] > 0:

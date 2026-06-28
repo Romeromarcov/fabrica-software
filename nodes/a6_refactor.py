@@ -19,7 +19,11 @@ from config import MODEL_A6
 
 def a6_refactor(state: FabricaState) -> dict:
     from tools.architecture_record import adr_context_block
+    from tools.context_retriever import get_relevant_context
     adr_block = adr_context_block(state["repo_path"])
+    # F6 — A6 unifica/corrige el código: debe respetar el LAYOUT y estilo de import REALES del
+    # repo (fingerprint), para no reintroducir una estructura genérica `app/...` al refactorizar.
+    fingerprint_block = get_relevant_context(state["repo_path"])
 
     # Contexto adicional si venimos de un retry de QA
     qa_feedback = ""
@@ -70,7 +74,10 @@ HERRAMIENTAS MCP (Agente 3):
 
     task = f"""
 Eres el Agente 6 — Revisor y Unificador de Código.
-{adr_block}
+{adr_block}{fingerprint_block}
+⚠️ Respeta el LAYOUT y estilo de import REALES del repo (fingerprint arriba). No muevas el código
+a una estructura genérica `app/api/v1/...` ni cambies el estilo de import si el repo no lo usa.
+
 Tu posición en el pipeline: A2+A3 → A4+A5 → **TÚ** → A7 QA → A8 SecOps → PR
 
 Tienes acceso a TODO el trabajo del pipeline: esquema DB, herramientas MCP,
