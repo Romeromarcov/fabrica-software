@@ -160,6 +160,15 @@ def _extract_files(text: str) -> dict[str, str]:
     for m in _FENCE_RE.finditer(text):
         fences.append((m.start(), m.end(), m.group(1)))
 
+    # Fallback (F6): texto con marcadores pero SIN fences ``` — p. ej. el código corregido
+    # por A8 SecOps, que al extraerse de su sección "## CÓDIGO BACKEND CORREGIDO" pierde el
+    # fence. Se parsea el texto completo por marcadores; si no, A10 escribiría 0 archivos.
+    if not fences:
+        for path, code in _parse_block(text):
+            if path:
+                result[path] = code
+        return result
+
     # Pasada 1: dentro de fences
     for _, _, content in fences:
         for path, code in _parse_block(content):
