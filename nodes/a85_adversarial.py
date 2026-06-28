@@ -178,8 +178,42 @@ HALLAZGOS DEL ESCANEO ESTÁTICO (AST):
                 feature_id=state.get("feature_id"),
             )
             upper = llm_output.upper()
-            llm_clear = "ADVERSARIAL CLEAR" in upper
-            llm_block = ("ADVERSARIAL BLOCK" in upper) or (not llm_clear)  # conservador
+            explicit_block = "ADVERSARIAL BLOCK" in upper
+            explicit_clear = "ADVERSARIAL CLEAR" in upper
+
+            # Robustez ante modelos débiles (p. ej. glm-4.6): si la salida NO trae un veredicto
+            # explícito, no bloqueamos por formato. Reintentamos pidiendo SOLO la línea de
+            # veredicto; si sigue ambigua, tratamos como CLEAR y dejamos la guardia DETERMINISTA
+            # (escaneo estático AST) como único bloqueo real. Un BLOCK explícito siempre bloquea.
+            if not explicit_block and not explicit_clear:
+                verdict_task = (
+                    "Acabas de revisar un cambio en busca de fugas cross-tenant, endpoints "
+                    "duplicados inseguros y AuthZ inconsistente. Responde con UNA SOLA LÍNEA, "
+                    "EXACTAMENTE una de estas dos, sin nada más:\n"
+                    "ADVERSARIAL CLEAR\n"
+                    "ADVERSARIAL BLOCK\n\n"
+                    "Tu análisis previo fue:\n---\n" + (llm_output or "")[:3000] + "\n---"
+                )
+                retry_out, retry_cost = call_agent(
+                    agent_key="a8_secops",
+                    agent_label=f"Agente 8.5 Adversarial — veredicto (iter {iteration})",
+                    task_content=verdict_task,
+                    model=MODEL_A85,
+                    repo_path=repo_path,
+                    feature_id=state.get("feature_id"),
+                )
+                llm_output = (llm_output or "") + "\n\n[reintento de veredicto]\n" + (retry_out or "")
+                if retry_cost is not None:
+                    cost = [cost, retry_cost] if cost is not None else retry_cost
+                rupper = (retry_out or "").upper()
+                explicit_block = explicit_block or ("ADVERSARIAL BLOCK" in rupper)
+                explicit_clear = explicit_clear or ("ADVERSARIAL CLEAR" in rupper)
+                if not explicit_block and not explicit_clear:
+                    logger.warning(
+                        "A8.5 iter %d: veredicto LLM ambiguo tras reintento — se trata como CLEAR "
+                        "(la guardia estática AST sigue activa)", iteration)
+
+            llm_block = explicit_block
         else:
             logger.info("A8.5: sin contexto de repo (sin files_written) — solo escaneo estático")
 
@@ -215,7 +249,7 @@ HALLAZGOS DEL ESCANEO ESTÁTICO (AST):
         "current_agent":          "a85_adversarial",
     }
     if cost is not None:
-        result["cost_entries"] = [cost]
+        result["cost_entries"] = cost if isinstance(cost, list) else [cost]
 
     if blocked:
         # Marca el cierre como no-verde y alimenta a A6 vía el canal de gate failures
