@@ -224,7 +224,13 @@ def _handle_interrupt(app, config: dict, interrupt_data: dict, feature_id: str) 
     from langgraph.types import Command
     while interrupt_data is not None:
         _prompt_for_interrupt(interrupt_data)
-        respuesta = input().strip()
+        try:
+            respuesta = input().strip()
+        except EOFError:
+            # Sin más entrada (stdin agotado / no interactivo): se detiene sin crashear.
+            console.print("\n[yellow]Sin entrada disponible — pipeline pausado. "
+                          "Usa 'resume' para continuar.[/yellow]")
+            return
 
         next_interrupt = None
         for chunk in app.stream(Command(resume=respuesta), config=config, stream_mode="updates"):

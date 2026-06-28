@@ -240,8 +240,11 @@ def _route_after_escalation(state: FabricaState) -> str:
             return "aceptar_adversarial"   # escalación adversarial → directo a PR Final
         if not state.get("sandbox_passed", False) and \
                 state.get("sandbox_iterations", 0) >= MAX_SANDBOX_ITER:
-            return "aceptar_sandbox"       # escalación sandbox → salta a adversarial
-        return "aceptar"                   # escalación QA/SecOps → continúa a SecOps
+            return "aceptar_sandbox"       # escalación sandbox → salta a A8.5 adversarial
+        if state.get("security_block_2") and \
+                state.get("secops_iterations", 0) >= MAX_SECOPS_ITER:
+            return "aceptar_secops"        # escalación SecOps → escribe archivos (A10) y sigue
+        return "aceptar"                   # escalación QA → continúa a SecOps
     if d in ("REDISEÑAR", "REDISENAR"):
         return "redisenar"
     return "cancelar"
@@ -631,7 +634,8 @@ def build_graph() -> StateGraph:
         "qa_escalation",
         _route_after_escalation,
         {
-            "aceptar":             "a8_secops",       # escalación QA/SecOps → continúa a seguridad
+            "aceptar":             "a8_secops",       # escalación QA → continúa a seguridad
+            "aceptar_secops":      "a10_code_writer", # escalación SecOps → escribe archivos y sigue
             "aceptar_sandbox":     "a85_adversarial", # escalación sandbox → salta a adversarial
             "aceptar_adversarial": "a1_pr_final",      # escalación adversarial → directo a PR Final
             "redisenar":           "a4_backend",
