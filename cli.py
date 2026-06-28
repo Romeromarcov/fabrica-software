@@ -11,6 +11,7 @@ Comandos:
   repos                  Lista los repositorios disponibles
 """
 import argparse
+import os
 import sys
 import uuid
 import json
