@@ -215,9 +215,17 @@ La última línea de tu respuesta debe ser:
 
     approved = "✅ DEVOPS COMPLETADO" in output or "⚠️ DEVOPS PARCIAL" in output
 
+    # F6: acumular con los archivos ya escritos por A10 (código del feature). Antes se
+    # REEMPLAZABA files_written con solo los de infra → A1 PR Final stageaba únicamente
+    # ci.yml/Dockerfile y el código del feature quedaba sin commitear.
+    merged_written: list[str] = list(state.get("files_written") or [])
+    for f in infra_result["files_written"]:
+        if f not in merged_written:
+            merged_written.append(f)
+
     return {
         "devops_output":     output,
-        "files_written":     infra_result["files_written"],
+        "files_written":     merged_written,
         "migration_note":    migration_note,
         "current_agent":     "a11_devops",
         "cost_entries":      [cost],

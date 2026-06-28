@@ -438,6 +438,13 @@ Al final escribe: `✅ CICLO COMPLETADO`
             # Sin archivos escritos (dry-run o feature 100% en state)
             staged = stage_all(repo_path)
 
+        # F6 — Safety net: el repo destino se clona LIMPIO desde main, así que todo cambio en
+        # él es del feature. Un stage_all adicional captura cualquier archivo que el pipeline
+        # escribió pero que NO quedó en files_written (p. ej. si un nodo lo sobrescribió),
+        # evitando PRs incompletos (solo metadata/infra sin el código del feature).
+        if stage_all(repo_path):
+            staged = True
+
         if staged and commit(commit_text, repo_path):
             # Push de la feature branch + crear PR
             push_branch(feature_branch, repo_path)
