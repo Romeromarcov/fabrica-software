@@ -18,7 +18,11 @@ def feature_slug(feature_name: str) -> str:
 def feature_branch_name(feature_id: str, feature_name: str) -> str:
     """Rama determinista a partir de (feature_id, feature_name).
 
-    `feature/<id8>-<slug>` — el prefijo del feature_id la hace única por run.
+    `feature/<YYYYMMDD-HHMMSS>-<slug>`. F6: antes usaba `feature_id[:8]`, que es SOLO la fecha
+    (`YYYYMMDD`) — dos runs del mismo feature el mismo día colisionaban en el mismo nombre de
+    rama → el push del segundo era non-fast-forward y fallaba. Se usa `feature_id[:15]`
+    (`YYYYMMDD_HHMMSS`), único por run hasta el segundo.
     """
-    prefix = (feature_id or "")[:8] or "feat"
-    return f"feature/{prefix}-{feature_slug(feature_name)}"[:50]
+    raw = (feature_id or "")[:15] or "feat"        # 20260627_212635
+    prefix = raw.replace("_", "-")                  # 20260627-212635
+    return f"feature/{prefix}-{feature_slug(feature_name)}"[:60]
